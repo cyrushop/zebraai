@@ -75,7 +75,7 @@ It reads up to three files:
 | File | Required | Used for |
 |---|---|---|
 | SFDC pipeline (`pipeline-*.xls`, HTML table) | Yes | Every section. The current quarter is taken from the date in the file name. |
-| POS export, or the weekly tracker `.xlsx` (sheet `POS_Raw`) | No | POS figures on the week dashboard. From the tracker it also reads the Q target and Match Keys. |
+| 262H POS export (`POS-HKTW-*.xlsx`), or the weekly tracker `.xlsx` (sheet `POS_Raw`) | No | POS figures on the week dashboard. Every sheet is read and only Hong Kong rows (262H Region) are kept, so an HK + TW export works. From the tracker it also reads the Q target and Match Keys. |
 | FY27 account list (`.xlsx`) | No | NAL / MPL lists, RAD and FY27 projection (Region `HK` rows only) |
 
 Rules:

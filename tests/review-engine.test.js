@@ -73,6 +73,15 @@ assert.strictEqual(W.projected, 3050);
 assert.deepStrictEqual(W.weekly.slice(0, 2).map(w => w.cum), [1500, 1650]);
 assert.strictEqual(W.weekly[2].cum, null);
 
+// POS exports with several regions: only Hong Kong rows count; rows without a region are kept
+const mixed = E.parsePOS([
+  ['Invoice Fiscal Quarter', 'Invoice Fiscal Week', 'POS End User Name - Submitted', 'POS Extended Cost (Net) (USD @ Planned Rate)', '262H Region'],
+  ['2026 Q4', '2026 Week 41', 'ACME LTD', 100, 'HongKong'],
+  ['2026 Q4', '2026 Week 41', 'TW CO', 900, 'Taiwan'],
+  ['2026 Q4', '2026 Week 41', 'NO REGION', 5, ''],
+]);
+assert.deepStrictEqual(mixed.filter(E.isHKPos).map(p => p.amt), [100, 5]);
+
 // account list: NAL / MPL rows, matched by Siebel ID first, then by name
 const accts = E.parseAccounts([
   ['#', 'Type', 'Account Name', 'Account ID USD', 'Region', 'FY26 RAD', 'FY27 Projection'],

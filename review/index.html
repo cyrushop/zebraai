@@ -232,7 +232,7 @@ function loadSample(kind) {
   if (kind === 'pos') S.pos = { name: SAMPLE.pos.name, rows: ENG.parsePOS([SAMPLE.pos.cols, ...SAMPLE.pos.rows]), sample: true };
   if (kind === 'acct') S.acct = { name: SAMPLE.acct.name, rows: ENG.parseAccounts([['Type', 'Account Name', 'Account ID USD', 'Region', 'FY26 RAD', 'FY27 Projection'], ...SAMPLE.acct.rows]), sample: true };
 }
-for (const k of ['pipe', 'pos', 'acct']) { const saved = store.get('data.' + k, null); if (saved && saved.rows && (k !== 'acct' || 'rad' in (saved.rows[0] || {}))) S[k] = saved; else loadSample(k); }
+for (const k of ['pipe', 'pos', 'acct']) { const saved = store.get('data.' + k, null); if (saved && saved.rows && (k !== 'acct' || 'rad' in (saved.rows[0] || {})) && (k !== 'pos' || 'region' in (saved.rows[0] || {}))) S[k] = saved; else loadSample(k); }
 
 // ---------- file reading ----------
 async function readRows(file) {
@@ -263,8 +263,12 @@ async function handleFile(kind, file) {
       const m = file.name.match(/(\d{4})-(\d{2})-(\d{2})/);
       S.curQ = m ? ENG.qFromDate(new Date(+m[1], +m[2] - 1, +m[3])) : ENG.qFromDate(new Date());
     } else if (kind === 'pos') {
-      const rows = firstParse(sheets, ENG.parsePOS, 'POS_Raw');
-      S.pos = { name: file.name, rows };
+      // read every sheet with POS columns (a tracker has one, a POS export may have HK and TW), keep Hong Kong rows
+      const all = sheets.flatMap(s => { try { return ENG.parsePOS(s.rows); } catch { return []; } });
+      if (!all.length) firstParse(sheets, ENG.parsePOS);   // throws the missing-column message
+      const rows = all.filter(ENG.isHKPos);
+      if (!rows.length) throw new Error('No Hong Kong rows found (262H Region / Submitting Country).');
+      S.pos = { name: file.name, rows, skipped: all.length - rows.length };
       if (wb && wb.Sheets.Dashboard && typeof wb.Sheets.Dashboard.C6?.v === 'number') { S.target = wb.Sheets.Dashboard.C6.v; store.set('target', S.target); }
       const ps = sheets.find(s => s.name === 'Pipeline');   // tracker Match Keys
       if (ps) { const hi = ps.rows.findIndex(r => r.includes('Match Key')); if (hi >= 0) { const a = ps.rows[hi].indexOf('Account'), k = ps.rows[hi].indexOf('Match Key'); let n = 0; for (const r of ps.rows.slice(hi + 1)) if (r[a] && r[k]) { S.keys[r[a]] = String(r[k]); n++; } store.set('keys', S.keys); if (n) toast(`Imported ${n} match keys from the tracker.`); } }
@@ -357,7 +361,7 @@ function render() {
 
   const srcInfo = (kind, n, extra) => { const b = $('#src-' + kind), d = S[kind]; b.querySelector('.fn').innerHTML = d ? esc(d.name) + (d.sample ? '<span class="sample">sample</span>' : '') : '<span class="dim">Not loaded</span>'; const i = b.querySelector('.info'); i.className = 'info'; i.textContent = d ? `${n.toLocaleString()} ${extra}` : ''; };
   srcInfo('pipe', pipe.length, 'schedule lines');
-  srcInfo('pos', pos.length, 'POS lines');
+  srcInfo('pos', pos.length, S.pos?.skipped ? `HK POS lines · ${S.pos.skipped.toLocaleString()} non-HK skipped` : 'HK POS lines');
   const hkAcct = accts.filter(a => /^hk$/i.test(a.region) || !a.region);
   srcInfo('acct', hkAcct.length, `HK accounts (${hkAcct.filter(a => a.type === 'NAL').length} NAL · ${hkAcct.filter(a => a.type === 'MPL').length} MPL)`);
   $('#asof').textContent = `Current quarter ${S.curQ} · next quarter ${nextQ} · pipeline file ${S.pipe.name}`;

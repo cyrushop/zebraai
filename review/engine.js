@@ -42,6 +42,8 @@ const ENG = (() => {
     ['euSub', ['POS End User Name - Submitted', 'End User Name - Raw'], true],
     ['nvl', ['NVL End User'], false],
     ['amt', ['POS Extended Cost (Net) (USD @ Planned Rate)'], true],
+    ['region', ['262H Region'], false],
+    ['country', ['Submitting Country'], false],
   ];
   const ACCT_SPEC = [
     ['type', ['Type'], true], ['name', ['Account Name'], true],
@@ -76,8 +78,11 @@ const ENG = (() => {
     const q = str(g(x, i.q)); if (!q) return null;
     const m = str(g(x, i.wk)).match(/(\d{1,2})\s*$/);
     const nvl = str(g(x, i.nvl));
-    return { q, wk: m ? +m[1] : null, eu: (nvl || str(g(x, i.euSub))).toUpperCase(), amt: num(g(x, i.amt)) };
+    return { q, wk: m ? +m[1] : null, eu: (nvl || str(g(x, i.euSub))).toUpperCase(), amt: num(g(x, i.amt)), region: str(g(x, i.region)) || str(g(x, i.country)) };
   }).rows;
+
+  // POS exports can hold several regions (e.g. an HK and a TW sheet); rows with no region are kept.
+  const isHKPos = p => !p.region || /hong\s*kong/i.test(p.region);
 
   const parseAccounts = rows => table(rows, ACCT_SPEC, (x, i) => {
     const type = str(g(x, i.type)).toUpperCase(); if (type !== 'NAL' && type !== 'MPL') return null;
@@ -194,7 +199,7 @@ const ENG = (() => {
       find: (id, name) => (id && byId.get(id)) || byName.get(String(name).toUpperCase()) || null };
   }
 
-  return { parsePipeline, parsePOS, parseAccounts, qAdd, qParse, qFromDate, qCmp, firstWeekOf, STAGES, tagOf, autoKey,
+  return { parsePipeline, parsePOS, parseAccounts, isHKPos, qAdd, qParse, qFromDate, qCmp, firstWeekOf, STAGES, tagOf, autoKey,
     weekDashboard, group, total, isSoftware, distOf, accountIndex };
 })();
 if (typeof module !== 'undefined') module.exports = ENG;

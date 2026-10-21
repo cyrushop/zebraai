@@ -4,11 +4,13 @@ The output holds customer and deal data, so it is git-ignored and must never
 be committed to this (public) repo.
 
 Usage:
-    python3 -I tools/build_review_data.py OUT.js PIPELINE.xls [TRACKER.xlsx] [ACCOUNTS.xlsx]
+    python3 -I tools/build_review_data.py OUT.js PIPELINE.xls [TRACKER.xlsx] [POS.xlsx] [ACCOUNTS.xlsx]
 
 PIPELINE  SFDC opportunity export with schedule lines (HTML-table .xls).
 TRACKER   HK weekly tracker (.xlsx with POS_Raw, Dashboard, Pipeline sheets): POS rows,
           Q target and Match Keys.
+POS       262H POS export (.xlsx, one sheet per region such as HK and TW). Only Hong Kong
+          rows are kept; it replaces the tracker's POS rows but keeps its target and keys.
 ACCOUNTS  FY27 account list (.xlsx with Type, Account Name, Account ID USD, Region,
           FY26 RAD, FY27 Projection).
 """
@@ -27,7 +29,7 @@ PIPE_COLS = ['First Ship Fiscal Quarter New', 'Opportunity Number', 'Opportunity
              'Siebel Account Number', 'Commit Category', 'Application Vertical', 'Schedule Date']
 POS_COLS = ['Invoice Fiscal Quarter', 'Invoice Fiscal Week', 'POS End User Name - Submitted', 'NVL End User',
             'POS Extended Cost (Net) (USD @ Planned Rate)', 'Submitting Account Name', 'POS Client Name - Submitted',
-            'Product Line']
+            'Product Line', '262H Region']
 ACCT_COLS = ['Type', 'Account Name', 'Account ID USD', 'Region', 'FY26 RAD', 'FY27 Projection']
 
 
@@ -65,6 +67,28 @@ def tracker(path):
     return {'name': os.path.basename(path) + ' (POS_Raw)', 'cols': cols, 'rows': rows}, keys, target
 
 
+def pos_export(path):
+    wb = openpyxl.load_workbook(path, read_only=True)
+    cols, rows = None, []
+    for ws in wb.worksheets:
+        data = list(ws.iter_rows(values_only=True))
+        h = next((i for i, r in enumerate(data[:30]) if 'Invoice Fiscal Quarter' in r), None)
+        if h is None:
+            continue
+        ix = {c: i for i, c in enumerate(data[h]) if c}
+        cols = [c for c in POS_COLS if c in ix]
+        for r in data[h + 1:]:
+            region = str(r[ix['262H Region']] if '262H Region' in ix else '')
+            if r[ix['Invoice Fiscal Quarter']] and (not region or 'hongkong' in region.lower().replace(' ', '')):
+                rows.append([clean(r[ix[c]]) for c in cols])
+    return {'name': os.path.basename(path) + ' (HK)', 'cols': cols, 'rows': rows}
+
+
+def is_pos_export(path):
+    wb = openpyxl.load_workbook(path, read_only=True)
+    return any('Invoice Fiscal Quarter' in r for ws in wb.worksheets for r in ws.iter_rows(max_row=30, values_only=True))
+
+
 def accounts(path):
     a = pd.read_excel(path)
     rows = []
@@ -77,12 +101,17 @@ def main(argv):
     if len(argv) < 3:
         sys.exit(__doc__)
     out = {'pipe': pipeline(argv[2])}
+    export = None
     for path in argv[3:]:
         names = openpyxl.load_workbook(path, read_only=True).sheetnames
         if 'POS_Raw' in names:
             out['pos'], out['keys'], out['target'] = tracker(path)
+        elif is_pos_export(path):
+            export = pos_export(path)
         else:
             out['acct'] = accounts(path)
+    if export:
+        out['pos'] = export
     js = 'window.HKPR_SAMPLE = ' + json.dumps(out, ensure_ascii=False, separators=(',', ':')) + ';\n'
     open(argv[1], 'w', encoding='utf-8').write(js)
     print(f"wrote {argv[1]}: {len(out['pipe']['rows'])} pipeline rows")
