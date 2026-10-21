@@ -11,6 +11,8 @@ It reads four exports:
 | VAD inventory (`*_INV_*.xlsx`) | VSTECS, Chinetek, … | Free on-hand stock |
 | VAD backlog (`*_BACKLOG_*.xlsx`) | VSTECS | Reseller orders waiting at the VAD |
 
+By default the views show open stages only (Secure, Validate, Qualify, Identify) with first ship in the current or next quarter. Won lines and other quarters can be switched on in the filters. Matching always runs over all open and Closed-Won lines, so orders and stock that Won deals already used are not offered to open ones.
+
 The file type is detected from the column headers, so you can drop all files in at once. A new pipeline or DSR replaces the previous one. Inventory and backlog files replace the earlier file for the same VAD.
 
 ## Matching order

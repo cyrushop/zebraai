@@ -308,12 +308,13 @@ tfoot td { font-weight: 600; border-bottom: 0; }
   var S = {
     tables: [], ds: null, a: null, fromUpload: false,
     tab: LS.get('zhk.tab', 'pipeline'),
-    f: Object.assign({ q: '', stages: ['Closed - Won', 'Secure', 'Validate', 'Qualify', 'Identify'], fqFrom: '', dist: '', group: '', sort: 'opp',
-      tie: '', zebra: '', stockOnly: true, claimConf: '' }, LS.get('zhk.filters', {})),
+    // Default view: open stages only, first ship in the current or next quarter.
+    f: Object.assign({ q: '', stages: ['Secure', 'Validate', 'Qualify', 'Identify'], fqScope: 'cn', dist: '', group: '', sort: 'opp',
+      tie: '', zebra: '', stockOnly: true, claimConf: '' }, LS.get('zhk.filters.v2', {})),
     overrides: LS.get('zhk.overrides', {}),
     limit: 300
   };
-  function saveFilters() { LS.set('zhk.filters', S.f); }
+  function saveFilters() { LS.set('zhk.filters.v2', S.f); }
   function lineKey(l) { return [l.oppNo, l.product, E.iso(l.shipDate), l.qty].join('|'); }
 
   // ------------------------------------------------------------ file reading
@@ -386,12 +387,22 @@ tfoot td { font-weight: 600; border-bottom: 0; }
     S.ds = E.buildDataset(S.tables);
     S.a = E.analyse(S.ds);
     $('#resetBtn').hidden = !(S.fromUpload && window.ZEBRA_INITIAL_DATA);
-    if (!S.f.fqFrom) S.f.fqFrom = currentFq();
     render();
   }
-  function currentFq() {
-    var d = new Date();
-    return d.getFullYear() + ' Q' + (Math.floor(d.getMonth() / 3) + 1);
+  function fqOf(d) { return d.getFullYear() + ' Q' + (Math.floor(d.getMonth() / 3) + 1); }
+  function currentFq() { return fqOf(new Date()); }
+  function nextFq() { var d = new Date(); return fqOf(new Date(d.getFullYear(), d.getMonth() + 3, 1)); }
+  function fqAllowed(scope) {
+    var c = currentFq(), n = nextFq();
+    if (scope === 'all') return null;
+    if (scope === 'c') return [c];
+    if (scope === 'n') return [n];
+    if (scope === 'cn' || !scope) return [c, n];
+    return [scope];
+  }
+  function fqScopeText() {
+    var a = fqAllowed(S.f.fqScope);
+    return a ? a.join(' + ') : 'all quarters';
   }
 
   function effStatus(r) {
@@ -421,11 +432,11 @@ tfoot td { font-weight: 600; border-bottom: 0; }
   function distKeyOf(l) { return l.distributor ? E.accountKey(l.distributor) : 'direct'; }
 
   function scopedLines(ignoreGroup) {
-    var f = S.f, q = f.q.trim().toLowerCase();
+    var f = S.f, q = f.q.trim().toLowerCase(), fqs = fqAllowed(f.fqScope);
     return S.a.lines.filter(function (r) {
       var l = r.line;
       if (f.stages.indexOf(l.stage) < 0) return false;
-      if (f.fqFrom && f.fqFrom !== 'all' && l.fq && l.fq < f.fqFrom) return false;
+      if (fqs && fqs.indexOf(l.fq) < 0) return false;
       if (f.dist && distKeyOf(l) !== f.dist) return false;
       var o = S.overrides[lineKey(l)];
       if (o && o.status === 'm-ignore' && f.group !== 'ignored') return false;
@@ -479,7 +490,7 @@ tfoot td { font-weight: 600; border-bottom: 0; }
     });
     var orderedPct = tot.amt ? (by.ordered.amt + by.claimorder.amt) / tot.amt : 0;
     var html = '<div class="sumhead"><div><h2>Where the pipeline stands</h2><div class="muted" style="font-size:.86rem">' +
-      tot.n.toLocaleString() + ' lines in scope · first ship ' + esc(S.f.fqFrom === 'all' ? 'all quarters' : 'from ' + S.f.fqFrom) +
+      tot.n.toLocaleString() + ' lines in scope · first ship ' + esc(fqScopeText()) + ' · ' + esc(S.f.stages.map(function (x) { return x.replace('Closed - ', ''); }).join(', ') || 'no stages') +
       ' · bar splits each line\'s USD by covered quantity</div></div><div class="kpis">' +
       '<div class="kpi"><div class="label">Pipeline in scope</div><div class="v">' + usdK(tot.amt) + '</div></div>' +
       '<div class="kpi"><div class="label">Found on Zebra orders</div><div class="v">' + Math.round(orderedPct * 100) + '%</div></div>' +
@@ -535,9 +546,11 @@ tfoot td { font-weight: 600; border-bottom: 0; }
     return opts;
   }
   function fqOptions() {
-    var s = {};
+    var s = {}, c = currentFq(), n = nextFq();
     S.a.lines.forEach(function (r) { if (r.line.fq) s[r.line.fq] = 1; });
-    return [['all', 'All quarters']].concat(Object.keys(s).sort().map(function (q) { return [q, 'From ' + q]; }));
+    return [['cn', 'This Q + next Q (' + c + ', ' + n + ')'], ['c', 'This Q only (' + c + ')'], ['n', 'Next Q only (' + n + ')']]
+      .concat(Object.keys(s).sort().filter(function (q) { return q !== c && q !== n; }).map(function (q) { return [q, q]; }))
+      .concat([['all', 'All quarters']]);
   }
   function sel(id, opts, val) {
     return '<select id="' + id + '">' + opts.map(function (o) {
@@ -549,7 +562,7 @@ tfoot td { font-weight: 600; border-bottom: 0; }
     if (S.tab === 'help') { $('#filters').innerHTML = ''; return; }
     h += '<input type="search" id="fq" placeholder="Search opp, end user, partner, part, PO…" value="' + esc(f.q) + '">';
     if (S.tab === 'pipeline' || S.tab === 'claim') {
-      h += sel('ffq', fqOptions(), f.fqFrom) + sel('fdist', distOptions(), f.dist);
+      h += sel('ffq', fqOptions(), f.fqScope) + sel('fdist', distOptions(), f.dist);
       h += '<div class="chips" role="group" aria-label="Sales stage">' + ['Closed - Won', 'Secure', 'Validate', 'Qualify', 'Identify'].map(function (s) {
         return '<button class="chipbtn" data-stage="' + s + '" aria-pressed="' + (f.stages.indexOf(s) >= 0) + '">' + s.replace('Closed - ', '') + '</button>';
       }).join('') + '</div>';
@@ -780,7 +793,7 @@ tfoot td { font-weight: 600; border-bottom: 0; }
   function viewHelp() {
     return '<article class="help">' +
       '<h2>How each pipeline line is checked</h2>' +
-      '<p>Every open or Closed-Won SFDC line (Closed-Lost and Closed-Other are skipped) is compared with the Zebra DSR, VAD inventory and the VST backlog. Matches are taken in the order below. Each DSR quantity and each unit of stock is used once, with Closed-Won lines first, then Secure, Validate, Qualify and Identify, earliest ship date first.</p>' +
+      '<p>By default the views show open stages (Secure, Validate, Qualify, Identify) with first ship in the current or next quarter. Turn on <i>Won</i> or pick another quarter in the filters to widen it. Matching itself always runs over every open or Closed-Won SFDC line (Closed-Lost and Closed-Other are skipped), so orders and stock already used by Won deals are not offered to open ones. Each line is compared with the Zebra DSR, VAD inventory and the VST backlog. Matches are taken in the order below. Each DSR quantity and each unit of stock is used once, with Closed-Won lines first, then Secure, Validate, Qualify and Identify, earliest ship date first.</p>' +
       '<ol>' +
       '<li><b>Ordered on opp / PC.</b> A DSR line carries the same Opportunity Number (or the same PC number) and the same part. Shipped lines show "Shipped on opp/PC"; open orders show "In Zebra backlog". These are front-end priced and need no claim.</li>' +
       '<li><b>End-user match.</b> A DSR line for the same end user and part, booked no earlier than 30 days before the opp was created, and not tied to a different opp in this pipeline. If it has no PC, it was bought at standard price and is a claim candidate.</li>' +
@@ -939,7 +952,7 @@ tfoot td { font-weight: 600; border-bottom: 0; }
   $('#sheetBg').addEventListener('click', closeSheet);
   document.addEventListener('change', function (e) {
     var id = e.target.id, v = e.target.value;
-    var map = { ffq: 'fqFrom', fdist: 'dist', fgroup: 'group', fsort: 'sort', ftie: 'tie', fzebra: 'zebra', fconf: 'claimConf' };
+    var map = { ffq: 'fqScope', fdist: 'dist', fgroup: 'group', fsort: 'sort', ftie: 'tie', fzebra: 'zebra', fconf: 'claimConf' };
     if (id === 'fileInput') { handleFiles(e.target.files); e.target.value = ''; return; }
     if (map[id]) { S.f[map[id]] = v; S.limit = 300; saveFilters(); render(); }
   });
