@@ -791,7 +791,7 @@ tfoot td { font-weight: 600; border-bottom: 0; }
       '<h3>Backend claim</h3><p>Items from steps 2–5 were bought at standard discount or DNP, so the deal price is recovered through a backend claim. The indicative claim is (standard unit − deal unit) × quantity. Standard unit comes from the DSR line value or the VAD inventory price. Deal unit is the SFDC schedule amount ÷ quantity. Treat it as a sizing guide and confirm against the PC and price file before you file.</p>' +
       '<h3>VST backlog check</h3><p>The VSTECS backlog PO number is the same PO VSTECS sends to Zebra, so each reseller order is traced to its DSR line. "Zebra still open" means VST is waiting for Zebra. "Zebra shipped · VAD holds stock" means stock is at VST but reserved for that reseller. "Not in DSR" means the PO is newer than the DSR or VST fills it from stock.</p>' +
       '<h3>Uploading</h3><p>Drop or upload any mix of files. The type is detected from the column headers: SFDC pipeline report (.xls), DSR (.xlsx, Hong Kong rows only), VAD inventory and VAD backlog. A new pipeline or DSR replaces the old one; inventory and backlog replace the earlier file for the same VAD. Data stays in this browser.</p>' +
-      '<h3>Manual decisions</h3><p>Open a line to record a confirmed status or a note, for example "preloaded on PO ZEB26-0929". Manual decisions are kept in this browser and survive new uploads, keyed by opportunity, part, ship date and quantity.</p>' +
+      '<h3>Manual decisions</h3><p>Open a line to record a confirmed status or a note, for example "preloaded on VST PO ZEB26-xxxx". Manual decisions are kept in this browser and survive new uploads, keyed by opportunity, part, ship date and quantity.</p>' +
       '</article>';
   }
 
@@ -839,7 +839,7 @@ tfoot td { font-weight: 600; border-bottom: 0; }
     h += '</div><form class="override" id="ovForm"><div class="label">Your decision</div>' +
       '<label for="ovStatus" class="muted" style="font-size:.86rem">Status</label><select id="ovStatus">' +
       Object.keys(MANUAL).map(function (k) { return '<option value="' + k + '"' + ((o.status || '') === k ? ' selected' : '') + '>' + esc(MANUAL[k]) + '</option>'; }).join('') +
-      '</select><label for="ovNote" class="muted" style="font-size:.86rem">Note</label><textarea id="ovNote" rows="3" placeholder="e.g. preloaded on VST PO ZEB26-0929, claim filed 21 Oct">' + esc(o.note || '') + '</textarea>' +
+      '</select><label for="ovNote" class="muted" style="font-size:.86rem">Note</label><textarea id="ovNote" rows="3" placeholder="e.g. preloaded on VST PO ZEB26-xxxx, claim filed">' + esc(o.note || '') + '</textarea>' +
       '<div style="display:flex;gap:8px"><button class="btn primary" type="submit">Save decision</button><button class="btn" type="button" id="ovClear">Clear</button></div></form>';
     var sh = $('#sheet');
     sh.innerHTML = h;
