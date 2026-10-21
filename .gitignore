@@ -1,0 +1,7 @@
+# Customer / deal data must never be committed: this repo is public.
+app/initial-data.js
+data/
+*.xls
+*.xlsx
+*.csv
+node_modules/

@@ -1,0 +1,975 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>HK Pipeline Order Check</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: a working surface. Data-freshness bar → status summary → tabs → filter row → dense table; detail opens in a side sheet. */
+:root {
+  --bg: #f3f5f7;
+  --surface: #ffffff;
+  --sunk: #e9edf1;
+  --ink: #15212c;
+  --ink-2: #4f5f6e;
+  --ink-3: #7b8896;
+  --line: #d9dfe5;
+  --accent: #1d5cc2;
+  --accent-ink: #ffffff;
+  --accent-soft: #e3ecfa;
+  /* status groups — categorical slots 1–4 in fixed order + neutral */
+  --g-ordered: #2a78d6;
+  --g-claimorder: #eb6834;
+  --g-claimstock: #1baf7a;
+  --g-partial: #eda100;
+  --g-none: #b9c1c9;
+  --warn-bg: #fff3d6;
+  --warn-ink: #7a5300;
+  --bad-ink: #b42d2d;
+  --good-ink: #136c2e;
+  --shadow: 0 8px 30px rgba(21, 33, 44, .16);
+  --f-display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11171d; --surface: #182029; --sunk: #1f2933; --ink: #e7edf3; --ink-2: #a9b6c3; --ink-3: #7d8a97;
+    --line: #2b3742; --accent: #6ea2f0; --accent-ink: #0d1620; --accent-soft: #1d2d45;
+    --g-ordered: #3987e5; --g-claimorder: #d95926; --g-claimstock: #199e70; --g-partial: #c98500; --g-none: #4a5662;
+    --warn-bg: #3a2e12; --warn-ink: #f2c35b; --bad-ink: #f08080; --good-ink: #6fd08c;
+    --shadow: 0 8px 30px rgba(0, 0, 0, .5);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11171d; --surface: #182029; --sunk: #1f2933; --ink: #e7edf3; --ink-2: #a9b6c3; --ink-3: #7d8a97;
+  --line: #2b3742; --accent: #6ea2f0; --accent-ink: #0d1620; --accent-soft: #1d2d45;
+  --g-ordered: #3987e5; --g-claimorder: #d95926; --g-claimstock: #199e70; --g-partial: #c98500; --g-none: #4a5662;
+  --warn-bg: #3a2e12; --warn-ink: #f2c35b; --bad-ink: #f08080; --good-ink: #6fd08c;
+  --shadow: 0 8px 30px rgba(0, 0, 0, .5);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  background: var(--bg); color: var(--ink); font: 14px/1.45 var(--f-body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 16px 48px;
+}
+.wrap { max-width: 1440px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+.wrap > * { min-width: 0; }
+h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; margin: 0; letter-spacing: .01em; }
+h1 { font-size: 1.6rem; font-weight: 700; }
+h2 { font-size: 1.1rem; font-weight: 600; }
+.mono { font-family: var(--f-mono); font-size: .86em; }
+.muted { color: var(--ink-2); }
+.faint { color: var(--ink-3); }
+.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+button, select, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.label { font-family: var(--f-display); font-size: .74rem; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-3); }
+
+/* header */
+.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; }
+.top .sub { color: var(--ink-2); margin-top: 2px; }
+.top .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.btn { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 7px 12px; font-weight: 500; }
+.btn:hover { border-color: var(--ink-3); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.small { padding: 4px 9px; font-size: .86rem; }
+
+/* freshness strip */
+.fresh { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.fresh > div { background: var(--surface); padding: 10px 12px; min-width: 0; }
+.fresh .v { font-weight: 600; font-variant-numeric: tabular-nums; }
+.fresh .f { font-size: .8rem; color: var(--ink-3); overflow-wrap: anywhere; }
+.fresh .stale .v { color: var(--warn-ink); }
+.notice { background: var(--warn-bg); color: var(--warn-ink); border-radius: 8px; padding: 9px 12px; font-size: .9rem; }
+
+/* summary */
+.summary { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 14px; }
+.sumhead { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 24px; align-items: baseline; }
+.kpis { display: flex; flex-wrap: wrap; gap: 8px 28px; }
+.kpi .v { font-family: var(--f-display); font-size: 1.45rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.bar { display: flex; gap: 2px; height: 22px; border-radius: 4px; overflow: hidden; background: var(--sunk); }
+.bar button { border: 0; padding: 0; min-width: 3px; height: 100%; }
+.bar button:hover, .bar button.on { filter: brightness(1.08); box-shadow: inset 0 0 0 2px var(--ink); }
+.legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 6px 18px; }
+.legend button { display: grid; grid-template-columns: 12px 1fr auto; gap: 8px; align-items: baseline; text-align: left; border: 1px solid transparent; background: none; border-radius: 6px; padding: 4px 6px; }
+.legend button:hover { border-color: var(--line); }
+.legend button.on { border-color: var(--ink-3); background: var(--sunk); }
+.legend .sw { width: 12px; height: 12px; border-radius: 3px; transform: translateY(1px); }
+.legend .lt { font-weight: 500; }
+.legend .ld { grid-column: 2 / 4; font-size: .8rem; color: var(--ink-3); }
+.tip { position: fixed; z-index: 30; pointer-events: none; background: var(--ink); color: var(--bg); border-radius: 6px; padding: 6px 9px; font-size: .82rem; max-width: 260px; }
+
+/* tabs + filters */
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.tabs button { border: 0; background: none; padding: 9px 14px; font-family: var(--f-display); font-weight: 600; font-size: .98rem; color: var(--ink-2); border-bottom: 3px solid transparent; white-space: nowrap; }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .count { font-family: var(--f-body); font-weight: 500; font-size: .78rem; color: var(--ink-3); margin-left: 4px; }
+.filters { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.filters input[type=search] { flex: 1 1 220px; min-width: 0; border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 7px 10px; }
+.filters select { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 7px 8px; max-width: 100%; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.chipbtn { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 3px 10px; font-size: .84rem; color: var(--ink-2); }
+.chipbtn[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--ink); }
+.filters .spacer { flex: 1 1 auto; }
+
+/* tables */
+.tablebox { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; min-width: 980px; }
+th, td { padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; text-align: left; }
+th { font-family: var(--f-display); font-weight: 600; font-size: .78rem; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3); background: var(--surface); position: sticky; top: 0; z-index: 1; white-space: nowrap; }
+th.sortable { cursor: pointer; }
+th.sortable:hover { color: var(--ink); }
+tbody tr.click { cursor: pointer; }
+tbody tr.click:hover td { background: var(--sunk); }
+tr.grp td { border-top: 2px solid var(--line); }
+tr.cont td.opp > * { visibility: hidden; }
+td.opp { max-width: 260px; }
+td.opp .on { font-weight: 600; overflow-wrap: anywhere; }
+td.opp .os { font-size: .8rem; color: var(--ink-3); }
+.ev { font-size: .82rem; color: var(--ink-2); max-width: 300px; }
+.ev div + div { margin-top: 2px; }
+tfoot td { font-weight: 600; border-bottom: 0; }
+.more { padding: 12px; text-align: center; }
+.empty { padding: 32px 16px; text-align: center; color: var(--ink-2); }
+
+/* status chips — colour + text, never colour alone */
+.st { display: inline-flex; align-items: center; gap: 6px; font-size: .8rem; font-weight: 500; white-space: nowrap; }
+.st::before { content: ""; width: 9px; height: 9px; border-radius: 2px; background: var(--c, var(--g-none)); flex: none; }
+.st.ordered { --c: var(--g-ordered); }
+.st.claimorder { --c: var(--g-claimorder); }
+.st.claimstock { --c: var(--g-claimstock); }
+.st.partial { --c: var(--g-partial); }
+.st.none { --c: var(--g-none); }
+.tag { display: inline-block; font-size: .72rem; border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; color: var(--ink-2); margin: 2px 4px 0 0; white-space: nowrap; }
+.tag.warn { border-color: var(--warn-ink); color: var(--warn-ink); }
+.tag.good { border-color: var(--good-ink); color: var(--good-ink); }
+.tag.manual { background: var(--accent-soft); border-color: var(--accent); color: var(--ink); }
+.cov { display: flex; gap: 1px; height: 6px; width: 90px; background: var(--sunk); border-radius: 3px; overflow: hidden; margin-top: 5px; }
+.cov span { height: 100%; }
+
+/* side sheet */
+.sheet-bg { position: fixed; inset: 0; background: rgba(10, 16, 22, .35); z-index: 20; }
+.sheet { position: fixed; top: 0; right: 0; bottom: 0; width: min(560px, 100%); background: var(--surface); z-index: 21; box-shadow: var(--shadow); overflow-y: auto;
+  padding: calc(18px + env(safe-area-inset-top, 0px)) max(20px, env(safe-area-inset-right, 0px)) calc(24px + env(safe-area-inset-bottom, 0px)) 20px; display: grid; gap: 16px; align-content: start; }
+.sheet .close { position: absolute; top: calc(12px + env(safe-area-inset-top, 0px)); right: max(12px, env(safe-area-inset-right, 0px)); }
+.facts { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; font-size: .9rem; }
+.facts dt { color: var(--ink-3); }
+.facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.piece { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: grid; gap: 4px; }
+.piece .h { display: flex; justify-content: space-between; gap: 8px; }
+.override { display: grid; gap: 8px; background: var(--sunk); border-radius: 8px; padding: 12px; }
+.override select, .override textarea { width: 100%; border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 7px 8px; font: inherit; color: inherit; }
+
+/* drop zone */
+.drop { position: fixed; inset: 0; z-index: 40; background: color-mix(in srgb, var(--accent) 18%, transparent); display: grid; place-items: center; }
+.drop div { background: var(--surface); border: 2px dashed var(--accent); border-radius: 12px; padding: 28px 36px; font-family: var(--f-display); font-size: 1.2rem; font-weight: 600; }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(18px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg); padding: 9px 14px; border-radius: 8px; z-index: 50; max-width: calc(100% - 32px); }
+
+.help { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; display: grid; gap: 14px; max-width: 900px; }
+.help p, .help li { max-width: 72ch; }
+.help ol { margin: 0; padding-left: 20px; display: grid; gap: 8px; }
+.help h3 { font-size: 1rem; }
+
+@media (max-width: 640px) {
+  h1 { font-size: 1.3rem; }
+  .kpi .v { font-size: 1.2rem; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>HK Pipeline Order Check</h1>
+      <div class="sub">SFDC pipeline against Zebra DSR orders, VAD stock and the VST reseller backlog. Hong Kong only.</div>
+    </div>
+    <div class="actions">
+      <input id="fileInput" type="file" multiple accept=".xls,.xlsx,.csv,.htm,.html" hidden>
+      <button class="btn primary" id="uploadBtn">Upload files</button>
+      <button class="btn" id="resetBtn" hidden>Reset to initial data</button>
+    </div>
+  </header>
+
+  <section class="fresh" id="fresh" aria-label="Loaded data"></section>
+  <div class="notice" id="notice" hidden></div>
+
+  <section class="summary" id="summary" aria-label="Status summary"></section>
+
+  <nav class="tabs" role="tablist" id="tabs"></nav>
+  <section class="filters" id="filters"></section>
+  <main id="view"></main>
+</div>
+
+<div class="tip" id="tip" hidden></div>
+<div class="sheet-bg" id="sheetBg" hidden></div>
+<aside class="sheet" id="sheet" hidden aria-label="Line detail"></aside>
+<div class="drop" id="drop" hidden><div>Drop pipeline, DSR, VAD stock or backlog files</div></div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="engine.js"></script>
+<script src="initial-data.js" onerror="window.ZEBRA_INITIAL_DATA = null"></script>
+<script>
+(function () {
+  'use strict';
+  var E = window.ZEngine;
+  var $ = function (s) { return document.querySelector(s); };
+  var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+  var fmtD = function (d) { return d ? d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'; };
+  var fmtDs = function (d) { return d ? d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }) : '—'; };
+  var usd = function (n) { return n == null ? '—' : '$' + Math.round(n).toLocaleString('en-US'); };
+  var usdK = function (n) { return Math.abs(n) >= 1e6 ? '$' + (n / 1e6).toFixed(2) + 'M' : Math.abs(n) >= 1e3 ? '$' + (n / 1e3).toFixed(1) + 'k' : '$' + Math.round(n); };
+  var qn = function (n) { return (Math.round(n * 100) / 100).toLocaleString('en-US'); };
+
+  // ------------------------------------------------------------ statuses
+  var STATUS = {
+    'shipped':       { label: 'Shipped on opp/PC', group: 'ordered', desc: 'Zebra order carries this opp or PC and has shipped.' },
+    'zebra-backlog': { label: 'In Zebra backlog', group: 'ordered', desc: 'Zebra order carries this opp or PC; still an open order.' },
+    'eu-claim':      { label: 'Ordered, end-user match', group: 'claimorder', desc: 'Same end user and part on a Zebra order without this opp; standard price.' },
+    'stock-claim':   { label: 'Stock order, no PC', group: 'claimorder', desc: 'VAD/partner ordered the opp parts on a PO without a PC (standard discount).' },
+    'vad-stock':     { label: 'VAD stock available', group: 'claimstock', desc: 'Free on-hand stock at the VAD can fulfil this line.' },
+    'incoming':      { label: 'Preload incoming', group: 'claimstock', desc: 'Zebra open order without PC at the VAD, not tied to a reseller order.' },
+    'partial':       { label: 'Partially covered', group: 'none', desc: 'Some quantity found; the rest has no order or stock.' },
+    'substituted':   { label: 'Opp ordered, other part', group: 'partial', desc: 'The opp is on Zebra orders, but with different part numbers.' },
+    'not-ordered':   { label: 'No order found', group: 'none', desc: 'Nothing in DSR, VAD stock or preload matches this line.' }
+  };
+  var GROUPS = [
+    { id: 'ordered', label: 'Ordered on opp / PC', desc: 'Front-end priced. Shipped or in Zebra backlog.' },
+    { id: 'claimorder', label: 'Ordered at standard price', desc: 'No PC on the order. Backend claim candidate.' },
+    { id: 'claimstock', label: 'Fulfil from VAD stock', desc: 'On-hand or preload stock. Backend claim candidate.' },
+    { id: 'partial', label: 'Opp ordered, other part', desc: 'Opp is on Zebra orders with different part numbers. Check for a substitution.' },
+    { id: 'none', label: 'No order found', desc: 'Not in DSR, stock or preload yet, including the uncovered part of partial lines.' }
+  ];
+  var MANUAL = {
+    '': 'Automatic',
+    'm-ordered': 'Confirmed ordered (front-end PC)',
+    'm-claim': 'Confirmed: fulfil from stock, backend claim',
+    'm-not': 'Confirmed not ordered yet',
+    'm-ignore': 'Ignore this line'
+  };
+  var MANUAL_GROUP = { 'm-ordered': 'ordered', 'm-claim': 'claimstock', 'm-not': 'none' };
+  var PIECE = {
+    opp: 'Zebra order on this opp/PC', eu: 'Zebra order, same end user', stock: 'VAD stock order (no PC)',
+    inv: 'VAD on-hand stock', inc: 'Preload: Zebra open order (no PC)'
+  };
+  var PIECE_GROUP = { opp: 'ordered', eu: 'claimorder', stock: 'claimorder', inv: 'claimstock', inc: 'claimstock' };
+
+  // ------------------------------------------------------------ storage
+  var LS = {
+    get: function (k, d) { try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
+    set: function (k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* storage unavailable */ } }
+  };
+  var IDB = {
+    open: function () {
+      return new Promise(function (res, rej) {
+        try {
+          var r = indexedDB.open('zebra-hk-order-check', 1);
+          r.onupgradeneeded = function () { r.result.createObjectStore('kv'); };
+          r.onsuccess = function () { res(r.result); };
+          r.onerror = function () { rej(r.error); };
+        } catch (e) { rej(e); }
+      });
+    },
+    get: function (k) {
+      return IDB.open().then(function (db) {
+        return new Promise(function (res) {
+          var q = db.transaction('kv').objectStore('kv').get(k);
+          q.onsuccess = function () { res(q.result); };
+          q.onerror = function () { res(undefined); };
+        });
+      }).catch(function () { return undefined; });
+    },
+    set: function (k, v) {
+      return IDB.open().then(function (db) {
+        return new Promise(function (res) {
+          var tx = db.transaction('kv', 'readwrite');
+          tx.objectStore('kv').put(v, k);
+          tx.oncomplete = function () { res(true); };
+          tx.onerror = function () { res(false); };
+        });
+      }).catch(function () { return false; });
+    },
+    del: function (k) {
+      return IDB.open().then(function (db) { db.transaction('kv', 'readwrite').objectStore('kv').delete(k); }).catch(function () {});
+    }
+  };
+
+  // ------------------------------------------------------------ state
+  var S = {
+    tables: [], ds: null, a: null, fromUpload: false,
+    tab: LS.get('zhk.tab', 'pipeline'),
+    f: Object.assign({ q: '', stages: ['Closed - Won', 'Secure', 'Validate', 'Qualify', 'Identify'], fqFrom: '', dist: '', group: '', sort: 'opp',
+      tie: '', zebra: '', stockOnly: true, claimConf: '' }, LS.get('zhk.filters', {})),
+    overrides: LS.get('zhk.overrides', {}),
+    limit: 300
+  };
+  function saveFilters() { LS.set('zhk.filters', S.f); }
+  function lineKey(l) { return [l.oppNo, l.product, E.iso(l.shipDate), l.qty].join('|'); }
+
+  // ------------------------------------------------------------ file reading
+  function readFile(file) {
+    return file.arrayBuffer().then(function (buf) {
+      var head = new TextDecoder().decode(buf.slice(0, 400)).replace(/^﻿/, '').trimStart();
+      var grids = [];
+      if (head.charAt(0) === '<') {
+        // SFDC "xls" exports are HTML tables
+        var html = new TextDecoder('windows-1252').decode(buf);
+        var doc = new DOMParser().parseFromString(html, 'text/html');
+        doc.querySelectorAll('table').forEach(function (t) {
+          grids.push(Array.prototype.map.call(t.rows, function (tr) {
+            return Array.prototype.map.call(tr.cells, function (c) { var v = c.textContent.trim(); return v === '' ? null : v; });
+          }));
+        });
+      } else {
+        if (!window.XLSX) throw new Error('The Excel reader did not load. Check your connection and reload.');
+        var wb = XLSX.read(buf, { type: 'array', cellDates: true });
+        wb.SheetNames.forEach(function (n) {
+          grids.push(XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: true, defval: null }));
+        });
+      }
+      for (var i = 0; i < grids.length; i++) {
+        var t = E.tableFromGrid(grids[i], file.name);
+        if (!t) continue;
+        t.rows = t.rows.map(function (r) { return r.map(function (v) { return v instanceof Date ? v.toISOString() : v; }); });
+        if (t.type === 'dsr') {
+          var c = t.headers.indexOf('Account Country');
+          if (c >= 0) t.rows = t.rows.filter(function (r) { return r[c] === 'Hong Kong'; });
+        }
+        t.loadedAt = new Date().toISOString();
+        return t;
+      }
+      throw new Error(file.name + ': not recognised as a pipeline, DSR, VAD inventory or VAD backlog export.');
+    });
+  }
+  function tableSlot(t) {
+    if (t.type === 'pipeline' || t.type === 'dsr') return t.type;
+    var c = t.headers.indexOf('Distributor Account Number'), n = t.headers.indexOf('Distributor Name');
+    var r = t.rows[0] || [];
+    return t.type + '|' + (c >= 0 && r[c] ? String(r[c]).replace(/\.0+$/, '') : E.accountKey(n >= 0 ? r[n] : t.name));
+  }
+  function mergeTables(old, add) {
+    var slots = {};
+    add.forEach(function (t) { slots[tableSlot(t)] = 1; });
+    return old.filter(function (t) { return !slots[tableSlot(t)]; }).concat(add);
+  }
+  function handleFiles(files) {
+    files = Array.prototype.slice.call(files);
+    if (!files.length) return;
+    toast('Reading ' + files.length + ' file' + (files.length > 1 ? 's' : '') + '…');
+    var ok = [], errs = [];
+    Promise.all(files.map(function (f) {
+      return readFile(f).then(function (t) { ok.push(t); }, function (e) { errs.push(e.message || String(e)); });
+    })).then(function () {
+      if (ok.length) {
+        S.tables = mergeTables(S.tables, ok);
+        S.fromUpload = true;
+        IDB.set('tables', S.tables);
+        recompute();
+      }
+      var msg = ok.map(function (t) { return 'Loaded ' + t.type + ' (' + t.rows.length + ' rows)'; }).concat(errs).join(' · ');
+      toast(msg || 'Nothing loaded', 6000);
+    });
+  }
+
+  // ------------------------------------------------------------ compute
+  function recompute() {
+    S.ds = E.buildDataset(S.tables);
+    S.a = E.analyse(S.ds);
+    $('#resetBtn').hidden = !(S.fromUpload && window.ZEBRA_INITIAL_DATA);
+    if (!S.f.fqFrom) S.f.fqFrom = currentFq();
+    render();
+  }
+  function currentFq() {
+    var d = new Date();
+    return d.getFullYear() + ' Q' + (Math.floor(d.getMonth() / 3) + 1);
+  }
+
+  function effStatus(r) {
+    var o = S.overrides[lineKey(r.line)];
+    return o && o.status ? o.status : r.status;
+  }
+  function groupOf(r) {
+    var o = S.overrides[lineKey(r.line)];
+    if (o && o.status) return MANUAL_GROUP[o.status] || null;
+    return STATUS[r.status].group;
+  }
+  // Split a line's USD across groups by covered quantity; the rest is "none".
+  function valueSplit(r) {
+    var out = {}, l = r.line, o = S.overrides[lineKey(l)];
+    if (o && o.status) { var g = MANUAL_GROUP[o.status]; if (g) out[g] = l.amount; return out; }
+    if (r.status === 'substituted') { out.partial = l.amount; return out; }
+    var left = l.amount;
+    ['opp', 'eu', 'stock', 'inv', 'inc'].forEach(function (k) {
+      if (!r.q[k] || !r.need) return;
+      var v = l.amount * Math.min(1, r.q[k] / r.need);
+      out[PIECE_GROUP[k]] = (out[PIECE_GROUP[k]] || 0) + v; left -= v;
+    });
+    if (left > 0.005) out.none = (out.none || 0) + left;
+    return out;
+  }
+  function distLabel(l) { return l.distributor || (l.partner ? 'Direct: ' + l.partner : 'Direct'); }
+  function distKeyOf(l) { return l.distributor ? E.accountKey(l.distributor) : 'direct'; }
+
+  function scopedLines(ignoreGroup) {
+    var f = S.f, q = f.q.trim().toLowerCase();
+    return S.a.lines.filter(function (r) {
+      var l = r.line;
+      if (f.stages.indexOf(l.stage) < 0) return false;
+      if (f.fqFrom && f.fqFrom !== 'all' && l.fq && l.fq < f.fqFrom) return false;
+      if (f.dist && distKeyOf(l) !== f.dist) return false;
+      var o = S.overrides[lineKey(l)];
+      if (o && o.status === 'm-ignore' && f.group !== 'ignored') return false;
+      if (!ignoreGroup && f.group) {
+        if (f.group === 'ignored') { if (!(o && o.status === 'm-ignore')) return false; }
+        else if (!valueSplit(r)[f.group]) return false;
+      }
+      if (q) {
+        var hay = [l.oppNo, l.oppName, l.endUser, l.partner, l.distributor, l.product, l.pc].join(' ').toLowerCase();
+        if (hay.indexOf(q) < 0) return false;
+      }
+      return true;
+    });
+  }
+
+  // ------------------------------------------------------------ render
+  function render() {
+    renderFresh(); renderSummary(); renderTabs(); renderFilters(); renderView();
+  }
+
+  function renderFresh() {
+    var a = S.a.asOf, src = S.ds.sources;
+    var cell = function (label, d, files, stale) {
+      return '<div class="' + (stale ? 'stale' : '') + '"><div class="label">' + label + '</div><div class="v">' + (d ? fmtD(d) : 'Not loaded') +
+        '</div><div class="f">' + esc((files || []).map(function (n) { return n.replace(/^[0-9a-f]{8}-/, ''); }).join(', ') || 'Upload to add') + '</div></div>';
+    };
+    var lag = a.pipeline && a.dsr ? Math.round((a.pipeline - a.dsr) / 864e5) : 0;
+    $('#fresh').innerHTML =
+      cell('SFDC pipeline · latest created', a.pipeline, src.pipeline) +
+      cell('Zebra DSR · last booking', a.dsr, src.dsr, lag > 7) +
+      cell('VAD inventory · as of', a.inventory, src.inventory) +
+      cell('VST backlog · as of', a.backlog, src.backlog);
+    var n = $('#notice');
+    if (lag > 7) {
+      n.hidden = false;
+      n.textContent = 'The DSR ends ' + lag + ' days before the pipeline export. Orders booked after ' + fmtD(a.dsr) +
+        ' are not visible yet, so recent deals may show "No order found". Upload a newer DSR to close the gap.';
+    } else n.hidden = true;
+  }
+
+  function renderSummary() {
+    var lines = scopedLines(true);
+    var tot = { amt: 0, n: 0 }, by = {};
+    GROUPS.forEach(function (g) { by[g.id] = { amt: 0, n: 0 }; });
+    var claim = 0, claimN = 0;
+    lines.forEach(function (r) {
+      var sp = valueSplit(r), o = S.overrides[lineKey(r.line)];
+      tot.amt += r.line.amount; tot.n++;
+      Object.keys(sp).forEach(function (g) { if (by[g]) { by[g].amt += sp[g]; by[g].n++; } });
+      if (r.claimQty && !(o && /m-(ordered|not)/.test(o.status))) { claim += r.claimEst; claimN++; }
+    });
+    var orderedPct = tot.amt ? (by.ordered.amt + by.claimorder.amt) / tot.amt : 0;
+    var html = '<div class="sumhead"><div><h2>Where the pipeline stands</h2><div class="muted" style="font-size:.86rem">' +
+      tot.n.toLocaleString() + ' lines in scope · first ship ' + esc(S.f.fqFrom === 'all' ? 'all quarters' : 'from ' + S.f.fqFrom) +
+      ' · bar splits each line\'s USD by covered quantity</div></div><div class="kpis">' +
+      '<div class="kpi"><div class="label">Pipeline in scope</div><div class="v">' + usdK(tot.amt) + '</div></div>' +
+      '<div class="kpi"><div class="label">Found on Zebra orders</div><div class="v">' + Math.round(orderedPct * 100) + '%</div></div>' +
+      '<div class="kpi"><div class="label">Indicative claim · ' + claimN + ' lines</div><div class="v">' + usdK(claim) + '</div></div>' +
+      '</div></div><div class="bar" role="img" aria-label="Pipeline value by order status">';
+    GROUPS.forEach(function (g) {
+      var w = tot.amt ? by[g.id].amt / tot.amt * 100 : 0;
+      if (w <= 0) return;
+      html += '<button data-group="' + g.id + '" class="' + (S.f.group === g.id ? 'on' : '') + '" style="flex:' + w.toFixed(3) +
+        ' 1 0;background:var(--g-' + g.id + ')" aria-label="' + esc(g.label) + '" data-tip="' + esc(g.label + ': ' + usd(by[g.id].amt) +
+        ' · ' + Math.round(w) + '% of value · ' + by[g.id].n + ' lines involved') + '"></button>';
+    });
+    html += '</div><div class="legend">';
+    GROUPS.forEach(function (g) {
+      html += '<button data-group="' + g.id + '" class="' + (S.f.group === g.id ? 'on' : '') + '" aria-pressed="' + (S.f.group === g.id) +
+        '"><span class="sw" style="background:var(--g-' + g.id + ')"></span><span class="lt">' + esc(g.label) +
+        '</span><span class="num">' + usdK(by[g.id].amt) + ' · ' + (tot.amt ? Math.round(by[g.id].amt / tot.amt * 100) : 0) + '%</span><span class="ld">' + esc(g.desc) + '</span></button>';
+    });
+    html += '</div>';
+    $('#summary').innerHTML = html;
+  }
+
+  var TABS = [
+    { id: 'pipeline', label: 'Pipeline check' },
+    { id: 'claim', label: 'Backend claim' },
+    { id: 'zebra', label: 'Zebra backlog' },
+    { id: 'vst', label: 'VST backlog' },
+    { id: 'stock', label: 'VAD stock' },
+    { id: 'help', label: 'How matching works' }
+  ];
+  function renderTabs() {
+    var counts = {
+      pipeline: scopedLines().length,
+      claim: claimRows().length,
+      zebra: S.a.zebraOpen.length,
+      vst: S.a.backlog.length,
+      stock: Object.keys(S.a.stock).filter(function (k) { return S.a.stock[k].onHand > 0; }).length
+    };
+    $('#tabs').innerHTML = TABS.map(function (t) {
+      return '<button role="tab" data-tab="' + t.id + '" aria-selected="' + (S.tab === t.id) + '">' + t.label +
+        (counts[t.id] != null ? '<span class="count">' + counts[t.id].toLocaleString() + '</span>' : '') + '</button>';
+    }).join('');
+  }
+
+  function distOptions() {
+    var seen = {}, opts = [['', 'All VADs & direct']];
+    S.a.lines.forEach(function (r) {
+      var k = distKeyOf(r.line);
+      if (seen[k]) return;
+      seen[k] = 1;
+      opts.push([k, k === 'direct' ? 'Direct (no VAD)' : r.line.distributor]);
+    });
+    return opts;
+  }
+  function fqOptions() {
+    var s = {};
+    S.a.lines.forEach(function (r) { if (r.line.fq) s[r.line.fq] = 1; });
+    return [['all', 'All quarters']].concat(Object.keys(s).sort().map(function (q) { return [q, 'From ' + q]; }));
+  }
+  function sel(id, opts, val) {
+    return '<select id="' + id + '">' + opts.map(function (o) {
+      return '<option value="' + esc(o[0]) + '"' + (o[0] === val ? ' selected' : '') + '>' + esc(o[1]) + '</option>';
+    }).join('') + '</select>';
+  }
+  function renderFilters() {
+    var f = S.f, h = '';
+    if (S.tab === 'help') { $('#filters').innerHTML = ''; return; }
+    h += '<input type="search" id="fq" placeholder="Search opp, end user, partner, part, PO…" value="' + esc(f.q) + '">';
+    if (S.tab === 'pipeline' || S.tab === 'claim') {
+      h += sel('ffq', fqOptions(), f.fqFrom) + sel('fdist', distOptions(), f.dist);
+      h += '<div class="chips" role="group" aria-label="Sales stage">' + ['Closed - Won', 'Secure', 'Validate', 'Qualify', 'Identify'].map(function (s) {
+        return '<button class="chipbtn" data-stage="' + s + '" aria-pressed="' + (f.stages.indexOf(s) >= 0) + '">' + s.replace('Closed - ', '') + '</button>';
+      }).join('') + '</div>';
+    }
+    if (S.tab === 'pipeline') {
+      h += sel('fgroup', [['', 'All statuses']].concat(GROUPS.map(function (g) { return [g.id, g.label]; })).concat([['ignored', 'Ignored lines']]), f.group);
+      h += sel('fsort', [['opp', 'Sort: opportunity'], ['ship', 'Sort: ship date'], ['amount', 'Sort: value']], f.sort);
+    }
+    if (S.tab === 'claim') h += sel('fconf', [['', 'All sources'], ['firm', 'Order-backed only'], ['stock', 'Stock / preload only']], f.claimConf);
+    if (S.tab === 'zebra') h += sel('ftie', [['', 'All open lines'], ['opp-in-pipeline', 'Opp in pipeline'], ['opp-not-in-pipeline', 'Opp not in this pipeline'], ['no-pc', 'No PC (stock / preload)'], ['no-pc-free', 'No PC and not matched']], f.tie);
+    if (S.tab === 'vst') h += sel('fzebra', [['', 'All backlog lines'], ['zebra-open', 'Zebra still open'], ['zebra-shipped', 'Zebra shipped'], ['not-in-dsr', 'Not in DSR']], f.zebra);
+    if (S.tab === 'stock') h += '<button class="chipbtn" id="fstock" aria-pressed="' + f.stockOnly + '">On-hand only</button>';
+    h += '<span class="spacer"></span><button class="btn small" id="copyBtn">Copy table</button>';
+    if (window.self === window.top) h += '<button class="btn small" id="exportBtn">Export .xlsx</button>';
+    $('#filters').innerHTML = h;
+  }
+
+  function renderView() {
+    var v = $('#view');
+    var fn = { pipeline: viewPipeline, claim: viewClaim, zebra: viewZebra, vst: viewVst, stock: viewStock, help: viewHelp }[S.tab] || viewPipeline;
+    v.innerHTML = fn();
+  }
+
+  function covBar(r) {
+    if (!r.need) return '';
+    var segs = ['opp', 'eu', 'stock', 'inv', 'inc'].map(function (k) {
+      var w = Math.min(100, r.q[k] / r.need * 100);
+      return w > 0 ? '<span style="width:' + w + '%;background:var(--g-' + PIECE_GROUP[k] + ')"></span>' : '';
+    }).join('');
+    return '<div class="cov" title="' + qn(r.covered) + ' of ' + qn(r.need) + ' covered">' + segs + '</div>';
+  }
+  function statusCell(r) {
+    var o = S.overrides[lineKey(r.line)];
+    var st = STATUS[r.status], grp = st.group, lab = st.label;
+    if (r.status === 'partial') {
+      var main = ['opp', 'eu', 'stock', 'inv', 'inc'].filter(function (k) { return r.q[k] > 0; })[0];
+      grp = PIECE_GROUP[main]; lab = 'Partial: ' + qn(r.covered) + ' of ' + qn(r.need);
+    }
+    var h = '<span class="st ' + grp + '">' + esc(lab) + '</span>';
+    if (o && o.status) h = '<span class="st ' + (MANUAL_GROUP[o.status] || 'none') + '">' + esc(MANUAL[o.status]) + '</span><br><span class="tag manual">Manual</span><span class="tag">Auto: ' + esc(st.label) + '</span>';
+    return h + covBar(r);
+  }
+  function evidence(r) {
+    var out = [];
+    r.pieces.slice(0, 3).forEach(function (p) {
+      if (p.dsr) out.push(qn(p.qty) + ' × PO <span class="mono">' + esc(p.dsr.po) + '</span> · ' + (p.dsr.status === 'Open Order' ? 'open' : 'shipped') +
+        (p.dsr.pc ? ' · PC ' + esc(p.dsr.pc) : ' · no PC') + (p.conf ? ' · ' + p.conf : ''));
+      else out.push(qn(p.qty) + ' × on hand at ' + esc(p.stock.dist));
+    });
+    if (r.pieces.length > 3) out.push('+' + (r.pieces.length - 3) + ' more');
+    var tags = '';
+    if (r.vstConfirmed) tags += '<span class="tag good">VST reseller order</span>';
+    if (r.line.repInvFlag === 'Y') tags += '<span class="tag">Rep: fulfil from disty stock</span>';
+    r.hints.forEach(function (h) {
+      if (h.kind === 'opp-other-parts') tags += '<span class="tag warn">Opp ordered with ' + h.parts.length + ' other part' + (h.parts.length > 1 ? 's' : '') + '</span>';
+      if (h.kind === 'other-vad-stock') tags += '<span class="tag">' + qn(h.qty) + ' free at ' + esc(h.dist) + '</span>';
+    });
+    var note = (S.overrides[lineKey(r.line)] || {}).note;
+    if (note) tags += '<span class="tag manual">' + esc(note.slice(0, 40)) + (note.length > 40 ? '…' : '') + '</span>';
+    return '<div class="ev">' + out.map(function (x) { return '<div>' + x + '</div>'; }).join('') + (tags ? '<div>' + tags + '</div>' : '') + '</div>';
+  }
+
+  function sortedPipeline() {
+    var rows = scopedLines();
+    var s = S.f.sort, first = {};
+    rows.forEach(function (r) {
+      var t = r.line.shipDate ? +r.line.shipDate : 9e15;
+      if (!(r.line.oppNo in first) || t < first[r.line.oppNo]) first[r.line.oppNo] = t;
+    });
+    rows.sort(function (a, b) {
+      if (s === 'amount') return b.line.amount - a.line.amount;
+      if (s === 'ship') return (a.line.shipDate || 0) - (b.line.shipDate || 0) || a.line.oppNo.localeCompare(b.line.oppNo);
+      return (first[a.line.oppNo] - first[b.line.oppNo]) || a.line.oppNo.localeCompare(b.line.oppNo) ||
+        (a.line.shipDate || 0) - (b.line.shipDate || 0) || a.line.idx - b.line.idx;
+    });
+    return rows;
+  }
+  var CUR_ROWS = [];
+  function viewPipeline() {
+    var rows = sortedPipeline();
+    CUR_ROWS = rows;
+    if (!rows.length) return '<div class="tablebox"><div class="empty">No pipeline lines match these filters. Widen the quarter or stage filter, or upload a pipeline export.</div></div>';
+    var h = '<div class="tablebox"><table><thead><tr><th>Opportunity · end user</th><th>Stage · ship</th><th>VAD → partner</th><th>Part</th><th class="num">Qty</th><th class="num">USD</th><th>Status</th><th>Evidence</th></tr></thead><tbody>';
+    var prev = null;
+    rows.slice(0, S.limit).forEach(function (r, i) {
+      var l = r.line, cont = S.f.sort === 'opp' && prev === l.oppNo;
+      prev = l.oppNo;
+      h += '<tr class="click ' + (cont ? 'cont' : (i ? 'grp' : '')) + '" data-row="' + i + '" tabindex="0">' +
+        '<td class="opp"><div class="on">' + esc(l.oppName) + '</div><div class="os"><span class="mono">' + esc(l.oppNo) + '</span> · ' + esc(l.endUser) + '</div></td>' +
+        '<td><div>' + esc(l.stage.replace('Closed - ', '')) + '</div><div class="faint" style="font-size:.8rem">' + esc(l.fq) + ' · ' + fmtDs(l.shipDate) + '</div></td>' +
+        '<td style="max-width:200px"><div>' + esc(l.distributor || 'Direct') + '</div><div class="faint" style="font-size:.8rem">' + esc(l.partner) + '</div></td>' +
+        '<td class="mono">' + esc(l.product) + '</td>' +
+        '<td class="num">' + qn(l.qty) + '</td>' +
+        '<td class="num">' + usd(l.amount) + '</td>' +
+        '<td>' + statusCell(r) + '</td>' +
+        '<td>' + evidence(r) + '</td></tr>';
+    });
+    h += '</tbody></table>';
+    if (rows.length > S.limit) h += '<div class="more"><button class="btn" id="moreBtn">Show all ' + rows.length.toLocaleString() + ' lines</button></div>';
+    return h + '</div>';
+  }
+
+  function claimRows() {
+    var rows = [];
+    scopedLines(true).forEach(function (r) {
+      var o = S.overrides[lineKey(r.line)];
+      if (o && (o.status === 'm-ignore' || o.status === 'm-ordered' || o.status === 'm-not')) return;
+      r.pieces.forEach(function (p) {
+        if (p.priced !== 'std') return;
+        var firm = p.kind === 'eu' || p.kind === 'stock';
+        if (S.f.claimConf === 'firm' && !firm) return;
+        if (S.f.claimConf === 'stock' && firm) return;
+        var std = p.dsr ? p.dsr.unit : p.unit;
+        rows.push({ r: r, p: p, std: std, deal: r.line.unit, est: std && r.line.unit ? Math.max(0, std - r.line.unit) * p.qty : null });
+      });
+    });
+    var q = S.f.q.trim().toLowerCase();
+    if (q) rows = rows.filter(function (x) {
+      return [x.r.line.oppNo, x.r.line.oppName, x.r.line.endUser, x.r.line.product, x.p.dsr ? x.p.dsr.po : ''].join(' ').toLowerCase().indexOf(q) >= 0;
+    });
+    rows.sort(function (a, b) { return (b.est || 0) - (a.est || 0); });
+    return rows;
+  }
+  function viewClaim() {
+    var rows = claimRows();
+    CUR_ROWS = rows.map(function (x) { return x.r; });
+    if (!rows.length) return '<div class="tablebox"><div class="empty">No backend claim candidates in this scope.</div></div>';
+    var tq = 0, te = 0;
+    var h = '<div class="tablebox"><table><thead><tr><th>Opportunity · end user</th><th>Part</th><th class="num">Qty</th><th>Fulfilled by</th><th>Reference</th><th class="num">Std unit</th><th class="num">Deal unit</th><th class="num">Indicative claim</th></tr></thead><tbody>';
+    rows.forEach(function (x, i) {
+      var l = x.r.line, p = x.p, ref;
+      tq += p.qty; te += x.est || 0;
+      if (p.dsr) ref = '<span class="mono">' + esc(p.dsr.po) + '</span><div class="faint" style="font-size:.8rem">SO ' + esc(p.dsr.orderNo) + ' · ' + (p.dsr.status === 'Open Order' ? 'open, ssd ' + fmtDs(p.dsr.ssd) : 'shipped') + ' · booked ' + fmtDs(p.dsr.booked) + (p.conf ? ' · ' + p.conf + ' (' + p.basket + ' parts)' : '') + '</div>';
+      else ref = esc(p.stock.dist) + '<div class="faint" style="font-size:.8rem">' + qn(p.stock.free) + ' free of ' + qn(p.stock.onHand) + ' on hand</div>';
+      h += '<tr class="click" data-row="' + i + '" tabindex="0"><td class="opp"><div class="on">' + esc(l.oppName) + '</div><div class="os"><span class="mono">' + esc(l.oppNo) + '</span> · ' + esc(l.endUser) + ' · ' + esc(l.stage.replace('Closed - ', '')) + '</div></td>' +
+        '<td class="mono">' + esc(l.product) + '</td><td class="num">' + qn(p.qty) + '</td>' +
+        '<td><span class="st ' + PIECE_GROUP[p.kind] + '">' + esc(PIECE[p.kind]) + '</span></td><td>' + ref + '</td>' +
+        '<td class="num">' + (x.std ? usd(x.std) : '—') + '</td><td class="num">' + usd(x.deal) + '</td><td class="num">' + (x.est == null ? '—' : usd(x.est)) + '</td></tr>';
+    });
+    h += '</tbody><tfoot><tr><td colspan="2">' + rows.length + ' claim lines</td><td class="num">' + qn(tq) + '</td><td colspan="4" class="muted" style="font-weight:400">Std unit = DSR line value or VAD inventory price. Deal unit = SFDC schedule amount ÷ qty.</td><td class="num">' + usd(te) + '</td></tr></tfoot></table></div>';
+    return h;
+  }
+
+  var TIE = {
+    'opp-in-pipeline': ['ordered', 'Opp in pipeline'],
+    'opp-not-in-pipeline': ['partial', 'Opp not in this export'],
+    'pc-only': ['partial', 'PC only'],
+    'no-pc': ['claimstock', 'No PC (stock / preload)']
+  };
+  function viewZebra() {
+    var q = S.f.q.trim().toLowerCase();
+    var rows = S.a.zebraOpen.filter(function (z) {
+      if (S.f.tie === 'no-pc-free') { if (z.tie !== 'no-pc' || z.usedBy.length || z.vst) return false; }
+      else if (S.f.tie && z.tie !== S.f.tie) return false;
+      if (q && [z.d.po, z.d.orderNo, z.d.part, z.d.endUser, z.d.reseller, z.d.oppNo, z.d.account].join(' ').toLowerCase().indexOf(q) < 0) return false;
+      return true;
+    }).sort(function (a, b) { return (a.d.ssd || 0) - (b.d.ssd || 0) || a.d.po.localeCompare(b.d.po); });
+    CUR_ROWS = [];
+    if (!rows.length) return '<div class="tablebox"><div class="empty">No Zebra open-order lines match.</div></div>';
+    var tv = 0;
+    var h = '<div class="tablebox"><table><thead><tr><th>Account · PO</th><th>Booked · SSD</th><th>Part</th><th class="num">Qty</th><th class="num">USD</th><th>Tied to</th><th>Pipeline use</th><th>VST reseller order</th></tr></thead><tbody>';
+    rows.forEach(function (z) {
+      var d = z.d, t = TIE[z.tie];
+      tv += d.amount;
+      var use = z.usedBy.map(function (u) { return esc(u.line.oppName) + ' <span class="faint">(' + qn(u.qty) + ', ' + u.kind + ')</span>'; }).join('<br>');
+      h += '<tr><td><div>' + esc(d.account) + '</div><div class="mono faint">' + esc(d.po) + ' · SO ' + esc(d.orderNo) + '</div></td>' +
+        '<td style="white-space:nowrap">' + fmtDs(d.booked) + '<div class="faint" style="font-size:.8rem">ssd ' + fmtDs(d.ssd) + '</div></td>' +
+        '<td class="mono">' + esc(d.part) + '</td><td class="num">' + qn(d.qty) + '</td><td class="num">' + usd(d.amount) + '</td>' +
+        '<td><span class="st ' + t[0] + '">' + t[1] + '</span>' + (d.oppNo ? '<div class="faint" style="font-size:.8rem"><span class="mono">' + esc(d.oppNo) + '</span> · PC ' + esc(d.pc) + '<br>' + esc(d.endUser) + '</div>' : '') + '</td>' +
+        '<td class="ev">' + (use || '<span class="faint">Not matched</span>') + '</td>' +
+        '<td>' + (z.vst ? '<span class="tag good">' + esc(z.vst.b.resellerOrder) + '</span><div class="faint" style="font-size:.8rem">' + fmtDs(z.vst.b.orderDate) + ' · ' + qn(z.vst.b.qty) + ' pcs</div>' : '<span class="faint">—</span>') + '</td></tr>';
+    });
+    h += '</tbody><tfoot><tr><td colspan="4">' + rows.length + ' open lines</td><td class="num">' + usd(tv) + '</td><td colspan="3"></td></tr></tfoot></table></div>';
+    return h;
+  }
+
+  var ZB = {
+    'zebra-open': ['ordered', 'Zebra order still open'],
+    'zebra-shipped': ['claimstock', 'Zebra shipped · VAD holds stock'],
+    'not-in-dsr': ['none', 'Not in DSR']
+  };
+  function viewVst() {
+    var q = S.f.q.trim().toLowerCase();
+    var rows = S.a.backlog.filter(function (r) {
+      if (S.f.zebra && r.zebra !== S.f.zebra) return false;
+      if (q && [r.b.po, r.b.resellerOrder, r.b.part, r.oppNo, r.endUser, r.reseller].join(' ').toLowerCase().indexOf(q) < 0) return false;
+      return true;
+    });
+    CUR_ROWS = [];
+    if (!S.a.backlog.length) return '<div class="tablebox"><div class="empty">No VAD backlog loaded. Upload the VSTECS backlog report.</div></div>';
+    var h = '<div class="tablebox"><table><thead><tr><th>Reseller order</th><th>Ordered · VAD ship</th><th>Part</th><th class="num">Qty</th><th>Zebra side</th><th>Opp / PC on Zebra order</th><th>Note</th></tr></thead><tbody>';
+    rows.forEach(function (r) {
+      var b = r.b, z = ZB[r.zebra];
+      var lines = r.dsrLines.map(function (d) { return 'SO ' + esc(d.orderNo) + ' · ' + (d.status === 'Open Order' ? 'open, ssd ' + fmtDs(d.ssd) : 'shipped ' + fmtDs(d.invDate)); }).join('<br>');
+      var note = r.zebra === 'not-in-dsr' ? 'PO is newer than the DSR (' + fmtDs(S.a.asOf.dsr) + ') or the VAD fills it from stock.' :
+        r.oppNo ? 'Reseller order confirms the opp demand.' : 'Bought without PC. If this is for a pipeline deal, claim backend.';
+      h += '<tr><td><div class="mono">' + esc(b.resellerOrder) + '</div><div class="faint" style="font-size:.8rem">' + esc(b.dist) + '</div></td>' +
+        '<td style="white-space:nowrap">' + fmtDs(b.orderDate) + '<div class="faint" style="font-size:.8rem">ship ' + fmtDs(b.ssd) + '</div></td>' +
+        '<td class="mono">' + esc(b.part) + '</td><td class="num">' + qn(b.qty) + '</td>' +
+        '<td><span class="st ' + z[0] + '">' + z[1] + '</span><div class="faint" style="font-size:.8rem">' + lines + '</div></td>' +
+        '<td>' + (r.oppNo ? '<span class="mono">' + esc(r.oppNo) + '</span> · PC ' + esc(r.pc) + '<div class="faint" style="font-size:.8rem">' + esc(r.endUser) + (r.reseller ? ' · ' + esc(r.reseller) : '') + '</div>' : '<span class="faint">No PC</span>') + '</td>' +
+        '<td class="ev">' + note + '</td></tr>';
+    });
+    return h + '</tbody></table></div>';
+  }
+
+  function viewStock() {
+    var q = S.f.q.trim().toLowerCase();
+    var rows = Object.keys(S.a.stock).map(function (k) { return S.a.stock[k]; }).filter(function (s) {
+      if (S.f.stockOnly && s.onHand <= 0) return false;
+      if (q && (s.part + ' ' + s.dist).toLowerCase().indexOf(q) < 0) return false;
+      return true;
+    }).sort(function (a, b) { return b.value - a.value; });
+    CUR_ROWS = [];
+    if (!rows.length) return '<div class="tablebox"><div class="empty">No VAD stock loaded or nothing matches.</div></div>';
+    var tv = 0;
+    var h = '<div class="tablebox"><table><thead><tr><th>VAD</th><th>Part</th><th class="num">On hand</th><th class="num">Committed</th><th class="num">Held for backlog</th><th class="num">Free</th><th>Allocated to pipeline</th><th class="num">Left</th><th class="num">Unit</th><th class="num">Value</th></tr></thead><tbody>';
+    rows.forEach(function (s) {
+      tv += s.value;
+      var al = s.alloc.map(function (x) { return esc(x.line.oppName) + ' <span class="faint">(' + qn(x.qty) + ')</span>'; }).join('<br>');
+      h += '<tr><td>' + esc(s.dist) + '</td><td class="mono">' + esc(s.part) + '</td><td class="num">' + qn(s.onHand) + '</td><td class="num">' + qn(s.committed) +
+        '</td><td class="num">' + qn(s.backlogHold) + '</td><td class="num">' + qn(s.free) + '</td><td class="ev">' + (al || '<span class="faint">—</span>') +
+        '</td><td class="num">' + qn(s.left) + '</td><td class="num">' + usd(s.unit) + '</td><td class="num">' + usd(s.value) + '</td></tr>';
+    });
+    return h + '</tbody><tfoot><tr><td colspan="9">' + rows.length + ' stock lines</td><td class="num">' + usd(tv) + '</td></tr></tfoot></table></div>';
+  }
+
+  function viewHelp() {
+    return '<article class="help">' +
+      '<h2>How each pipeline line is checked</h2>' +
+      '<p>Every open or Closed-Won SFDC line (Closed-Lost and Closed-Other are skipped) is compared with the Zebra DSR, VAD inventory and the VST backlog. Matches are taken in the order below. Each DSR quantity and each unit of stock is used once, with Closed-Won lines first, then Secure, Validate, Qualify and Identify, earliest ship date first.</p>' +
+      '<ol>' +
+      '<li><b>Ordered on opp / PC.</b> A DSR line carries the same Opportunity Number (or the same PC number) and the same part. Shipped lines show "Shipped on opp/PC"; open orders show "In Zebra backlog". These are front-end priced and need no claim.</li>' +
+      '<li><b>End-user match.</b> A DSR line for the same end user and part, booked no earlier than 30 days before the opp was created, and not tied to a different opp in this pipeline. If it has no PC, it was bought at standard price and is a claim candidate.</li>' +
+      '<li><b>Stock order without PC.</b> The VAD (or direct partner) placed a PO without a PC between opp creation (−14 days) and 90 days after the last ship date, and that PO holds the opp\'s parts. <i>High</i> = the PO covers at least 60% of the opp\'s parts; <i>medium</i> = at least 40% (two parts or more), or a single-part opp with the exact quantity on one line. Single-part hits below that are shown only as hints.</li>' +
+      '<li><b>VAD stock.</b> Free on-hand stock at the primary VAD: on hand − committed − VST backlog lines that Zebra already shipped or that are not in the DSR. Only for lines shipping from 60 days before the inventory date onward.</li>' +
+      '<li><b>Preload incoming.</b> A Zebra open order without PC at the VAD that is not already promised to a VST reseller order.</li>' +
+      '</ol>' +
+      '<h3>Backend claim</h3><p>Items from steps 2–5 were bought at standard discount or DNP, so the deal price is recovered through a backend claim. The indicative claim is (standard unit − deal unit) × quantity. Standard unit comes from the DSR line value or the VAD inventory price. Deal unit is the SFDC schedule amount ÷ quantity. Treat it as a sizing guide and confirm against the PC and price file before you file.</p>' +
+      '<h3>VST backlog check</h3><p>The VSTECS backlog PO number is the same PO VSTECS sends to Zebra, so each reseller order is traced to its DSR line. "Zebra still open" means VST is waiting for Zebra. "Zebra shipped · VAD holds stock" means stock is at VST but reserved for that reseller. "Not in DSR" means the PO is newer than the DSR or VST fills it from stock.</p>' +
+      '<h3>Uploading</h3><p>Drop or upload any mix of files. The type is detected from the column headers: SFDC pipeline report (.xls), DSR (.xlsx, Hong Kong rows only), VAD inventory and VAD backlog. A new pipeline or DSR replaces the old one; inventory and backlog replace the earlier file for the same VAD. Data stays in this browser.</p>' +
+      '<h3>Manual decisions</h3><p>Open a line to record a confirmed status or a note, for example "preloaded on PO ZEB26-0929". Manual decisions are kept in this browser and survive new uploads, keyed by opportunity, part, ship date and quantity.</p>' +
+      '</article>';
+  }
+
+  // ------------------------------------------------------------ detail sheet
+  function openSheet(r) {
+    var l = r.line, key = lineKey(l), o = S.overrides[key] || {};
+    var st = STATUS[r.status];
+    var h = '<button class="btn small close" id="closeSheet">Close</button>' +
+      '<div><div class="label">' + esc(l.oppNo) + ' · ' + esc(l.stage) + '</div><h2 style="font-size:1.3rem;margin-top:4px;padding-right:64px">' + esc(l.oppName) + '</h2></div>' +
+      '<dl class="facts">' +
+      '<dt>End user</dt><dd>' + esc(l.endUser) + '</dd>' +
+      '<dt>VAD / partner</dt><dd>' + esc(distLabel(l)) + (l.distributor && l.partner ? ' → ' + esc(l.partner) : '') + '</dd>' +
+      '<dt>Part</dt><dd class="mono">' + esc(l.product) + ' <span class="faint">' + esc(l.productLine) + '</span></dd>' +
+      '<dt>Qty · value</dt><dd>' + qn(l.qty) + ' · ' + usd(l.amount) + ' <span class="faint">(' + usd(l.unit) + ' each)</span></dd>' +
+      '<dt>First ship</dt><dd>' + esc(l.fq) + ' · ' + fmtD(l.shipDate) + '</dd>' +
+      '<dt>Created</dt><dd>' + fmtD(l.created) + (l.orderDate ? ' · order date ' + fmtD(l.orderDate) : '') + '</dd>' +
+      '<dt>PC number</dt><dd>' + (l.pc ? esc(l.pc) : '<span class="faint">none on SFDC line</span>') + '</dd>' +
+      '<dt>Fulfilment</dt><dd>' + esc(l.fulfillment) + (l.repInvFlag ? ' · disty stock flag: ' + l.repInvFlag : '') + '</dd>' +
+      '<dt>Auto status</dt><dd><span class="st ' + st.group + '">' + esc(st.label) + '</span><div class="faint" style="font-size:.84rem">' + esc(st.desc) + '</div></dd>' +
+      '</dl><div style="display:grid;gap:8px"><div class="label">Evidence · ' + qn(r.covered) + ' of ' + qn(r.need) + ' covered</div>';
+    if (!r.pieces.length) h += '<div class="muted">No matching order or stock.</div>';
+    r.pieces.forEach(function (p) {
+      h += '<div class="piece"><div class="h"><span class="st ' + PIECE_GROUP[p.kind] + '">' + esc(PIECE[p.kind]) + '</span><b class="num">' + qn(p.qty) + ' pcs</b></div>';
+      if (p.dsr) {
+        var d = p.dsr;
+        h += '<div class="faint" style="font-size:.86rem">' + esc(d.account) + ' · PO <span class="mono">' + esc(d.po) + '</span> · SO ' + esc(d.orderNo) + ' line ' + esc(d.line) +
+          '<br>Booked ' + fmtD(d.booked) + ' · ' + (d.status === 'Open Order' ? 'open, scheduled ship ' + fmtD(d.ssd) : 'shipped / invoiced ' + fmtD(d.invDate)) +
+          '<br>' + (d.pc ? 'PC ' + esc(d.pc) + ' · opp ' + esc(d.oppNo) : 'No PC: standard discount') + (d.unit ? ' · ' + usd(d.unit) + ' each' : '') +
+          (d.endUser ? '<br>End user on order: ' + esc(d.endUser) : '') + (d.reseller ? ' · reseller ' + esc(d.reseller) : '') +
+          (p.conf ? '<br>Basket match: ' + p.conf + ', ' + p.basket + ' opp parts on this PO' : '') +
+          (p.vst ? '<br><span class="tag good">VST reseller order ' + esc(p.vst.b.resellerOrder) + ' · ' + fmtD(p.vst.b.orderDate) + '</span>' : '') + '</div>';
+      } else {
+        h += '<div class="faint" style="font-size:.86rem">' + esc(p.stock.dist) + ' · ' + qn(p.stock.onHand) + ' on hand, ' + qn(p.stock.free) + ' free · ' + usd(p.stock.unit) + ' each · as of ' + fmtD(p.stock.asOf) + '</div>';
+      }
+      h += '</div>';
+    });
+    r.hints.forEach(function (x) {
+      if (x.kind === 'opp-other-parts') h += '<div class="piece"><span class="st partial">Opp is on Zebra orders with other parts</span><div class="mono faint" style="font-size:.84rem">' + x.parts.map(esc).join(', ') + '</div></div>';
+      if (x.kind === 'other-vad-stock') h += '<div class="piece"><span class="st claimstock">' + qn(x.qty) + ' free at ' + esc(x.dist) + '</span><div class="faint" style="font-size:.84rem">Another VAD holds this part.</div></div>';
+    });
+    var weak = r.hints.filter(function (x) { return x.kind === 'stock-part-only'; }).map(function (x) { return x.po; });
+    weak = weak.filter(function (po, i) { return weak.indexOf(po) === i; });
+    if (weak.length) h += '<div class="piece"><span class="st none">Part also on ' + weak.length + ' no-PC PO' + (weak.length > 1 ? 's' : '') + ' (not counted)</span><div class="faint" style="font-size:.84rem">Only this single part matched, which is too weak to count: <span class="mono">' +
+      weak.slice(0, 12).map(esc).join(', ') + (weak.length > 12 ? ' …' : '') + '</span></div></div>';
+    h += '</div><form class="override" id="ovForm"><div class="label">Your decision</div>' +
+      '<label for="ovStatus" class="muted" style="font-size:.86rem">Status</label><select id="ovStatus">' +
+      Object.keys(MANUAL).map(function (k) { return '<option value="' + k + '"' + ((o.status || '') === k ? ' selected' : '') + '>' + esc(MANUAL[k]) + '</option>'; }).join('') +
+      '</select><label for="ovNote" class="muted" style="font-size:.86rem">Note</label><textarea id="ovNote" rows="3" placeholder="e.g. preloaded on VST PO ZEB26-0929, claim filed 21 Oct">' + esc(o.note || '') + '</textarea>' +
+      '<div style="display:flex;gap:8px"><button class="btn primary" type="submit">Save decision</button><button class="btn" type="button" id="ovClear">Clear</button></div></form>';
+    var sh = $('#sheet');
+    sh.innerHTML = h;
+    sh.hidden = false; $('#sheetBg').hidden = false;
+    $('#closeSheet').focus();
+    $('#ovForm').addEventListener('submit', function (e) {
+      e.preventDefault();
+      var v = { status: $('#ovStatus').value, note: $('#ovNote').value.trim() };
+      if (!v.status && !v.note) delete S.overrides[key]; else S.overrides[key] = v;
+      LS.set('zhk.overrides', S.overrides);
+      closeSheet(); render(); toast('Decision saved');
+    });
+    $('#ovClear').addEventListener('click', function () {
+      delete S.overrides[key]; LS.set('zhk.overrides', S.overrides); closeSheet(); render(); toast('Decision cleared');
+    });
+  }
+  function closeSheet() { $('#sheet').hidden = true; $('#sheetBg').hidden = true; }
+
+  // ------------------------------------------------------------ copy / export
+  function tableAsRows() {
+    var t = document.querySelector('#view table');
+    if (!t) return [];
+    return Array.prototype.map.call(t.querySelectorAll('thead tr, tbody tr'), function (tr) {
+      return Array.prototype.map.call(tr.cells, function (c) { return c.innerText.replace(/\s*\n\s*/g, ' · ').trim(); });
+    });
+  }
+  function copyTable() {
+    if (S.tab === 'pipeline' && CUR_ROWS.length > S.limit) { S.limit = 1e9; renderView(); }
+    var tsv = tableAsRows().map(function (r) { return r.join('\t'); }).join('\n');
+    if (!tsv) return;
+    navigator.clipboard.writeText(tsv).then(function () { toast('Table copied. Paste into Excel.'); }, function () {
+      var ta = document.createElement('textarea'); ta.value = tsv; document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); toast('Table copied. Paste into Excel.'); } catch (e) { toast('Copy was blocked. Select the table and copy manually.'); }
+      ta.remove();
+    });
+  }
+  function exportXlsx() {
+    if (!window.XLSX) return toast('The Excel writer did not load.');
+    var wb = XLSX.utils.book_new();
+    var lines = sortedPipeline().map(function (r) {
+      var l = r.line, o = S.overrides[lineKey(l)] || {};
+      return {
+        'Opportunity Number': l.oppNo, 'Opportunity Name': l.oppName, 'Stage': l.stage, 'First Ship FQ': l.fq, 'Ship Date': E.iso(l.shipDate),
+        'End User': l.endUser, 'Distributor': l.distributor, 'Partner': l.partner, 'Part': l.product, 'Qty': l.qty, 'USD': l.amount,
+        'Auto Status': STATUS[r.status].label, 'Manual Status': o.status ? MANUAL[o.status] : '', 'Note': o.note || '',
+        'Qty on opp/PC order': r.q.opp, 'Qty end-user match': r.q.eu, 'Qty stock order no PC': r.q.stock, 'Qty VAD stock': r.q.inv, 'Qty preload': r.q.inc,
+        'Shipped qty': r.shipped, 'Open order qty': r.open, 'Claim qty': r.claimQty, 'Indicative claim USD': Math.round(r.claimEst),
+        'Evidence POs': r.pieces.filter(function (p) { return p.dsr; }).map(function (p) { return p.dsr.po; }).join(', ')
+      };
+    });
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(lines), 'Pipeline check');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(claimRows().map(function (x) {
+      return { 'Opportunity Number': x.r.line.oppNo, 'Opportunity Name': x.r.line.oppName, 'End User': x.r.line.endUser, 'Part': x.r.line.product, 'Qty': x.p.qty,
+        'Source': PIECE[x.p.kind], 'PO': x.p.dsr ? x.p.dsr.po : '', 'SO': x.p.dsr ? x.p.dsr.orderNo : '', 'VAD': x.p.stock ? x.p.stock.dist : (x.p.dsr ? x.p.dsr.account : ''),
+        'Std unit': x.std, 'Deal unit': x.deal, 'Indicative claim USD': x.est };
+    })), 'Backend claim');
+    XLSX.writeFile(wb, 'HK_pipeline_order_check_' + new Date().toISOString().slice(0, 10) + '.xlsx');
+  }
+
+  // ------------------------------------------------------------ toast / tip
+  var toastT;
+  function toast(msg, ms) {
+    var t = $('#toast'); t.textContent = msg; t.hidden = false;
+    clearTimeout(toastT); toastT = setTimeout(function () { t.hidden = true; }, ms || 2600);
+  }
+
+  // ------------------------------------------------------------ events
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest('button, tr.click');
+    if (!t) return;
+    if (t.id === 'uploadBtn') return $('#fileInput').click();
+    if (t.id === 'resetBtn') {
+      IDB.del('tables'); S.tables = window.ZEBRA_INITIAL_DATA.tables.slice(); S.fromUpload = false; recompute(); return toast('Back to the initial data set');
+    }
+    if (t.id === 'moreBtn') { S.limit = 1e9; return renderView(); }
+    if (t.id === 'copyBtn') return copyTable();
+    if (t.id === 'exportBtn') return exportXlsx();
+    if (t.id === 'closeSheet') return closeSheet();
+    if (t.id === 'fstock') { S.f.stockOnly = !S.f.stockOnly; saveFilters(); renderFilters(); return renderView(); }
+    if (t.dataset.tab) { S.tab = t.dataset.tab; LS.set('zhk.tab', S.tab); S.limit = 300; renderTabs(); renderFilters(); return renderView(); }
+    if (t.dataset.group) {
+      S.f.group = S.f.group === t.dataset.group ? '' : t.dataset.group;
+      if (S.tab !== 'pipeline') { S.tab = 'pipeline'; LS.set('zhk.tab', S.tab); }
+      saveFilters(); return render();
+    }
+    if (t.dataset.stage) {
+      var i = S.f.stages.indexOf(t.dataset.stage);
+      if (i >= 0) S.f.stages.splice(i, 1); else S.f.stages.push(t.dataset.stage);
+      saveFilters(); return render();
+    }
+    if (t.matches('tr.click')) { var r = CUR_ROWS[+t.dataset.row]; if (r) openSheet(r); }
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') closeSheet();
+    if (e.key === 'Enter' && e.target.matches && e.target.matches('tr.click')) { var r = CUR_ROWS[+e.target.dataset.row]; if (r) openSheet(r); }
+  });
+  $('#sheetBg').addEventListener('click', closeSheet);
+  document.addEventListener('change', function (e) {
+    var id = e.target.id, v = e.target.value;
+    var map = { ffq: 'fqFrom', fdist: 'dist', fgroup: 'group', fsort: 'sort', ftie: 'tie', fzebra: 'zebra', fconf: 'claimConf' };
+    if (id === 'fileInput') { handleFiles(e.target.files); e.target.value = ''; return; }
+    if (map[id]) { S.f[map[id]] = v; S.limit = 300; saveFilters(); render(); }
+  });
+  var qT;
+  document.addEventListener('input', function (e) {
+    if (e.target.id !== 'fq') return;
+    clearTimeout(qT);
+    qT = setTimeout(function () { S.f.q = e.target.value; S.limit = 300; saveFilters(); renderTabs(); renderView(); }, 200);
+  });
+  // hover tooltip on summary bar
+  document.addEventListener('mousemove', function (e) {
+    var t = e.target.closest && e.target.closest('[data-tip]'), tip = $('#tip');
+    if (!t) { tip.hidden = true; return; }
+    tip.textContent = t.dataset.tip; tip.hidden = false;
+    tip.style.left = Math.min(e.clientX + 12, window.innerWidth - tip.offsetWidth - 8) + 'px';
+    tip.style.top = (e.clientY + 14) + 'px';
+  });
+  // drag & drop anywhere
+  var dragN = 0;
+  window.addEventListener('dragenter', function (e) { if (e.dataTransfer && Array.prototype.indexOf.call(e.dataTransfer.types, 'Files') >= 0) { dragN++; $('#drop').hidden = false; } });
+  window.addEventListener('dragleave', function () { if (--dragN <= 0) { dragN = 0; $('#drop').hidden = true; } });
+  window.addEventListener('dragover', function (e) { e.preventDefault(); });
+  window.addEventListener('drop', function (e) { e.preventDefault(); dragN = 0; $('#drop').hidden = true; handleFiles(e.dataTransfer.files); });
+
+  // ------------------------------------------------------------ boot
+  IDB.get('tables').then(function (saved) {
+    if (saved && saved.length) { S.tables = saved; S.fromUpload = true; }
+    else if (window.ZEBRA_INITIAL_DATA) S.tables = window.ZEBRA_INITIAL_DATA.tables.slice();
+    recompute();
+    if (!S.tables.length) toast('Upload the SFDC pipeline and DSR to start', 6000);
+  });
+})();
+</script>
