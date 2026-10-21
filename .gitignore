@@ -5,3 +5,4 @@ data/
 *.xlsx
 *.csv
 node_modules/
+review/initial-data.js
