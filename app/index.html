@@ -309,12 +309,12 @@ tfoot td { font-weight: 600; border-bottom: 0; }
     tables: [], ds: null, a: null, fromUpload: false,
     tab: LS.get('zhk.tab', 'pipeline'),
     // Default view: open stages only, first ship in the current or next quarter.
-    f: Object.assign({ q: '', stages: ['Secure', 'Validate', 'Qualify', 'Identify'], fqScope: 'cn', dist: '', group: '', sort: 'opp',
-      tie: '', zebra: '', stockOnly: true, claimConf: '' }, LS.get('zhk.filters.v2', {})),
+    f: Object.assign({ q: '', stages: ['Secure', 'Validate'], fqScope: 'cn', dist: '', group: '', sort: 'opp',
+      tie: '', zebra: '', stockOnly: true, claimConf: '' }, LS.get('zhk.filters.v3', {})),
     overrides: LS.get('zhk.overrides', {}),
     limit: 300
   };
-  function saveFilters() { LS.set('zhk.filters.v2', S.f); }
+  function saveFilters() { LS.set('zhk.filters.v3', S.f); }
   function lineKey(l) { return [l.oppNo, l.product, E.iso(l.shipDate), l.qty].join('|'); }
 
   // ------------------------------------------------------------ file reading
@@ -563,7 +563,7 @@ tfoot td { font-weight: 600; border-bottom: 0; }
     h += '<input type="search" id="fq" placeholder="Search opp, end user, partner, part, PO…" value="' + esc(f.q) + '">';
     if (S.tab === 'pipeline' || S.tab === 'claim') {
       h += sel('ffq', fqOptions(), f.fqScope) + sel('fdist', distOptions(), f.dist);
-      h += '<div class="chips" role="group" aria-label="Sales stage">' + ['Closed - Won', 'Secure', 'Validate', 'Qualify', 'Identify'].map(function (s) {
+      h += '<div class="chips" role="group" aria-label="Sales stage">' + ['Closed - Won', 'Secure', 'Validate'].map(function (s) {
         return '<button class="chipbtn" data-stage="' + s + '" aria-pressed="' + (f.stages.indexOf(s) >= 0) + '">' + s.replace('Closed - ', '') + '</button>';
       }).join('') + '</div>';
     }
@@ -793,7 +793,7 @@ tfoot td { font-weight: 600; border-bottom: 0; }
   function viewHelp() {
     return '<article class="help">' +
       '<h2>How each pipeline line is checked</h2>' +
-      '<p>By default the views show open stages (Secure, Validate, Qualify, Identify) with first ship in the current or next quarter. Turn on <i>Won</i> or pick another quarter in the filters to widen it. Matching itself always runs over every open or Closed-Won SFDC line (Closed-Lost and Closed-Other are skipped), so orders and stock already used by Won deals are not offered to open ones. Each line is compared with the Zebra DSR, VAD inventory and the VST backlog. Matches are taken in the order below. Each DSR quantity and each unit of stock is used once, with Closed-Won lines first, then Secure, Validate, Qualify and Identify, earliest ship date first.</p>' +
+      '<p>Only Secure, Validate and Closed-Won lines are checked; Identify, Qualify, Closed-Lost and Closed-Other are ignored. By default the views show Secure and Validate with first ship in the current or next quarter. Turn on <i>Won</i> or pick another quarter in the filters to widen it. Won lines are always matched, so orders and stock already used by Won deals are not offered to open ones. Each line is compared with the Zebra DSR, VAD inventory and the VST backlog. Matches are taken in the order below. Each DSR quantity and each unit of stock is used once, with Closed-Won lines first, then Secure, then Validate, earliest ship date first.</p>' +
       '<ol>' +
       '<li><b>Ordered on opp / PC.</b> A DSR line carries the same Opportunity Number (or the same PC number) and the same part. Shipped lines show "Shipped on opp/PC"; open orders show "In Zebra backlog". These are front-end priced and need no claim.</li>' +
       '<li><b>End-user match.</b> A DSR line for the same end user and part, booked no earlier than 30 days before the opp was created, and not tied to a different opp in this pipeline. If it has no PC, it was bought at standard price and is a claim candidate.</li>' +

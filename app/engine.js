@@ -114,7 +114,10 @@
   }
 
   // ------------------------------------------------------------ normalisers
-  var STAGE_RANK = { 'Closed - Won': 0, 'Secure': 1, 'Validate': 2, 'Qualify': 3, 'Identify': 4 };
+  var STAGE_RANK = { 'Closed - Won': 0, 'Secure': 1, 'Validate': 2 };
+  // Only these stages are matched. Identify / Qualify are too early to have orders;
+  // Closed-Lost / Closed-Other never will.
+  var MATCH_STAGES = /^(Closed - Won|Secure|Validate)$/;
 
   function normPipeline(table) {
     // Detect date order: SFDC exports follow the user's locale.
@@ -330,7 +333,7 @@
     });
 
     // Order lines: won first, then by stage and ship date.
-    var active = pipeline.filter(function (l) { return !/^Closed - (Lost|Other)/.test(l.stage); });
+    var active = pipeline.filter(function (l) { return MATCH_STAGES.test(l.stage); });
     active.sort(function (a, b) {
       return a.stageRank - b.stageRank || ((a.shipDate || 0) - (b.shipDate || 0)) || a.idx - b.idx;
     });
