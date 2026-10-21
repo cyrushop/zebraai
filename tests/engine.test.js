@@ -40,6 +40,9 @@ const tables = [
     pipe('Z-5', 'Nothing', 'ET401', 3, 1800, 'Epsilon Ltd'),
     pipe('Z-6', 'Lost', 'TC22', 1, 500, 'Zeta', { 'Sales Stage': 'Closed - Lost' }),
     pipe('Z-8', 'Early', 'DS2208', 2, 100, 'Theta', { 'Sales Stage': 'Qualify' }),
+    pipe('Z-9', 'Theta-HK-Runrate-R', 'DS2208', 2, 100, 'Theta'),
+    pipe('Z-10', 'Iota-HK-TC22-F2', 'DS2208', 2, 100, 'Iota'),
+    pipe('Z-11', 'Kappa-HK-ZT610R', 'ET401', 1, 100, 'Kappa'),
     pipe('Z-7', 'Substituted', 'TC58-OLD', 2, 2000, 'Eta Ltd')
   ]),
   table('dsr', DSR_H, [
@@ -63,6 +66,9 @@ const by = name => a.lines.filter(r => r.line.oppName === name);
 
 assert.strictEqual(by('Lost').length, 0, 'Closed - Lost is skipped');
 assert.strictEqual(by('Early').length, 0, 'Qualify / Identify are skipped');
+assert.strictEqual(by('Theta-HK-Runrate-R').length + by('Iota-HK-TC22-F2').length, 0, '-R / -F opps are skipped');
+assert.strictEqual(by('Kappa-HK-ZT610R').length, 1, 'a part ending in R is not a -R opp');
+assert.deepStrictEqual(a.ignored, { lines: 2, opps: 2 });
 const linked = by('Opp linked')[0];
 assert.strictEqual(linked.q.opp, 10);
 assert.strictEqual(linked.status, 'zebra-backlog', '4 still open on the opp');

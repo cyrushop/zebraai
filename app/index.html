@@ -491,7 +491,7 @@ tfoot td { font-weight: 600; border-bottom: 0; }
     var orderedPct = tot.amt ? (by.ordered.amt + by.claimorder.amt) / tot.amt : 0;
     var html = '<div class="sumhead"><div><h2>Where the pipeline stands</h2><div class="muted" style="font-size:.86rem">' +
       tot.n.toLocaleString() + ' lines in scope · first ship ' + esc(fqScopeText()) + ' · ' + esc(S.f.stages.map(function (x) { return x.replace('Closed - ', ''); }).join(', ') || 'no stages') +
-      ' · bar splits each line\'s USD by covered quantity</div></div><div class="kpis">' +
+      ' · ' + S.a.ignored.opps + ' -F / -R opps not checked · bar splits each line\'s USD by covered quantity</div></div><div class="kpis">' +
       '<div class="kpi"><div class="label">Pipeline in scope</div><div class="v">' + usdK(tot.amt) + '</div></div>' +
       '<div class="kpi"><div class="label">Found on Zebra orders</div><div class="v">' + Math.round(orderedPct * 100) + '%</div></div>' +
       '<div class="kpi"><div class="label">Indicative claim · ' + claimN + ' lines</div><div class="v">' + usdK(claim) + '</div></div>' +
@@ -793,7 +793,7 @@ tfoot td { font-weight: 600; border-bottom: 0; }
   function viewHelp() {
     return '<article class="help">' +
       '<h2>How each pipeline line is checked</h2>' +
-      '<p>Only Secure, Validate and Closed-Won lines are checked; Identify, Qualify, Closed-Lost and Closed-Other are ignored. By default the views show Secure and Validate with first ship in the current or next quarter. Turn on <i>Won</i> or pick another quarter in the filters to widen it. Won lines are always matched, so orders and stock already used by Won deals are not offered to open ones. Each line is compared with the Zebra DSR, VAD inventory and the VST backlog. Matches are taken in the order below. Each DSR quantity and each unit of stock is used once, with Closed-Won lines first, then Secure, then Validate, earliest ship date first.</p>' +
+      '<p>Only Secure, Validate and Closed-Won lines are checked; Identify, Qualify, Closed-Lost and Closed-Other are ignored. Opportunities whose name ends in -F or -R (also -F2, -R3 and so on: forecast and run-rate opps) are ignored too. By default the views show Secure and Validate with first ship in the current or next quarter. Turn on <i>Won</i> or pick another quarter in the filters to widen it. Won lines are always matched, so orders and stock already used by Won deals are not offered to open ones. Each line is compared with the Zebra DSR, VAD inventory and the VST backlog. Matches are taken in the order below. Each DSR quantity and each unit of stock is used once, with Closed-Won lines first, then Secure, then Validate, earliest ship date first.</p>' +
       '<ol>' +
       '<li><b>Ordered on opp / PC.</b> A DSR line carries the same Opportunity Number (or the same PC number) and the same part. Shipped lines show "Shipped on opp/PC"; open orders show "In Zebra backlog". These are front-end priced and need no claim.</li>' +
       '<li><b>End-user match.</b> A DSR line for the same end user and part, booked no earlier than 30 days before the opp was created, and not tied to a different opp in this pipeline. If it has no PC, it was bought at standard price and is a claim candidate.</li>' +

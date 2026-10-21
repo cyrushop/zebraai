@@ -118,6 +118,8 @@
   // Only these stages are matched. Identify / Qualify are too early to have orders;
   // Closed-Lost / Closed-Other never will.
   var MATCH_STAGES = /^(Closed - Won|Secure|Validate)$/;
+  // Opp names ending -F / -R (also -F2, -R3 …) are forecast / run-rate opps: not checked.
+  var IGNORE_NAME = /-(F|R)\d*\s*$/i;
 
   function normPipeline(table) {
     // Detect date order: SFDC exports follow the user's locale.
@@ -333,7 +335,12 @@
     });
 
     // Order lines: won first, then by stage and ship date.
-    var active = pipeline.filter(function (l) { return MATCH_STAGES.test(l.stage); });
+    var ignored = { lines: 0, opps: {} };
+    var active = pipeline.filter(function (l) {
+      if (!MATCH_STAGES.test(l.stage)) return false;
+      if (IGNORE_NAME.test(l.oppName)) { ignored.lines++; ignored.opps[l.oppNo] = 1; return false; }
+      return true;
+    });
     active.sort(function (a, b) {
       return a.stageRank - b.stageRank || ((a.shipDate || 0) - (b.shipDate || 0)) || a.idx - b.idx;
     });
@@ -515,6 +522,7 @@
       stock: stock,
       backlog: backlogRows,
       zebraOpen: zebraOpenView(ds, res, pipeOpps, dsrInBacklog, dsrLeft),
+      ignored: { lines: ignored.lines, opps: Object.keys(ignored.opps).length },
       asOf: asOfDates(ds)
     };
   }
