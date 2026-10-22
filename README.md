@@ -57,7 +57,7 @@ Scope: record type *Zebra Opportunity* (every row is checked if the report has n
 |---|---|
 | 1 | Commit Category does not match the stage: Identify / Qualify blank, Validate = Upside, Secure = Commit, Closed - Won = Shipped/booked |
 | 2 | Identify / Qualify last modified on or after 2026-05-01 and more than 90 days before the cutoff |
-| 3 | First Ship Date is on or before the cutoff and the stage is not Closed |
+| 3 | The stage is not Closed and the POS update deadline has passed: the Wednesday after the ship week (Monday to Sunday), when that week's POS report arrives. Ships this week, and last week's before Wednesday, are not flagged |
 | 4 | Validate / Secure, opportunity total ≥ US$50,000, Forecast Notes blank |
 | 5 | Fulfillment Type blank |
 | 6 | Closed - Won with First Ship Date after the cutoff |

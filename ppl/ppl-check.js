@@ -26,7 +26,7 @@
   var RULES = [
     { id: 1, short: '階段與 Commit 不符', desc: 'Identify / Qualify 的 Commit 要空白，Validate = Upside，Secure = Commit，Closed - Won = Shipped/booked。' },
     { id: 2, short: '超過 90 天未更新', desc: 'Identify / Qualify 的 Last Modified Date 在 2026-05-01 之後，但距截止日（下週三）已超過 90 天。2026-05-01 之前修改的不提醒。' },
-    { id: 3, short: '發貨日已到仍未關閉', desc: 'First Ship Date 不遲於截止日（下週三），階段卻不是 Closed。' },
+    { id: 3, short: '發貨日已過仍未關閉', desc: '發貨週（週一至週日）的 POS 報表在下週三收到，收到後才更新 SFDC。所以發貨週之後的週三過了，階段仍不是 Closed 才算違規；這週和上週（未到週三）發貨的不提醒。' },
     { id: 4, short: '≥ 50k 缺 Forecast Notes', desc: '整個機會的 Schedule Amount 合計 ≥ US$50,000，階段是 Validate 或 Secure，Forecast Notes 卻是空白。' },
     { id: 5, short: 'Fulfillment Type 空白', desc: 'Fulfillment Type 不可以空白。' },
     { id: 6, short: '未到發貨日已 Closed - Won', desc: 'First Ship Date 在截止日（下週三）之後，階段卻已是 Closed - Won。' },
@@ -55,6 +55,13 @@
   function nextWednesday(today) {
     var p = today.split('-'), d = new Date(+p[0], +p[1] - 1, +p[2]);
     return ymd(new Date(d.getFullYear(), d.getMonth(), d.getDate() + (3 - d.getDay() + 7) % 7));
+  }
+
+  // POS 更新期限：發貨週（週一至週日）之後的週三。這週的生意下週三才收到 POS 報表，收到後才更新 SFDC。
+  function posDeadline(isoDay) {
+    var p = isoDay.split('-'), d = new Date(+p[0], +p[1] - 1, +p[2]);
+    var monday = (d.getDay() + 6) % 7;   // 0 = 週一
+    return ymd(new Date(d.getFullYear(), d.getMonth(), d.getDate() - monday + 9));
   }
 
   // 自然季 = Zebra 財季（財年與曆年相同）
@@ -225,7 +232,9 @@
         if (lm && lm >= opts.s2MinEdit && lm < cutoff90) add(2, '上次修改 ' + lm + '，距截止日 ' + cutoff + ' 已超過 ' + opts.maxUnmodifiedDays + ' 天');
       }
       var fs = has('firstShip') ? parseDate(info.firstShip) : null;
-      if (fs && fs <= cutoff && stage.indexOf('Closed') !== 0) add(3, '發貨日 ' + fs + ' 已到（截止 ' + cutoff + '），階段仍是 ' + stage);
+      if (fs && stage.indexOf('Closed') !== 0 && today > posDeadline(fs)) {
+        add(3, '發貨日 ' + fs + '，POS 更新期限 ' + posDeadline(fs) + '（發貨週之後的週三）已過，階段仍是 ' + stage);
+      }
       if (has('amount') && has('notes') && (stage === 'Validate' || stage === 'Secure') &&
           info.amount >= opts.amountThreshold && !info.notes) {
         add(4, '機會總金額 ' + money(info.amount) + ' ≥ 50k，階段 ' + stage + '，未填 Forecast Notes');
@@ -354,7 +363,7 @@
   var api = {
     DEFAULTS: DEFAULTS, RULES: RULES, STAGE_COMMIT: STAGE_COMMIT,
     prepare: prepare, slim: slim, check: check, pivot: pivot, secureNotOrdered: secureNotOrdered, owners: owners,
-    sfdcLink: sfdcLink, parseDate: parseDate, nextWednesday: nextWednesday, fq: fq
+    sfdcLink: sfdcLink, parseDate: parseDate, nextWednesday: nextWednesday, posDeadline: posDeadline, fq: fq
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.PPLCheck = api;

@@ -23,6 +23,8 @@ const grid = [['My Pipeline'], ['Filtered by: Me'], H,
   row(base('Z-2', { 'Sales Stage': 'Qualify', 'Commit Category': '', 'Last Modified Date': '01/06/2026' })), // 2
   row(base('Z-2b', { 'Sales Stage': 'Qualify', 'Commit Category': '', 'Last Modified Date': '01/04/2026' })), // before 2026-05: no 2
   row(base('Z-3', { 'First Ship Date': '15/10/2026', 'Customer Requested Ship Date': '01/10/2026' })),   // 3
+  row(base('Z-3w', { 'First Ship Date': '23/10/2026', 'Customer Requested Ship Date': '01/10/2026' })),  // ships this week: POS not in yet
+  row(base('Z-3m', { 'First Ship Date': '19/10/2026', 'Customer Requested Ship Date': '01/10/2026' })),  // Monday this week
   row(base('Z-4', { 'Schedule Amount (converted)': '30,000' })),
   row(base('Z-4', { 'Schedule Amount (converted)': '25,000' })),                                       // 4: 55k across lines
   row(base('Z-5', { 'Fulfillment Type': '' })),                                                        // 5
@@ -54,6 +56,16 @@ assert.deepStrictEqual(rules('Z-1'), [1]);
 assert.deepStrictEqual(rules('Z-2'), [2]);
 assert.deepStrictEqual(rules('Z-2b'), [], 'edits before 2026-05-01 are not flagged');
 assert.deepStrictEqual(rules('Z-3'), [3]);
+assert.deepStrictEqual(rules('Z-3w'), [], 'this week ships wait for next Wednesday POS');
+assert.deepStrictEqual(rules('Z-3m'), []);
+assert.strictEqual(P.posDeadline('2026-10-23'), '2026-10-28', 'Fri → next Wed');
+assert.strictEqual(P.posDeadline('2026-10-19'), '2026-10-28', 'Mon → next Wed');
+assert.strictEqual(P.posDeadline('2026-10-25'), '2026-10-28', 'Sun → next Wed');
+assert.strictEqual(P.posDeadline('2026-10-15'), '2026-10-21', 'last week → this Wed (past)');
+// last week's ships wait while this week's POS has not arrived (Tue 2026-10-20, last week Thu 10-15)
+assert.deepStrictEqual((P.check(rows, { today: '2026-10-20' }).violations.find(v => v.opp === 'Z-3') || { issues: [] }).issues.map(i => i.rule).filter(r => r === 3), []);
+// after next Wednesday the this-week ship is flagged if still open
+assert.ok(P.check(rows, { today: '2026-10-29' }).violations.find(v => v.opp === 'Z-3w').issues.some(i => i.rule === 3));
 assert.deepStrictEqual(rules('Z-4'), [4], 'amount is summed per opportunity');
 assert.deepStrictEqual(rules('Z-5'), [5]);
 assert.deepStrictEqual(rules('Z-6'), [6]);
