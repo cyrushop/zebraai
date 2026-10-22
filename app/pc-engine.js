@@ -153,6 +153,7 @@
         stdDisc: num(g(r, 'Discount')),
         stdNet: num(g(r, 'Standard Net Price (converted)')),
         fulfil: str(g(r, 'Fulfillment Type')),
+        region: str(g(r, 'Owner Sub Region')),
         unit: num(g(r, 'Unit Special Price (converted)')),
         totalDisc: num(g(r, 'Total Discount'))
       };

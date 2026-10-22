@@ -93,6 +93,14 @@ a { color: var(--accent); }
 .fresh .f { font-size: .8rem; color: var(--ink-3); overflow-wrap: anywhere; }
 .notice { background: var(--warn-bg); color: var(--warn-ink); border-radius: 8px; padding: 9px 12px; font-size: .9rem; }
 
+/* region switch: one choice, shown as a segmented row */
+.region { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.seg { display: inline-flex; max-width: 100%; overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.seg button { border: 0; background: none; padding: 7px 14px; font-weight: 500; color: var(--ink-2); border-left: 1px solid var(--line); white-space: nowrap; }
+.seg button:first-child { border-left: 0; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.seg .n { font-size: .78rem; opacity: .75; margin-left: 4px; font-variant-numeric: tabular-nums; }
+@media (max-width: 480px) { .seg button { padding: 7px 11px; } .seg .n { display: none; } }
 .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); overflow-x: auto; }
 .tabs button { border: 0; background: none; padding: 9px 14px; font-family: var(--f-display); font-weight: 600; font-size: .98rem; color: var(--ink-2); border-bottom: 3px solid transparent; white-space: nowrap; }
 .tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
@@ -197,6 +205,7 @@ svg.spark circle { fill: var(--spark); }
   <section class="fresh" id="fresh" aria-label="已載入資料" hidden></section>
   <div class="notice" id="notice" hidden></div>
 
+  <section class="region" id="region" aria-label="地區" hidden></section>
   <nav class="tabs" role="tablist" id="tabs"></nav>
   <main id="view"></main>
 </div>
@@ -303,6 +312,7 @@ svg.spark circle { fill: var(--spark); }
   // ------------------------------------------------------------ state
   var S = {
     rows: [], idx: null, meta: null, sample: false,
+    region: LS.get('zpc.region', 'all'),
     tab: LS.get('zpc.tab', 'check'),
     acct: LS.get('zpc.acct', ''),
     acctQ: '',
@@ -361,8 +371,26 @@ svg.spark circle { fill: var(--spark); }
   function setData(rows, meta) {
     S.rows = rows;
     S.meta = meta;
+    applyRegion();
+  }
+  // Rows saved before the region column was read have no `region`.
+  function hasRegion() { return S.rows.some(function (r) { return r.region; }); }
+  function regionCounts() {
+    var c = {};
+    S.rows.forEach(function (r) { if (r.region) c[r.region] = (c[r.region] || 0) + 1; });
+    return c;
+  }
+  // Hong Kong and Taiwan first, then any other region in the file.
+  function regionList() {
+    var c = regionCounts(), order = ['Hong Kong', 'Taiwan'];
+    return order.filter(function (k) { return c[k]; }).concat(Object.keys(c).filter(function (k) { return order.indexOf(k) < 0; }).sort());
+  }
+  function applyRegion() {
+    if (S.region !== 'all' && (!hasRegion() || !regionCounts()[S.region])) S.region = 'all';
+    var rows = S.region === 'all' ? S.rows : S.rows.filter(function (r) { return r.region === S.region; });
     S.idx = E.buildIndex(rows);
     if (S.acct && !S.idx.byAcct[S.acct]) S.acct = '';
+    S.limit = 300;
     render();
   }
 
@@ -370,7 +398,8 @@ svg.spark circle { fill: var(--spark); }
   function sampleRows() {
     var H = ['PC #', 'Price Concession Name', 'Unit Special Price (converted)', 'Price Concession: Created Date', 'Status',
       'Siebel Account Number', 'Account Name', 'Reseller', 'Distributor', 'Product: Product Conversion Source', 'Product Line',
-      'Product: Product Sub Line', 'Product Family', 'Line Item Reseller: Product', 'Min Qty', 'Max Qty', 'Siebel List Price (converted)'];
+      'Product: Product Sub Line', 'Product Family', 'Line Item Reseller: Product', 'Min Qty', 'Max Qty', 'Siebel List Price (converted)',
+      'Owner Sub Region'];
     var P = {
       'TC530E-DEMO': ['EVM', 'Mobile Computing', 'Knowledge Worker', 'TC53 2nd Gen'],
       'CRD-TC5X-DEMO': ['EVM', 'Mobile Computing', 'Knowledge Worker', 'CRDLS-ENT-ACC'],
@@ -383,9 +412,9 @@ svg.spark circle { fill: var(--spark); }
     function add(acct, d, p, list, unit, st) {
       var a = P[p];
       out.push([String(++n), n + ' : ' + acct[1], unit, d, st || 'Expired', acct[0], acct[1], 'Demo Partner Ltd', 'Demo VAD',
-        a[0], a[1], a[2], a[3], p, 1, 50, list]);
+        a[0], a[1], a[2], a[3], p, 1, 50, list, acct[2]]);
     }
-    var A = ['DEMO1', '示範客戶 Alpha Logistics'], B = ['DEMO2', '示範客戶 Beta Retail'];
+    var A = ['DEMO1', '示範客戶 Alpha Logistics', 'Hong Kong'], B = ['DEMO2', '示範客戶 Beta Retail', 'Taiwan'];
     add(A, '12/03/2025', 'TC530E-DEMO', 1200, 780); add(A, '20/02/2026', 'TC530E-DEMO', 1260, 790);
     add(A, '15/01/2026', 'DS2278-DEMO', 200, 118); add(A, '02/07/2026', 'DS2278-DEMO', 200, 120.36);
     add(A, '01/06/2026', 'ZD421-DEMO', 600, 402); add(A, '09/10/2026', 'ZD421-DEMO', 618, 414.06);
@@ -397,7 +426,19 @@ svg.spark circle { fill: var(--spark); }
   }
 
   // ------------------------------------------------------------ render
+  var REGION_ZH = { 'Hong Kong': '香港 HK', 'Taiwan': '台灣 TW', 'China': '中國 CN' };
+  function renderRegion() {
+    var el = $('#region');
+    if (!S.idx || !hasRegion()) { el.hidden = true; return; }
+    var c = regionCounts(), list = regionList();
+    el.hidden = false;
+    el.innerHTML = '<span class="label">地區</span><div class="seg" role="group" aria-label="地區">' +
+      [['all', '全部', S.rows.length]].concat(list.map(function (k) { return [k, REGION_ZH[k] || k, c[k]]; })).map(function (x) {
+        return '<button data-region="' + esc(x[0]) + '" aria-pressed="' + (S.region === x[0]) + '">' + esc(x[1]) + '<span class="n">' + x[2].toLocaleString() + '</span></button>';
+      }).join('') + '</div><span class="small faint">按 PC Owner Sub Region</span>';
+  }
   function render() {
+    renderRegion();
     renderFresh();
     renderTabs();
     renderView();
@@ -409,13 +450,16 @@ svg.spark circle { fill: var(--spark); }
     var m = S.meta || {};
     f.innerHTML = [
       ['PC list', S.sample ? '示範資料' : esc(m.name || ''), m.loadedAt ? '載入於 ' + fmtD(new Date(m.loadedAt)) : ''],
-      ['PC 行數', S.rows.length.toLocaleString(), S.idx.accounts.length + ' 個客戶 · ' + S.idx.parts.length + ' 個產品'],
+      ['PC 行數' + (S.region === 'all' ? '' : '（' + esc(REGION_ZH[S.region] || S.region) + '）'), S.idx.rows.length.toLocaleString(), S.idx.accounts.length + ' 個客戶 · ' + S.idx.parts.length + ' 個產品'],
       ['PC 日期', fmtDs(S.idx.from) + ' – ' + fmtDs(S.idx.to), '按 PC 建立日期'],
       ['加價日', eventsSorted().map(function (e) { return esc(e.date); }).join('、') || '—', '可喺「加價規則」改']
     ].map(function (x) { return '<div><div class="label">' + x[0] + '</div><div class="v">' + x[1] + '</div><div class="f">' + x[2] + '</div></div>'; }).join('');
     if (S.sample) {
       n.hidden = false;
       n.innerHTML = '而家顯示嘅係<b>示範資料</b>（虛構客戶同價錢）。上載 SFDC PC list 先會用你的真實紀錄。';
+    } else if (!hasRegion()) {
+      n.hidden = false;
+      n.innerHTML = '呢份資料係舊版 app 載入的，冇地區欄。重新上載 PC list 就可以揀香港 / 台灣。';
     } else n.hidden = true;
   }
   var TABS = [['check', '加價檢查'], ['part', '產品紀錄'], ['cust', '客戶紀錄'], ['rules', '加價規則']];
@@ -448,6 +492,9 @@ svg.spark circle { fill: var(--spark); }
       '<input type="search" id="' + idPrefix + 'Acct" data-acctq value="' + esc(q || (a ? a.name : '')) + '" placeholder="輸入公司名或 Siebel account no." autocomplete="off"></div>';
     return { html: html, acct: a };
   }
+  function regionHint() {
+    return S.region === 'all' ? '' : '（而家只睇 ' + esc(REGION_ZH[S.region] || S.region) + '，可以揀「全部」）';
+  }
   function acctMatches() {
     var q = S.acctQ.trim();
     if (!q) return [];
@@ -456,7 +503,7 @@ svg.spark circle { fill: var(--spark); }
   function acctPicks() {
     var list = acctMatches();
     if (!S.acctQ.trim()) return '';
-    if (!list.length) return '<div class="empty">搵唔到客戶「' + esc(S.acctQ) + '」。</div>';
+    if (!list.length) return '<div class="empty">搵唔到客戶「' + esc(S.acctQ) + '」' + regionHint() + '。</div>';
     return '<div class="picks">' + list.map(function (a) {
       return '<button class="pick" data-acct="' + esc(a.key) + '" aria-pressed="' + (a.key === S.acct) + '"><span class="pn">' + esc(a.name) + '</span>' +
         '<span class="pd">' + esc(a.no || '冇 account no.') + ' · ' + a.pcCount + ' 張 PC · ' + a.partCount + ' 個產品 · 最近 ' + fmtDs(a.last) + '</span></button>';
@@ -538,7 +585,7 @@ svg.spark circle { fill: var(--spark); }
     var q = S.partQ.trim();
     if (!q) return html + '<div class="empty">輸入產品編號（打頭幾個字都得）。</div>';
     var list = E.findParts(S.idx, q);
-    if (!list.length) return html + '<div class="empty">PC list 入面冇「' + esc(q) + '」。</div>';
+    if (!list.length) return html + '<div class="empty">PC list 入面冇「' + esc(q) + '」' + regionHint() + '。</div>';
     var sel = list.indexOf(S.part) >= 0 ? S.part : list[0];
     if (list.length > 1) {
       html += '<div class="picks">' + list.slice(0, 40).map(function (p) {
@@ -759,6 +806,7 @@ svg.spark circle { fill: var(--spark); }
       saveRules(); toast('已刪除加價日'); return renderView();
     }
     if (t.id === 'resetRules') { S.rules = defaultRules(); saveRules(); toast('已還原預設規則'); return renderView(); }
+    if (t.dataset.region) { S.region = t.dataset.region; LS.set('zpc.region', S.region); return applyRegion(); }
     if (t.dataset.tab) { S.tab = t.dataset.tab; LS.set('zpc.tab', S.tab); S.limit = 300; renderTabs(); return renderView(); }
     if (t.dataset.acct) return setAcct(t.dataset.acct);
     if (t.hasAttribute('data-clearacct')) { S.acct = ''; S.acctQ = ''; LS.set('zpc.acct', ''); renderView(); var i = document.querySelector('[data-acctq]'); if (i) i.focus(); return; }

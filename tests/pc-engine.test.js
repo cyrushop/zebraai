@@ -8,7 +8,7 @@ const H = ['PC Source', 'Price Concession: Created Date', 'Approved/ Rejected Da
   'Status', 'Sales Stage', 'Siebel Account Number', 'Account Name', 'Reseller', 'Distributor',
   'Product: Product Conversion Source', 'Product Line', 'Product: Product Sub Line', 'Product Family',
   'Product: Product Sub Family', 'Line Item Reseller: Product', 'Min Qty', 'Max Qty', 'Siebel List Price (converted)',
-  'Unit Special Price (converted)', 'Opportunity Number', 'Discount', 'Fulfillment Type'];
+  'Unit Special Price (converted)', 'Opportunity Number', 'Discount', 'Fulfillment Type', 'Owner Sub Region'];
 
 const EMC = { bu: 'EVM', line: 'Mobile Computing', sub: 'Knowledge Worker', fam: 'TC53XX' };
 const ACC = { bu: 'EVM', line: 'Mobile Computing', sub: 'Knowledge Worker', fam: 'BTRY-ENT-ACC' };
@@ -27,14 +27,14 @@ const row = (acct, created, part, prod, list, unit, extra) => {
     'Product Line': prod.line, 'Product: Product Sub Line': prod.sub, 'Product Family': prod.fam,
     'Product: Product Sub Family': prod.fam, 'Line Item Reseller: Product': part, 'Min Qty': 1, 'Max Qty': 10,
     'Siebel List Price (converted)': list, 'Unit Special Price (converted)': unit, 'Opportunity Number': 'Z-' + pcNo, 'Discount': 30,
-    'Fulfillment Type': 'Distributor Sales Out'
+    'Fulfillment Type': 'Distributor Sales Out', 'Owner Sub Region': acct[2] || 'Hong Kong'
   }, extra);
   o['Price Concession Name'] = o['PC #'] + ' : ' + acct[1];
   return o;
 };
 const A = ['100', 'Alpha Logistics Limited'];
 const B = ['200', 'Beta Retail'];
-const C = ['300', 'Gamma Freight'];
+const C = ['300', 'Gamma Freight', 'Taiwan'];
 
 // Default events: 2026-03-19 (EMC 15% only) and 2026-10-05 (all categories).
 const objs = [
@@ -81,6 +81,8 @@ assert.strictEqual(E.tableFromGrid([['report'], H].concat(table.rows), 'g').rows
 const rows = E.normPc(table);
 assert.strictEqual(rows.length, objs.length - 1, 'duplicate line removed');
 const idx = E.buildIndex(rows);
+assert.deepStrictEqual([...new Set(rows.map(x => x.region))].sort(), ['Hong Kong', 'Taiwan']);
+assert.strictEqual(E.buildIndex(rows.filter(x => x.region === 'Taiwan')).accounts.length, 1, 'region subset indexes on its own');
 const R = E.DEFAULT_RULES;
 const get = (acct, p, rules) => E.assess(idx, (idx.byAcct[acct] || []).filter(r => r.part === p), rules || R, p);
 

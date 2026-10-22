@@ -61,6 +61,8 @@ The tests use synthetic fixtures only.
 
 It reads the SFDC **PC list** export (`*_PC_List-*.xls`, HTML table). Upload it or drop it on the page. The rows stay in the browser (IndexedDB).
 
+The 地區 buttons above the tabs show all regions or one region at a time (Hong Kong, Taiwan, and any other `Owner Sub Region` in the file). The choice applies to every tab, including the latest list price and standard discount used for suggestions. Data loaded before this button existed has no region; upload the PC list again to use it.
+
 | Tab | What it does |
 |---|---|
 | 加價檢查 | Pick a customer, paste the part numbers for the new PC (or leave blank for every part the customer has had). For each part: last approved PC price, the one before it, whether it was already raised, suggested uplift and price. |
