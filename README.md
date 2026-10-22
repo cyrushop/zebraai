@@ -56,6 +56,12 @@ python3 -I tools/build_initial_data.py app/initial-data.js path/to/pipeline.xls 
 
 For the competitor, pick a brand (Honeywell, TSC, Chainway, Urovo, Evolis). The page suggests a model for each Zebra product you typed, by product class (for example TC53 → rugged touch mobile computer → Honeywell CT47). TSC's mobile computers are Bluebird models. Evolis covers card printers only (ZC series → Primacy 2 / Zenius / Badgy200, ZXP Series 9 → Avansia / Agilia). When every product typed is a card printer, the page picks Evolis by itself and puts the previous brand back if you change the products. The suggestions come from public product pages, checked 22 Oct 2026. Where no model was confirmed for a class, the page leaves it blank, so type it in. You can always edit the competitor model.
 
+To get one file you can download and open without this repo:
+
+```sh
+python3 -I tools/build_pc_justification.py PC-Justification.html
+```
+
 Margins default to 5% / 12% (new) and 5% / 15% (repeat). The other Yes/No items keep the defaults under **Other items**.
 
 ## Tests
