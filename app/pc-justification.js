@@ -10,7 +10,7 @@
 (function (root) {
   'use strict';
 
-  var BRANDS = ['Honeywell', 'TSC', 'Chainway', 'Urovo'];
+  var BRANDS = ['Honeywell', 'TSC', 'Chainway', 'Urovo', 'Evolis'];
   var DEMANDS = ['WMS', 'Asset Management', 'Staff Card'];
 
   // Zebra model → category. First match wins, so the narrower patterns
@@ -25,6 +25,7 @@
     { key: 'touch-entry', label: 'Entry touch mobile computer', re: /^(TC[12]\d|EC\d|HC[12]\d)/ },
     { key: 'keypad-ultra', label: 'Ultra-rugged keypad mobile computer', re: /^MC9\d/ },
     { key: 'keypad', label: 'Keypad mobile computer', re: /^MC[23]\d/ },
+    { key: 'printer-card-retransfer', label: 'Retransfer card printer', re: /^ZXP(SERIES)?9/ },
     { key: 'printer-card', label: 'Card printer', re: /^(ZC\d|ZXP)/ },
     { key: 'printer-mobile', label: 'Mobile printer', re: /^(ZQ\d|ZR\d|QLN|IMZ)/ },
     { key: 'printer-industrial', label: 'Industrial printer', re: /^(ZT\d|ZE\d|XI4)/ },
@@ -85,7 +86,14 @@
       Chainway: [{ model: 'C61', note: 'Keypad handheld' }],
       Urovo: [{ model: 'DT40', note: '4" full keypad' }, { model: 'RT40S', note: 'IP68, long range' }]
     },
-    'printer-card': {},
+    'printer-card-retransfer': {
+      Evolis: [{ model: 'Avansia', note: 'Retransfer, 600 dpi' }, { model: 'Agilia', note: 'Retransfer, edge-to-edge' }]
+    },
+    'printer-card': {
+      Evolis: [{ model: 'Primacy 2', note: 'High-volume, single / dual-sided' },
+               { model: 'Zenius', note: 'Compact desktop' },
+               { model: 'Badgy200', note: 'Entry level' }]
+    },
     'printer-mobile': {
       Honeywell: [{ model: 'RP4f', note: '4" mobile printer' }],
       TSC: [{ model: 'Alpha-40L', note: '4" mobile printer' }, { model: 'Alpha-40L RFID', note: 'Mobile RFID printer' }],
