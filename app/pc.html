@@ -196,6 +196,39 @@ svg.spark circle { fill: var(--spark); }
 .start .actions { display: flex; flex-wrap: wrap; gap: 8px; }
 
 @media (max-width: 640px) { h1 { font-size: 1.3rem; } }
+/* PC Justification tab: form on the left, live text on the right; scoped so it cannot clash with the price check. */
+#justView { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+#justView .jtop { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+#justView .seg button[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); }
+#justView .jfill { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; display: grid; gap: 10px; }
+#justView .jfill .combo { max-width: 640px; }
+#justView .jfill .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+#justView .jfill select { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 7px 8px; }
+#justView .cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 860px) { #justView .cols { grid-template-columns: minmax(0, 1fr); } }
+#justView .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 14px; min-width: 0; }
+#justView .field { display: grid; gap: 4px; }
+#justView .field input, #justView .field select, #justView .field textarea { width: 100%; min-width: 0; border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 7px 10px; }
+#justView .row2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+#justView .comp { display: grid; gap: 8px; background: var(--sunk); border-radius: 8px; padding: 12px; }
+#justView .faint { font-size: .82rem; }
+#justView .faint a, #justView .pjpick .note a { color: var(--accent); }
+#pj-picks { display: grid; gap: 10px; }
+.pjpick { display: grid; grid-template-columns: minmax(0, 9rem) minmax(0, 1fr); gap: 4px 10px; align-items: center; }
+.pjpick .z { font-weight: 600; overflow-wrap: anywhere; }
+.pjpick .z small { display: block; font-weight: 400; color: var(--ink-3); font-size: .78rem; }
+.pjpick select { width: 100%; min-width: 0; border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 6px 8px; }
+.pjpick .note { grid-column: 2; font-size: .8rem; color: var(--ink-3); }
+.pjpick .none { grid-column: 2; font-size: .82rem; color: var(--warn-ink); }
+#justView details { border-top: 1px solid var(--line); padding-top: 10px; }
+#justView summary { cursor: pointer; font-weight: 500; }
+#justView .toggles { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 6px 16px; margin-top: 10px; }
+#justView .toggles label { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+#justView .toggles select { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 4px 6px; }
+#justView .out { position: sticky; top: 16px; }
+#justView .out pre { margin: 0; background: var(--sunk); border-radius: 8px; padding: 14px; font: 13px/1.6 var(--f-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+#justView .outhead { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+@media (max-width: 640px) { #justView .out { position: static; } .pjpick { grid-template-columns: minmax(0, 1fr); } .pjpick .note, .pjpick .none { grid-column: 1; } }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 </style>
 
@@ -218,6 +251,92 @@ svg.spark circle { fill: var(--spark); }
   <section class="region" id="region" aria-label="地區" hidden></section>
   <nav class="tabs" role="tablist" id="tabs"></nav>
   <main id="view"></main>
+  <section id="justView" aria-label="PC Justification" hidden>
+    <div class="jtop">
+      <div class="seg" role="tablist" aria-label="PC 類型">
+        <button role="tab" id="pj-tabNew" aria-selected="true" data-mode="new">New PC</button>
+        <button role="tab" id="pj-tabRepeat" aria-selected="false" data-mode="repeat">Repeat PC</button>
+      </div>
+      <span class="small faint">填空格，撳 Copy，貼入 PC request。</span>
+    </div>
+    <section class="jfill" id="jPrefill" aria-label="由 PC 紀錄帶入"></section>
+    <div class="cols">
+        <form class="card" id="pj-form" autocomplete="off" onsubmit="return false">
+          <label class="field" data-only="repeat">
+            <span class="label">Previous Repeat PC#</span>
+            <input id="pj-previousPc" inputmode="numeric" placeholder="80971801">
+          </label>
+    
+          <label class="field">
+            <span class="label">Customer Contact Information</span>
+            <input id="pj-contact" placeholder="Name, Title / Dept, Phone, Email">
+          </label>
+    
+          <label class="field" data-only="new">
+            <span class="label">Customer Demand</span>
+            <select id="pj-demand"></select>
+          </label>
+    
+          <label class="field" data-only="new">
+            <span class="label">Zebra Product &amp; Solution</span>
+            <input id="pj-zebraProduct" placeholder="TC53  (several: TC53, ZD421)">
+          </label>
+    
+          <div class="comp" data-only="new">
+            <label class="field">
+              <span class="label">Competitor brand</span>
+              <select id="pj-brand"></select>
+            </label>
+            <div class="faint" id="pj-autoNote" hidden></div>
+            <div id="pj-picks"></div>
+            <label class="field">
+              <span class="label">Competitor model (edit if needed)</span>
+              <input id="pj-compModel" placeholder="Pick above or type">
+            </label>
+            <div class="faint" id="pj-srcNote">Suggested by product class from public product pages, checked 22 Oct 2026. Check the model fits the deal before you submit.</div>
+            <div class="faint" id="pj-askedNote" hidden></div>
+          </div>
+    
+          <div class="row2">
+            <label class="field">
+              <span class="label">Distributor Margin %</span>
+              <input id="pj-distMargin" inputmode="decimal">
+            </label>
+            <label class="field">
+              <span class="label">Reseller Margin %</span>
+              <input id="pj-resellerMargin" inputmode="decimal">
+            </label>
+          </div>
+    
+          <details>
+            <summary>Other items (defaults)</summary>
+            <div class="toggles" id="pj-toggles"></div>
+            <div class="row2" data-only="new" style="margin-top:10px">
+              <label class="field">
+                <span class="label">Other Comments &amp; Update</span>
+                <input id="pj-otherComments" placeholder="Nil">
+              </label>
+              <label class="field">
+                <span class="label">Attachment</span>
+                <input id="pj-attachment" placeholder="Nil">
+              </label>
+            </div>
+          </details>
+    
+          <div><button type="button" class="btn" id="pj-clearBtn">Clear</button></div>
+        </form>
+    
+        <section class="card out" aria-label="Justification text">
+          <div class="outhead">
+            <h2 id="pj-outTitle">New PC justification</h2>
+            <button type="button" class="btn primary" id="pj-copyBtn">Copy</button>
+          </div>
+          <div class="notice" id="pj-missing" hidden></div>
+          <pre id="pj-text"></pre>
+        </section>
+      </div>
+    <div class="toast" id="pj-toast" hidden></div>
+  </section>
 </div>
 
 <div class="sheet-bg" id="sheetBg" hidden></div>
@@ -227,6 +346,7 @@ svg.spark circle { fill: var(--spark); }
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="pc-engine.js"></script>
+<script src="pc-justification.js"></script>
 <script>
 (function () {
   'use strict';
@@ -476,14 +596,18 @@ svg.spark circle { fill: var(--spark); }
       n.innerHTML = '呢份資料係舊版 app 載入的，冇地區欄。重新上載 PC list 就可以揀香港 / 台灣。';
     } else n.hidden = true;
   }
-  var TABS = [['check', '加價檢查'], ['part', '產品紀錄'], ['cust', '客戶紀錄'], ['rules', '加價規則']];
+  var TABS = [['check', '加價檢查'], ['part', '產品紀錄'], ['cust', '客戶紀錄'], ['just', 'PC Justification'], ['rules', '加價規則']];
   function renderTabs() {
-    $('#tabs').innerHTML = S.idx ? TABS.map(function (t) {
+    // The justification tab works without a PC list, so the tabs always show.
+    $('#tabs').innerHTML = TABS.map(function (t) {
       return '<button role="tab" data-tab="' + t[0] + '" aria-selected="' + (S.tab === t[0]) + '">' + t[1] + '</button>';
-    }).join('') : '';
+    }).join('');
   }
   function renderView() {
-    var v = $('#view');
+    var v = $('#view'), jv = $('#justView');
+    jv.hidden = S.tab !== 'just';
+    v.hidden = S.tab === 'just';
+    if (S.tab === 'just') { renderPrefill(); return; }
     if (!S.idx) { v.innerHTML = startHtml(); return; }
     if (S.tab === 'part') v.innerHTML = partView();
     else if (S.tab === 'cust') v.innerHTML = custView();
@@ -771,6 +895,58 @@ svg.spark circle { fill: var(--spark); }
       '</ul></div></section>';
   }
 
+  // ---- PC Justification: start from the customer's last PC
+  // Families of the parts on the check tab that a justification names (no accessories, services or supplies).
+  var JUST_SKIP = { emcAcc: 1, svc: 1, other: 1 };
+  var AIT_HW = { 'Desktop': 1, 'Tabletop': 1, 'Mobile': 1, 'Card': 1, 'RFID': 1 };
+  function justProducts(parts) {
+    var out = [];
+    parts.forEach(function (p) {
+      var i = S.idx.info[p];
+      if (!i || JUST_SKIP[i.cat] || (i.cat === 'ait' && !AIT_HW[i.line])) return;
+      if (out.indexOf(i.family) < 0) out.push(i.family);
+    });
+    return out.join(', ');
+  }
+  function prefillData() {
+    if (!S.idx || !S.acct) return null;
+    var parts = E.parsePartList(S.parts);
+    var lp = E.lastPcFor(S.idx, S.acct, parts, S.rules);
+    var f = lp.just ? lp.just.fields : {};
+    return { lp: lp, products: justProducts(parts) || f.product || '', fields: f };
+  }
+  function renderPrefill() {
+    var box = $('#jPrefill');
+    if (!S.idx) {
+      box.innerHTML = '<div class="small muted">上載 PC list 之後，揀客戶就可以由上次 PC 帶入 Previous PC#、聯絡人、margin 同產品。</div>';
+      return;
+    }
+    var a = S.acct ? S.idx.accounts.filter(function (x) { return x.key === S.acct; })[0] : null;
+    var html = '<div class="label">由 PC 紀錄帶入</div><div class="combo"><select id="jAcctSel" data-acctsel aria-label="揀客戶">' + acctOptions() + '</select></div>';
+    var d = prefillData();
+    if (!a || !d) { box.innerHTML = html + '<div class="small faint">揀客戶（或者喺「加價檢查」揀）就會見到上次 PC 的資料。</div>'; return; }
+    var lp = d.lp, f = d.fields;
+    html += '<dl class="facts">' +
+      '<dt>上次 PC#</dt><dd>' + (lp.last ? '<span class="mono">' + esc(lp.last.pc) + '</span>（' + fmtDs(lp.last.created) + '，' + esc(STATUS_ZH[lp.last.status] || lp.last.status) +
+        (lp.forParts ? '，加價檢查入面的產品' : '') + '）' : '<span class="faint">冇已批的 PC</span>') + '</dd>' +
+      '<dt>聯絡人</dt><dd>' + (f.contact ? esc(f.contact) + ' <span class="faint">（PC ' + esc(lp.just.pc) + '，' + fmtDs(lp.just.created) + '）</span>' : '<span class="faint">上次 justification 冇寫</span>') + '</dd>' +
+      '<dt>Margin</dt><dd>' + (f.distMargin || f.resellerMargin ? 'Distributor ' + esc(f.distMargin || '—') + '% · Reseller ' + esc(f.resellerMargin || '—') + '%' : '<span class="faint">冇</span>') + '</dd>' +
+      '<dt>產品</dt><dd>' + (d.products ? esc(d.products) + (justProducts(E.parsePartList(S.parts)) ? ' <span class="faint">（加價檢查入面的產品）</span>' : ' <span class="faint">（上次 justification）</span>') : '<span class="faint">喺「加價檢查」貼產品就會帶入</span>') + '</dd>' +
+      (f.competitor ? '<dt>上次對手</dt><dd>' + esc(f.competitor) + '</dd>' : '') +
+      '</dl><div class="actions"><button class="btn primary small" data-jfill="repeat">帶入 Repeat PC</button><button class="btn small" data-jfill="new">帶入 New PC</button></div>' +
+      '<div class="small faint">SFDC 匯出時「：」同中文會變成「?」，帶入後請睇一睇聯絡人。</div>';
+    box.innerHTML = html;
+  }
+  function fillJustification(mode) {
+    var d = prefillData();
+    if (!d || !window.PCJUI) return;
+    var f = d.fields;
+    window.PCJUI.fill({ mode: mode, previousPc: d.lp.last ? d.lp.last.pc : '', contact: f.contact, distMargin: f.distMargin,
+      resellerMargin: f.resellerMargin, zebraProduct: mode === 'new' ? d.products : '', demand: f.demand,
+      competitor: mode === 'new' ? f.competitor : '' });
+    toast('已帶入 ' + (mode === 'repeat' ? 'Repeat' : 'New') + ' PC，請檢查一次先 Copy');
+  }
+
   // ------------------------------------------------------------ side sheet
   function openSheet(acctKey, partNo) {
     var hist = (S.idx.byAcct[acctKey] || []).filter(function (r) { return r.part === partNo; });
@@ -856,6 +1032,7 @@ svg.spark circle { fill: var(--spark); }
     if (t.id === 'demoBtn') { S.sample = true; setData(sampleRows(), { name: 'demo' }); S.acct = 'DEMO1'; S.tab = 'check'; return render(); }
     if (t.id === 'closeSheet') return closeSheet();
     if (t.id === 'copyBtn') return copyTable();
+    if (t.dataset.jfill) return fillJustification(t.dataset.jfill);
     if (t.id === 'clearParts') { S.parts = ''; LS.set('zpc.parts', ''); return renderView(); }
     if (t.id === 'moreBtn') { S.limit = 1e9; return renderView(); }
     if (t.id === 'addEvent') {
@@ -963,5 +1140,307 @@ svg.spark circle { fill: var(--spark); }
   IDB.get('pc').then(function (saved) {
     if (saved && saved.rows && saved.rows.length) setData(saved.rows, saved.meta);
   });
+})();
+</script>
+<script>
+// PC Justification tab (from pc-justification.html; ids carry a pj- prefix).
+(function () {
+  'use strict';
+  var P = window.PCJ;
+  var $ = function (id) { return document.getElementById('pj-' + id); };
+  var TOGGLES = [
+    ['pcRebate', 'PC+Rebate'], ['sideway', 'Sideway Selling'], ['freeUnits', 'Has Free units Request'],
+    ['emc', 'EMC Market Share Acceleration'], ['invoice', 'End-user Invoice Providing'],
+    ['bundle', 'Bundle Service'], ['annual', 'Annual Agreement']
+  ];
+  var MARGINS = { new: { distMargin: '5', resellerMargin: '12' }, repeat: { distMargin: '5', resellerMargin: '15' } };
+  var mode = 'new';
+  var picks = [];          // option index shown per Zebra product row, -1 = none
+  var chosen = {};         // option index the user picked, by brand + product
+  var modelEdited = false; // the user typed in the competitor model box
+  var autoFrom = null;      // brand before the page switched it automatically
+  var lastAuto = null;      // autoBrand() for the products last seen; a manual pick holds until it changes
+  // Online copy only: rows from the monthly web check, and the models asked so far.
+  var db = null;
+  var live = { models: {}, categories: {} };
+  var asked = {};
+  var lastRun = '';
+
+  function opt(sel, value, text) { var o = document.createElement('option'); o.value = value; o.textContent = text; sel.appendChild(o); }
+  opt($('demand'), '', 'Select…');
+  P.DEMANDS.forEach(function (d) { opt($('demand'), d, d); });
+  P.BRANDS.forEach(function (b) { opt($('brand'), b, b); });
+  TOGGLES.forEach(function (t) {
+    var l = document.createElement('label');
+    l.innerHTML = '<span></span><select><option value="1">Yes</option><option value="0">No</option></select>';
+    l.firstChild.textContent = t[1];
+    l.lastChild.id = 'pj-' + t[0];
+    l.lastChild.value = P.DEFAULTS[t[0]] ? '1' : '0';
+    $('toggles').appendChild(l);
+  });
+
+  function setMode(m) {
+    var prev = mode;
+    mode = m;
+    ['tabNew', 'tabRepeat'].forEach(function (id) { $(id).setAttribute('aria-selected', String($(id).dataset.mode === m)); });
+    document.querySelectorAll('#justView [data-only]').forEach(function (el) { el.hidden = el.dataset.only !== m; });
+    $('outTitle').textContent = (m === 'new' ? 'New' : 'Repeat') + ' PC justification';
+    // Swap margin defaults only where the user left the previous default.
+    ['distMargin', 'resellerMargin'].forEach(function (k) {
+      if (!$(k).value || $(k).value === MARGINS[prev][k]) $(k).value = MARGINS[m][k];
+    });
+    update();
+  }
+
+  function renderPicks() {
+    var rows = P.suggest($('zebraProduct').value, $('brand').value, live);
+    var key = function (r) { return $('brand').value + '|' + r.zebra.toUpperCase(); };
+    picks = rows.map(function (r) {
+      var c = chosen[key(r)];
+      return c != null && c < r.options.length ? c : (r.options.length ? 0 : -1);
+    });
+    var box = $('picks');
+    box.innerHTML = '';
+    rows.forEach(function (r, i) {
+      var d = document.createElement('div');
+      d.className = 'pjpick';
+      var z = document.createElement('div');
+      z.className = 'z';
+      z.textContent = r.zebra;
+      var small = document.createElement('small');
+      small.textContent = r.category ? r.category.label : 'Model not recognised';
+      z.appendChild(small);
+      d.appendChild(z);
+      if (r.options.length) {
+        var s = document.createElement('select');
+        s.setAttribute('aria-label', 'Competitor model for ' + r.zebra);
+        r.options.forEach(function (o, j) { opt(s, j, o.model); });
+        opt(s, -1, 'None');
+        s.value = picks[i];
+        s.onchange = function () { picks[i] = chosen[key(r)] = +s.value; modelEdited = false; renderPicks(); fillModel(rows); update(); };
+        d.appendChild(s);
+        var n = document.createElement('div');
+        n.className = 'note';
+        noteFor(n, picks[i] >= 0 ? r.options[picks[i]] : null, r.checkedAt);
+        d.appendChild(n);
+      } else {
+        var w = document.createElement('div');
+        w.className = 'none';
+        w.textContent = r.from === 'model' ? 'No ' + $('brand').value + ' match found online' + (r.checkedAt ? ' (' + r.checkedAt + ')' : '') + '. Type the model below.'
+                      : r.category ? 'No confirmed ' + $('brand').value + ' match for this class. Type the model below.'
+                      : 'Type the competitor model below.' + (db ? ' It will be looked up online in the next monthly check.' : '');
+        d.appendChild(w);
+      }
+      box.appendChild(d);
+    });
+    return rows;
+  }
+
+  // "5.7", IP67 · source · checked 2026-11-01"
+  function noteFor(el, o, checkedAt) {
+    el.textContent = o && o.note || '';
+    var add = function (node) { if (el.childNodes.length) el.appendChild(document.createTextNode(' · ')); el.appendChild(node); };
+    if (o && o.source) {
+      var a = document.createElement('a');
+      a.href = o.source;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.textContent = 'source';
+      add(a);
+    }
+    if (checkedAt) add(document.createTextNode('checked ' + checkedAt));
+  }
+
+  function fillModel(rows) {
+    if (modelEdited) return;
+    var models = [];
+    rows.forEach(function (r, i) {
+      var m = picks[i] >= 0 && r.options[picks[i]] ? r.options[picks[i]].model : '';
+      if (m && models.indexOf(m) < 0) models.push(m);
+    });
+    $('compModel').value = models.join(', ');
+  }
+
+  function fields() {
+    var f = {
+      contact: $('contact').value, previousPc: $('previousPc').value, demand: $('demand').value,
+      zebraProduct: $('zebraProduct').value, competitorBrand: $('compModel').value.trim() ? $('brand').value : '',
+      competitorModel: $('compModel').value, distMargin: $('distMargin').value, resellerMargin: $('resellerMargin').value,
+      otherComments: $('otherComments').value, attachment: $('attachment').value
+    };
+    TOGGLES.forEach(function (t) { f[t[0]] = $(t[0]).value === '1'; });
+    return f;
+  }
+
+  function update() {
+    var f = fields();
+    $('text').textContent = mode === 'new' ? P.buildNew(f) : P.buildRepeat(f);
+    var miss = [];
+    if (mode === 'repeat' && !f.previousPc.trim()) miss.push('Previous Repeat PC#');
+    if (!f.contact.trim()) miss.push('Customer Contact');
+    if (mode === 'new') {
+      if (!f.demand) miss.push('Customer Demand');
+      if (!f.zebraProduct.trim()) miss.push('Zebra Product');
+      if (!f.competitorModel.trim()) miss.push('Competitor model');
+    }
+    $('missing').hidden = !miss.length;
+    $('missing').textContent = 'Still blank: ' + miss.join(', ');
+  }
+
+  // Only one brand matches what was typed (e.g. ZC300 → Evolis): pick it, and
+  // put the previous brand back once the products no longer call for it.
+  function applyAutoBrand() {
+    var b = P.autoBrand($('zebraProduct').value, live);
+    if (b === lastAuto) return;
+    lastAuto = b;
+    if (b && $('brand').value !== b) {
+      if (autoFrom == null) autoFrom = $('brand').value;
+      $('brand').value = b;
+    } else if (!b && autoFrom != null) {
+      $('brand').value = autoFrom;
+      autoFrom = null;
+    }
+    $('autoNote').hidden = autoFrom == null;
+    $('autoNote').textContent = 'Picked automatically: only ' + $('brand').value + ' has a match for this product.';
+  }
+
+  function refreshCompetitor() { modelEdited = false; fillModel(renderPicks()); update(); }
+
+  function toast(msg) {
+    var t = $('toast');
+    t.textContent = msg;
+    t.hidden = false;
+    clearTimeout(toast.timer);
+    toast.timer = setTimeout(function () { t.hidden = true; }, 1800);
+  }
+
+  function copy() {
+    var s = $('text').textContent;
+    var fallback = function () {
+      var ta = document.createElement('textarea');
+      ta.value = s;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+      document.body.removeChild(ta);
+      toast(ok ? 'Copied' : 'Copy blocked. Select the text and copy it.');
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(s).then(function () { toast('Copied'); }, fallback);
+    else fallback();
+  }
+
+  $('tabNew').onclick = function () { setMode('new'); };
+  $('tabRepeat').onclick = function () { setMode('repeat'); };
+  $('zebraProduct').oninput = function () { applyAutoBrand(); refreshCompetitor(); };
+  $('brand').onchange = function () { autoFrom = null; $('autoNote').hidden = true; refreshCompetitor(); };
+  $('compModel').oninput = function () { modelEdited = true; update(); };
+  $('form').addEventListener('input', update);
+  $('form').addEventListener('change', update);
+  $('copyBtn').onclick = function () { copy(); remember(); };
+  $('clearBtn').onclick = function () {
+    ['previousPc', 'contact', 'zebraProduct', 'compModel', 'otherComments', 'attachment'].forEach(function (k) { $(k).value = ''; });
+    $('demand').value = '';
+    $('brand').value = P.BRANDS[0];
+    TOGGLES.forEach(function (t) { $(t[0]).value = P.DEFAULTS[t[0]] ? '1' : '0'; });
+    $('distMargin').value = MARGINS[mode].distMargin;
+    $('resellerMargin').value = MARGINS[mode].resellerMargin;
+    chosen = {};
+    autoFrom = lastAuto = null;
+    $('autoNote').hidden = true;
+    refreshCompetitor();
+  };
+
+  function today() {
+    var d = new Date();
+    var p2 = function (n) { return (n < 10 ? '0' : '') + n; };
+    return d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate());
+  }
+
+  // Remember each Zebra model on Copy, so the monthly check looks it up.
+  // Only model names and the competitor picked are stored, never contacts.
+  async function remember() {
+    if (!db || mode !== 'new') return;
+    var rows = P.suggest($('zebraProduct').value, $('brand').value, live);
+    for (var i = 0; i < rows.length; i++) {
+      var key = P.modelKey(rows[i].zebra);
+      if (!key) continue;
+      var o = picks[i] >= 0 ? rows[i].options[picks[i]] : null;
+      var doc = { zebra: rows[i].zebra.slice(0, 80), lastAsked: today(), brand: $('brand').value, model: o ? o.model : '' };
+      var old = asked[key];
+      if (old && old.zebra === doc.zebra && old.lastAsked === doc.lastAsked && old.brand === doc.brand && old.model === doc.model) continue;
+      try { await db.collection('asked').doc(key).set(doc); } catch (e) { console.warn('remember', key, e && e.code); return; }
+      asked[key] = doc;
+    }
+    renderLiveNotes();
+  }
+
+  function renderLiveNotes() {
+    if (!db) return;
+    $('srcNote').textContent = 'Suggestions are checked online every month' + (lastRun ? ' (last ' + lastRun + ')' : '') +
+      '. Check the model fits the deal before you submit.';
+    var keys = Object.keys(asked).sort(function (a, b) { return String(asked[b].lastAsked).localeCompare(String(asked[a].lastAsked)); });
+    $('askedNote').hidden = !keys.length;
+    $('askedNote').textContent = 'Remembered models (' + keys.length + '): ' +
+      keys.slice(0, 15).map(function (k) { return asked[k].zebra || k; }).join(', ') + (keys.length > 15 ? ' …' : '');
+  }
+
+  function onLive() {
+    applyAutoBrand();
+    fillModel(renderPicks());
+    update();
+    renderLiveNotes();
+  }
+
+  function byId(snap) {
+    var o = {};
+    snap.docs.forEach(function (d) { var v = d.data(); if (v) o[d.id] = v; });
+    return o;
+  }
+
+  // Filled from the PC history panel on the PC Price Check page.
+  function fillFrom(o) {
+    if (o.mode) setMode(o.mode);
+    ['previousPc', 'contact', 'zebraProduct', 'distMargin', 'resellerMargin'].forEach(function (k) {
+      if (o[k] != null && o[k] !== '') $(k).value = o[k];
+    });
+    if (o.demand && P.DEMANDS.indexOf(o.demand) >= 0) $('demand').value = o.demand;
+    applyAutoBrand();
+    refreshCompetitor();
+    // Keep the competitor named on the last PC ("TSC T4000"): its brand if listed, the rest as the model.
+    var c = String(o.competitor || '').trim();
+    if (c && !/^nil$/i.test(c)) {
+      var brand = P.BRANDS.filter(function (b) { return c.toUpperCase().indexOf(b.toUpperCase() + ' ') === 0 || c.toUpperCase() === b.toUpperCase(); })[0];
+      if (brand) { $('brand').value = brand; autoFrom = null; $('autoNote').hidden = true; refreshCompetitor(); }
+      $('compModel').value = brand ? c.slice(brand.length).trim() || c : c;
+      modelEdited = true;
+      update();
+    }
+  }
+  window.PCJUI = { fill: fillFrom };
+
+  $('distMargin').value = MARGINS.new.distMargin;
+  $('resellerMargin').value = MARGINS.new.resellerMargin;
+  setMode('new');
+  refreshCompetitor();
+
+  if (window.claude && window.claude.use) {
+    window.claude.use('db').then(function (d) {
+      if (!d) return;
+      db = d;
+      var fail = function (e) { console.warn('db', e && e.code); };
+      db.collection('models').onSnapshot(function (s) { live.models = byId(s); onLive(); }, fail);
+      db.collection('categories').onSnapshot(function (s) { live.categories = byId(s); onLive(); }, fail);
+      db.collection('asked').onSnapshot(function (s) { asked = byId(s); renderLiveNotes(); }, fail);
+      db.doc('meta/update').onSnapshot(function (s) {
+        var v = s.exists && s.data() || {};
+        lastRun = typeof v.lastRun === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v.lastRun) ? v.lastRun : '';
+        renderLiveNotes();
+      }, fail);
+      renderLiveNotes();
+    }, function () {});
+  }
 })();
 </script>

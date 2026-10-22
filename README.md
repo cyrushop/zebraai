@@ -88,6 +88,7 @@ The 地區 buttons above the tabs show Hong Kong (the default), Taiwan or both. 
 | 加價檢查 | Pick a customer, paste the part numbers for the new PC (or leave blank for every part the customer has had). For each part: last approved PC price, the one before it, whether it was already raised, suggested uplift and price. |
 | 產品紀錄 | Every PC for a part across customers, with lowest / median / highest approved price. |
 | 客戶紀錄 | Every part a customer has had on a PC, first vs latest price and the trend. |
+| PC Justification | The PC justification writer (`pc-justification.html`) as a tab. It works without a PC list. With one loaded, pick a customer and press 帶入 Repeat PC or 帶入 New PC: the previous PC# (the customer's newest granted PC, for the parts on the check tab when they have one), the contact and margins from the newest justification that names a contact, and for a new PC the demand, the products on the check tab and the last competitor. |
 | 加價規則 | Edit the rates and the "already raised" test. Saved in the browser. |
 
 Customers and parts can be typed or picked from dropdowns: customers list the 15 with the most PCs first, then all A–Z; parts are grouped by rule category, and the 加價檢查 tab can add the chosen customer's parts one by one. The 客戶紀錄 tab can hide parts with only one PC. A collapsible strip on 加價檢查 shows the current rules.

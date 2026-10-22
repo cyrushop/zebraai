@@ -127,7 +127,7 @@
     var h = {};
     table.headers.forEach(function (x, i) { h[x] = i; });
     var g = function (r, k) { return h[k] == null ? null : r[h[k]]; };
-    var seen = {};
+    var seen = {}, seenPc = {};
     var out = [];
     table.rows.forEach(function (r) {
       var o = {
@@ -166,6 +166,8 @@
       var k = [o.pc, o.part, o.unit, o.minQty, o.maxQty].join('|');
       if (seen[k]) return;
       seen[k] = 1;
+      // The justification repeats on every line of a PC; keep it once.
+      if (!seenPc[o.pc]) { seenPc[o.pc] = 1; o.just = str(g(r, 'Justification')); }
       o.region = regionOf(o.regionRaw);
       o.statusGroup = STATUS_GROUP[o.status] || 'notgranted';
       o.cat = categoryOf(o);
@@ -357,6 +359,54 @@
     return out;
   }
 
+  /* Read the fields of a justification written from the PC template.
+   * The SFDC export turns full-width colons (and any Chinese) into "?", so
+   * "?", ":" and "：" all count as the separator.
+   */
+  function parseJustification(text) {
+    var t = str(text).replace(/\s+/g, ' ');
+    var SEP = '\\s*[?:：]\\s*';
+    var grab = function (label, next) {
+      var m = t.match(new RegExp(label + SEP + '(.*?)\\s*(?=\\d{1,2}\\.\\s+(?:' + next + ')|$)', 'i'));
+      return m ? m[1].trim() : '';
+    };
+    var margin = function (label) {
+      var m = t.match(new RegExp(label + '\\s*[?:：]?\\s*([\\d.]+)\\s*%', 'i'));
+      return m ? m[1] : '';
+    };
+    var prev = t.match(/Previous Repeat PC#?\s*[?:：]?\s*(\d{6,})/i);
+    return {
+      contact: grab('Customer Contact Information', 'Annual Agreement|Customer Demand'),
+      distMargin: margin('Distributor Margin'),
+      resellerMargin: margin('Reseller Margin'),
+      demand: grab('Customer Demand', 'Zebra Product'),
+      product: grab('Zebra Product & Solution', 'Competitor'),
+      competitor: grab('Competitor & Model', 'Other Comments'),
+      previousPc: prev ? prev[1] : ''
+    };
+  }
+
+  /* What a new justification for this customer can start from: the newest
+   * granted PC (the "previous PC#"), restricted to `parts` when any of them
+   * has one, and the newest justification that names a contact.
+   */
+  function lastPcFor(idx, acctKey, parts, rules) {
+    rules = rules || DEFAULT_RULES;
+    var rows = idx.byAcct[acctKey] || [];
+    var want = {};
+    (parts || []).forEach(function (p) { want[p] = 1; });
+    var granted = rows.filter(function (r) { return counts(r.statusGroup, rules); });
+    var forParts = granted.filter(function (r) { return want[r.part]; });
+    var last = (forParts.length ? forParts : granted)[0] || null;
+    var just = null;
+    for (var i = 0; i < rows.length && !just; i++) {
+      if (!rows[i].just) continue;
+      var f = parseJustification(rows[i].just);
+      if (f.contact) just = { pc: rows[i].pc, created: rows[i].created, fields: f };
+    }
+    return { last: last, forParts: !!forParts.length, just: just };
+  }
+
   function findAccounts(idx, q) {
     q = str(q).toUpperCase();
     if (!q) return idx.accounts;
@@ -391,7 +441,8 @@
     SIGNATURE: SIGNATURE, CATEGORIES: CATEGORIES, DEFAULT_RULES: DEFAULT_RULES, STATUS_GROUP: STATUS_GROUP,
     isPcHeader: isPcHeader, tableFromGrid: tableFromGrid, normPc: normPc, regionOf: regionOf, buildIndex: buildIndex, categoryOf: categoryOf,
     assess: assess, customerParts: customerParts, otherCustomers: otherCustomers, findAccounts: findAccounts,
-    findParts: findParts, parsePartList: parsePartList, date: date, iso: iso
+    findParts: findParts, parsePartList: parsePartList, parseJustification: parseJustification, lastPcFor: lastPcFor,
+    date: date, iso: iso
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.PcEngine = api;

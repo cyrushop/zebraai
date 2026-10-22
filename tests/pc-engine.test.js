@@ -182,4 +182,33 @@ assert.deepStrictEqual(E.findParts(idx, 'tc53'), ['TC53-X']);
 assert.deepStrictEqual(E.parsePartList('zd421-x, TC53-X\nzd421-x\t MC333R-X'), ['ZD421-X', 'TC53-X', 'MC333R-X']);
 assert.deepStrictEqual(E.otherCustomers(idx, 'TC53-X', '100', R).map(x => x.acctKey), ['200', '300']);
 
+// justification parsing (the export turns full-width colons into "?")
+const J = '1. Front-end PC 2. PC+Rebate: No 7. Margin Information?  a. Distributor Margin?5%  b. Reseller Margin?12% ' +
+  '8. Bundle Service: Yes Customer Contact Information?Jo Chan, IT, 2345 6789 9. Annual Agreement: No ' +
+  '10. Customer Demand?WMS 11. Zebra Product & Solution?TC53 12. Competitor & Model?Honeywell CT47 13. Other Comments & Update: Nil';
+assert.deepStrictEqual(E.parseJustification(J), { contact: 'Jo Chan, IT, 2345 6789', distMargin: '5', resellerMargin: '12',
+  demand: 'WMS', product: 'TC53', competitor: 'Honeywell CT47', previousPc: '' });
+const JR = '1. Previous Repeat PC#: 81482416 All +3% already 2. Front-end PC 8. Margin Information? a. Distributor Margin?5% ' +
+  'b. Reseller Margin?15% 9. Bundle Service: No Customer Contact Information：Sam Lee, GM 10. Annual Agreement: Nil';
+const fr = E.parseJustification(JR);
+assert.strictEqual(fr.previousPc, '81482416');
+assert.strictEqual(fr.contact, 'Sam Lee, GM');
+assert.strictEqual(fr.resellerMargin, '15');
+assert.strictEqual(E.parseJustification('DHL new forecast').contact, '');
+
+// starting point for a new justification
+const jrows = E.normPc({ name: 'j', headers: H.concat(['Justification']), rows: [
+  row(A, '01/03/2026', 'TC53-X', EMC, 1000, 600, { 'Justification': J }),
+  row(A, '01/05/2026', 'ZD421-X', PRN, 500, 300, { 'Justification': 'Add qty' }),
+  row(A, '01/06/2026', 'DS2278-X', ADC, 200, 100, { 'Status': 'Rejected', 'Justification': JR })
+].map(o => H.concat(['Justification']).map(h => o[h] ?? null)) });
+const jidx = E.buildIndex(jrows);
+let lp = E.lastPcFor(jidx, '100', []);
+assert.strictEqual(lp.last.part, 'ZD421-X', 'newest granted PC');
+assert.strictEqual(lp.just.fields.contact, 'Sam Lee, GM', 'newest justification with a contact, any status');
+lp = E.lastPcFor(jidx, '100', ['TC53-X']);
+assert.strictEqual(lp.last.part, 'TC53-X');
+assert.strictEqual(lp.forParts, true);
+assert.strictEqual(E.lastPcFor(jidx, '999', []).last, null);
+
 console.log('pc-engine tests passed');
