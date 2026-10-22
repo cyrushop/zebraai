@@ -557,6 +557,23 @@
     });
   }
 
+  // -------------------------------------------------------- forecast totals
+  // Schedule USD by sales stage for one quarter ("2026 Q4"), by schedule date
+  // (first-ship quarter when there is none). Every line counts, -F / -R opps
+  // included, so the totals line up with SFDC stage totals.
+  var STAGE_KEY = { 'Closed - Won': 'won', 'Secure': 'secure', 'Validate': 'validate', 'Qualify': 'qualify' };
+  function quarterOf(d) { return d.getFullYear() + ' Q' + (Math.floor(d.getMonth() / 3) + 1); }
+  function stageTotals(pipeline, fq) {
+    var out = { won: 0, secure: 0, validate: 0, qualify: 0, lines: 0 };
+    pipeline.forEach(function (l) {
+      var k = STAGE_KEY[l.stage];
+      if (!k || (l.shipDate ? quarterOf(l.shipDate) : l.fq) !== fq) return;
+      out[k] += l.amount;
+      out.lines++;
+    });
+    return out;
+  }
+
   function asOfDates(ds) {
     var max = function (arr, f) {
       return arr.reduce(function (m, x) { var v = f(x); return v && (!m || v > m) ? v : m; }, null);
@@ -571,7 +588,8 @@
 
   var api = {
     detectType: detectType, tableFromGrid: tableFromGrid, buildDataset: buildDataset, analyse: analyse,
-    sameEndUser: sameEndUser, accountKey: accountKey, parseDate: date, iso: iso
+    sameEndUser: sameEndUser, accountKey: accountKey, parseDate: date, iso: iso,
+    stageTotals: stageTotals, quarterOf: quarterOf
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.ZEngine = api;

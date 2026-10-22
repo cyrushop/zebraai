@@ -95,4 +95,18 @@ assert.strictEqual(by('Substituted')[0].status, 'substituted');
 assert.ok(E.sameEndUser('A. S. Watson Retail (HK) Limited', 'A.S. Watson'));
 assert.ok(!E.sameEndUser('DHL HK', 'UPS HK'));
 
+// Stage totals for the forecast tracker: by schedule-date quarter, -F opps included, Identify ignored.
+const fds = E.buildDataset([table('pipeline', PIPE_H, [
+  pipe('F-1', 'Won deal', 'TC22', 1, 1000, 'Alpha', { 'Sales Stage': 'Closed - Won' }),
+  pipe('F-2', 'Secure deal', 'TC22', 1, 2000, 'Beta'),
+  pipe('F-3', 'Run rate-F', 'TC22', 1, 100, 'Gamma'),
+  pipe('F-4', 'Validate deal', 'TC22', 1, 500, 'Delta', { 'Sales Stage': 'Validate' }),
+  pipe('F-5', 'Qualify deal', 'TC22', 1, 300, 'Eps', { 'Sales Stage': 'Qualify' }),
+  pipe('F-6', 'Early deal', 'TC22', 1, 999, 'Zeta', { 'Sales Stage': 'Identify' }),
+  pipe('F-7', 'Next quarter', 'TC22', 1, 700, 'Eta', { 'Schedule Date': '10/01/2027' })
+])]);
+const st = E.stageTotals(fds.pipeline, '2026 Q4');
+assert.deepStrictEqual([st.won, st.secure, st.validate, st.qualify, st.lines], [1000, 2100, 500, 300, 5]);
+assert.strictEqual(E.stageTotals(fds.pipeline, '2027 Q1').secure, 700);
+
 console.log('engine tests passed:', a.lines.length, 'lines');

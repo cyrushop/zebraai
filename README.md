@@ -27,6 +27,17 @@ Each Secure, Validate or Closed-Won pipeline line is matched in this order. Ever
 
 The indicative claim is (standard unit − deal unit) × qty. The standard unit comes from the DSR line value or the VAD inventory price. The deal unit is the SFDC schedule amount ÷ qty.
 
+## Forecast tracker
+
+The **Forecast tracker** tab follows Secure + Won week by week against the forecast you submitted and the quarter quota, in USD thousands.
+
+- Set the quarter's quota, the date week 1 starts and its week number (default: first Monday of the quarter; W2, W15, W28, W41 for Q1–Q4).
+- For the current week, type the latest Secure and Won from SFDC, plus the forecast when you submit it. The forecast carries forward to later weeks until you enter a new one.
+- The tab shows Secure + Won above or below the forecast, % of quota, the gap to quota, and what changed since your last entry.
+- **Fill from pipeline file** copies Secure, Won, Validate and Qualify from the uploaded pipeline (lines scheduled in the quarter, `-F` / `-R` opps included). The pipeline figure is also shown under each box, so you can see how far the file is behind SFDC.
+
+Entries stay in this browser (localStorage). **Export .xlsx** adds them as a *Forecast tracker* sheet.
+
 ## Run it
 
 Open `app/index.html` in a browser, or serve the folder:

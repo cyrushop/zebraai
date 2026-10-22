@@ -180,6 +180,35 @@ tfoot td { font-weight: 600; border-bottom: 0; }
 .help ol { margin: 0; padding-left: 20px; display: grid; gap: 8px; }
 .help h3 { font-size: 1rem; }
 
+/* forecast tracker */
+.fc { display: grid; gap: 14px; }
+.fc-set { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: end; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+.fc-set label, .fc-fields label { display: grid; gap: 3px; align-content: start; }
+.fc input, .fc select { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 6px 8px; font: inherit; color: inherit; font-variant-numeric: tabular-nums; }
+.fc-set input[type=number] { width: 120px; }
+.fc-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 14px; }
+@media (max-width: 860px) { .fc-grid { grid-template-columns: minmax(0, 1fr); } }
+.fc-card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; gap: 12px; align-content: start; min-width: 0; }
+.fc-card .hd { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; justify-content: space-between; }
+.fc-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 10px 12px; }
+.fc-fields input { width: 100%; min-width: 0; }
+.fc-fields .pipe { font-size: .78rem; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.fc-fields .pipe.diff { color: var(--warn-ink); }
+.fc-acts { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.fc-kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; }
+.fc-kpis .v { font-family: var(--f-display); font-size: 1.5rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.fc-kpis .d { font-size: .8rem; color: var(--ink-3); }
+.fc-vs { grid-column: 1 / -1; border-radius: 8px; padding: 10px 12px; background: var(--sunk); }
+.fc-vs .v { font-size: 1.9rem; }
+.fc-vs.good .v { color: var(--good-ink); } .fc-vs.bad .v { color: var(--bad-ink); }
+td.fcn, th.fcn { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+td.neg { color: var(--bad-ink); } td.pos { color: var(--good-ink); }
+td.carried { color: var(--ink-3); }
+tr.fc-now td { background: var(--accent-soft); }
+tr.fc-sel td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+tr.fc-future td { color: var(--ink-3); }
+.linkbtn { border: 0; background: none; padding: 0; font: inherit; font-weight: 600; color: var(--accent); text-decoration: underline; text-underline-offset: 2px; cursor: pointer; white-space: nowrap; }
+
 @media (max-width: 640px) {
   h1 { font-size: 1.3rem; }
   .kpi .v { font-size: 1.2rem; }
@@ -515,6 +544,7 @@ tfoot td { font-weight: 600; border-bottom: 0; }
 
   var TABS = [
     { id: 'pipeline', label: 'Pipeline check' },
+    { id: 'forecast', label: 'Forecast tracker' },
     { id: 'claim', label: 'Backend claim' },
     { id: 'zebra', label: 'Zebra backlog' },
     { id: 'vst', label: 'VST backlog' },
@@ -560,6 +590,7 @@ tfoot td { font-weight: 600; border-bottom: 0; }
   function renderFilters() {
     var f = S.f, h = '';
     if (S.tab === 'help') { $('#filters').innerHTML = ''; return; }
+    if (S.tab === 'forecast') { $('#filters').innerHTML = '<span class="spacer"></span><button class="btn small" id="copyBtn">Copy table</button>'; return; }
     h += '<input type="search" id="fq" placeholder="Search opp, end user, partner, part, PO…" value="' + esc(f.q) + '">';
     if (S.tab === 'pipeline' || S.tab === 'claim') {
       h += sel('ffq', fqOptions(), f.fqScope) + sel('fdist', distOptions(), f.dist);
@@ -580,9 +611,178 @@ tfoot td { font-weight: 600; border-bottom: 0; }
     $('#filters').innerHTML = h;
   }
 
+  // ------------------------------------------------------------ forecast tracker
+  // Weekly Secure + Won against the submitted forecast and quota, in USD thousands.
+  // Figures are typed in (SFDC moves daily) or filled from the uploaded pipeline,
+  // and stay in this browser like the rest of the app's data.
+  var FC_KEY = 'zhk.forecast.v1', FC_WEEKS = 13;
+  var FC = LS.get(FC_KEY, { q: {} });
+  var FC_FIELDS = [['fcst', 'Forecast'], ['secure', 'Secure'], ['won', 'Won'], ['validate', 'Validate'], ['qualify', 'Qualify'], ['rfid', 'RFID']];
+  var FC_PIPE = { secure: 1, won: 1, validate: 1, qualify: 1 };
+  var FC_FIRST_WEEK = { 1: 2, 2: 15, 3: 28, 4: 41 };
+  function fcSave() { LS.set(FC_KEY, FC); }
+  function fqParts(fq) { var m = /^(\d{4}) Q([1-4])$/.exec(fq || ''); return m ? { y: +m[1], q: +m[2] } : null; }
+  function fqShift(fq, n) { var p = fqParts(fq), i = p.y * 4 + p.q - 1 + n; return Math.floor(i / 4) + ' Q' + (i % 4 + 1); }
+  function isoDay(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  function parseDay(s) { var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || ''); return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null; }
+  function fcQuarter(fq) {
+    if (FC.q[fq]) return FC.q[fq];
+    // Week 1 starts on the first Monday of the quarter until the user sets it.
+    var p = fqParts(fq), d = new Date(p.y, (p.q - 1) * 3, 1);
+    while (d.getDay() !== 1) d.setDate(d.getDate() + 1);
+    return { quota: null, firstWeek: FC_FIRST_WEEK[p.q], start: isoDay(d), weeks: {} };
+  }
+  function fcKeep(fq, c) { FC.q[fq] = c; fcSave(); }
+  function fcWeeks(fq) {
+    var c = fcQuarter(fq), st = parseDay(c.start) || new Date(), out = [];
+    for (var i = 0; i < FC_WEEKS; i++) {
+      var a = new Date(st.getFullYear(), st.getMonth(), st.getDate() + i * 7), b = new Date(a.getFullYear(), a.getMonth(), a.getDate() + 6);
+      out.push({ i: i, no: c.firstWeek + i, from: a, to: b });
+    }
+    return out;
+  }
+  function fcLabel(fq, no) { var p = fqParts(fq); return String(p.y).slice(2) + 'Q' + p.q + ' W' + no; }
+  // Week index that contains today: below 0 before the quarter, 13+ after it.
+  function fcTodayIdx(fq) {
+    var st = parseDay(fcQuarter(fq).start), t = new Date();
+    if (!st) return -1;
+    return Math.floor(Math.round((new Date(t.getFullYear(), t.getMonth(), t.getDate()) - st) / 864e5) / 7);
+  }
+  function fcPipe(fq) {
+    if (!S.ds || !S.ds.pipeline.length) return null;
+    var t = E.stageTotals(S.ds.pipeline, fq);
+    return { secure: t.secure / 1000, won: t.won / 1000, validate: t.validate / 1000, qualify: t.qualify / 1000, lines: t.lines };
+  }
+  var k0 = function (n) { return n == null ? '—' : Math.round(n).toLocaleString('en-US'); };
+  var kIn = function (n) { return n == null ? '' : String(Math.round(n * 10) / 10); };
+  var kSigned = function (n) { if (n == null) return '—'; var r = Math.round(n); return r === 0 ? '0' : (r > 0 ? '+' : '−') + Math.abs(r).toLocaleString('en-US'); };
+  var signCls = function (n) { return n == null || Math.round(n) === 0 ? '' : n > 0 ? ' pos' : ' neg'; };
+  var span = function (w) { return w.from.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + ' – ' + w.to.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }); };
+
+  function fcRows(fq) {
+    var c = fcQuarter(fq), lastF = null, prevSW = null;
+    return fcWeeks(fq).map(function (w) {
+      var e = c.weeks[w.no] || null, r = { w: w, e: e };
+      var f = e && e.fcst != null ? e.fcst : null;
+      r.fcstOwn = f != null;
+      r.fcstWoW = r.fcstOwn && lastF != null ? f - lastF : null;
+      if (f != null) lastF = f;
+      r.fcst = lastF;   // the forecast submitted earlier in the quarter carries forward
+      r.has = !!(e && (e.secure != null || e.won != null));
+      if (r.has) {
+        r.sw = (e.secure || 0) + (e.won || 0);
+        r.vsF = r.fcst != null ? r.sw - r.fcst : null;
+        r.pct = c.quota ? r.sw / c.quota : null;
+        r.gap = c.quota != null ? c.quota - r.sw : null;
+        r.swWoW = prevSW != null ? r.sw - prevSW : null;
+        prevSW = r.sw;
+      }
+      if (e && (e.validate != null || e.qualify != null)) r.vq = (e.validate || 0) + (e.qualify || 0);
+      return r;
+    });
+  }
+  function fcSelIdx(fq) {
+    var ti = fcTodayIdx(fq);
+    if (S.fcWeek != null && S.fcWeek >= 0 && S.fcWeek < FC_WEEKS) return S.fcWeek;
+    return Math.max(0, Math.min(FC_WEEKS - 1, ti));
+  }
+
+  function viewForecast() {
+    if (!fqParts(S.fcQ)) S.fcQ = currentFq();
+    var fq = S.fcQ, c = fcQuarter(fq), weeks = fcWeeks(fq), si = fcSelIdx(fq), w = weeks[si], ti = fcTodayIdx(fq);
+    var e = c.weeks[w.no] || {}, pipe = fcPipe(fq), carried = fcRows(fq)[si].fcst;
+    var qs = {};
+    [fqShift(currentFq(), -1), currentFq(), nextFq()].concat(Object.keys(FC.q)).forEach(function (q) { if (fqParts(q)) qs[q] = 1; });
+    var qOpts = Object.keys(qs).sort().reverse().map(function (q) { return [q, q + (q === currentFq() ? ' (this quarter)' : '')]; });
+    var h = '<div class="fc">';
+    h += '<div class="fc-set">' +
+      '<label><span class="label">Quarter</span>' + sel('fc-q', qOpts, fq) + '</label>' +
+      '<label><span class="label">Quota ($K)</span><input id="fc-quota" type="number" step="any" inputmode="decimal" value="' + kIn(c.quota) + '" placeholder="e.g. 750"></label>' +
+      '<label><span class="label">Week 1 starts</span><input id="fc-start" type="date" value="' + esc(c.start) + '"></label>' +
+      '<label><span class="label">Week 1 number</span><input id="fc-first" type="number" min="1" max="53" value="' + c.firstWeek + '"></label>' +
+      '<span class="faint" style="font-size:.82rem;flex:1 1 220px">All amounts in USD thousands. ' + esc(fcLabel(fq, weeks[0].no)) + ' – ' + esc(fcLabel(fq, weeks[FC_WEEKS - 1].no)) + '.</span>' +
+      '</div>';
+    h += '<div class="fc-grid"><section class="fc-card" aria-label="Update week">' +
+      '<div class="hd"><h2 style="font-size:1.15rem">Update ' + esc(fcLabel(fq, w.no)) + '</h2><span class="faint">' + esc(span(w)) + (si === ti ? ' · this week' : '') + '</span></div>' +
+      '<div class="fc-fields">' + FC_FIELDS.map(function (f) {
+        var pv = pipe && FC_PIPE[f[0]] ? pipe[f[0]] : null;
+        var ph = f[0] === 'fcst' && e.fcst == null && carried != null ? ' placeholder="' + kIn(carried) + ' (carried)"' : '';
+        return '<label><span class="label">' + f[1] + '</span><input id="fc-v-' + f[0] + '" data-fc="' + f[0] + '" type="number" step="any" inputmode="decimal" value="' + kIn(e[f[0]]) + '"' + ph + '>' +
+          (pv != null ? '<span class="pipe" data-pipe="' + f[0] + '">Pipeline file: ' + k0(pv) + '</span>' : '') + '</label>';
+      }).join('') + '</div>' +
+      '<div class="fc-acts">' +
+      (pipe ? '<button class="btn small" id="fcFill">Fill Secure, Won, Validate, Qualify from pipeline file</button>' : '<span class="faint" style="font-size:.84rem">Upload a pipeline to compare it with what you type here.</span>') +
+      '<button class="btn small" id="fcClear">Clear this week</button></div>' +
+      (pipe ? '<div class="faint" style="font-size:.8rem">Pipeline file: ' + esc((S.ds.sources.pipeline || []).join(', ').replace(/^[0-9a-f]{8}-/, '')) + ' · ' + pipe.lines + ' lines scheduled in ' + esc(fq) + ', -F / -R opps included.</div>' : '') +
+      '</section><section class="fc-card" id="fcResult" aria-label="Result">' + fcResultHtml(fq) + '</section></div>';
+    h += '<div class="tablebox" id="fcTable">' + fcTableHtml(fq) + '</div>';
+    h += '<p class="faint" style="font-size:.82rem;margin:0">Forecast carries forward from the last week you entered it (shown grey). vs forecast = Secure + Won − forecast. Gap = quota − (Secure + Won). Saved in this browser only.</p>';
+    return h + '</div>';
+  }
+
+  function fcResultHtml(fq) {
+    var c = fcQuarter(fq), rows = fcRows(fq), si = fcSelIdx(fq), r = rows[si], e = r.e || {};
+    if (!r.has) return '<div class="hd"><h2 style="font-size:1.15rem">' + esc(fcLabel(fq, r.w.no)) + '</h2></div><div class="empty" style="padding:16px 0">Type Secure and Won to see how they compare with the forecast.</div>';
+    var vs = r.vsF, cls = vs == null ? '' : Math.round(vs) > 0 ? ' good' : Math.round(vs) < 0 ? ' bad' : '';
+    var vsText = vs == null ? 'Enter the forecast to compare' : Math.round(vs) === 0 ? 'On forecast' : (vs > 0 ? '▲ ' + k0(vs) + ' above forecast' : '▼ ' + k0(-vs) + ' below forecast');
+    var log = e.log || [], prev = null;
+    for (var i = log.length - 1; i >= 0; i--) { if (Math.round(log[i].sw * 10) !== Math.round(r.sw * 10)) { prev = log[i]; break; } }
+    var h = '<div class="hd"><h2 style="font-size:1.15rem">' + esc(fcLabel(fq, r.w.no)) + '</h2>' + (e.at ? '<span class="faint" style="font-size:.82rem">Updated ' + esc(new Date(e.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })) + '</span>' : '') + '</div>';
+    h += '<div class="fc-kpis">' +
+      '<div class="fc-vs' + cls + '"><div class="label">Secure + Won vs forecast</div><div class="v">' + esc(vsText) + '</div><div class="d">' + k0(r.sw) + ' Secure + Won · forecast ' + k0(r.fcst) + (r.fcst != null && !r.fcstOwn ? ' (carried)' : '') + '</div></div>' +
+      '<div><div class="label">Secure + Won</div><div class="v">' + k0(r.sw) + '</div><div class="d">' + (r.swWoW != null ? kSigned(r.swWoW) + ' vs last week' : 'first week entered') + '</div></div>' +
+      '<div><div class="label">% of quota</div><div class="v">' + (r.pct != null ? (r.pct * 100).toFixed(2) + '%' : '—') + '</div><div class="d">' + (c.quota != null ? 'gap ' + k0(r.gap) + ' to quota ' + k0(c.quota) : 'set the quota above') + '</div></div>' +
+      '</div>';
+    if (prev) h += '<div class="faint" style="font-size:.84rem">Since ' + esc(new Date(prev.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })) + ': Secure + Won ' + k0(prev.sw) + ' → ' + k0(r.sw) + ' (' + kSigned(r.sw - prev.sw) + ')</div>';
+    return h;
+  }
+
+  function fcTableHtml(fq) {
+    var c = fcQuarter(fq), rows = fcRows(fq), si = fcSelIdx(fq), ti = fcTodayIdx(fq);
+    var cell = function (v, extra) { return '<td class="fcn' + (extra || '') + '">' + v + '</td>'; };
+    var h = '<table><thead><tr><th>Week</th><th class="fcn">Quota</th><th class="fcn">Forecast</th><th class="fcn">Fcst WoW</th><th class="fcn">Secure</th><th class="fcn">Won</th>' +
+      '<th class="fcn">Secure + Won</th><th class="fcn">vs Forecast</th><th class="fcn">% of quota</th><th class="fcn">Gap</th><th class="fcn">RFID</th><th class="fcn">Validate</th><th class="fcn">Qualify</th><th class="fcn">V + Q</th><th>Updated</th></tr></thead><tbody>';
+    rows.forEach(function (r, i) {
+      var e = r.e || {}, future = i > ti && !r.has && !r.fcstOwn;
+      var trc = [i === ti ? 'fc-now' : '', i === si ? 'fc-sel' : '', future ? 'fc-future' : ''].join(' ').trim();
+      h += '<tr' + (trc ? ' class="' + trc + '"' : '') + '><td><button class="linkbtn" data-fcweek="' + i + '" title="' + esc(span(r.w)) + '">' + esc(fcLabel(fq, r.w.no)) + '</button></td>' +
+        cell(k0(c.quota)) +
+        cell(future ? '—' : k0(r.fcst), r.fcst != null && !r.fcstOwn ? ' carried' : '') +
+        cell(kSigned(r.fcstWoW), signCls(r.fcstWoW)) +
+        cell(k0(e.secure)) + cell(k0(e.won)) +
+        cell(r.has ? '<strong>' + k0(r.sw) + '</strong>' : '—') +
+        cell(r.has ? kSigned(r.vsF) : '—', r.has ? signCls(r.vsF) : '') +
+        cell(r.pct != null ? (r.pct * 100).toFixed(2) + '%' : '—') +
+        cell(r.has ? k0(r.gap) : '—') +
+        cell(k0(e.rfid)) + cell(k0(e.validate)) + cell(k0(e.qualify)) + cell(k0(r.vq)) +
+        '<td class="faint" style="white-space:nowrap">' + (e.at ? esc(new Date(e.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })) : '') + '</td></tr>';
+    });
+    return h + '</tbody></table>';
+  }
+  function fcRefresh() {
+    var res = $('#fcResult'), tb = $('#fcTable');
+    if (res) res.innerHTML = fcResultHtml(S.fcQ);
+    if (tb) tb.innerHTML = fcTableHtml(S.fcQ);
+  }
+  function fcEntry() {
+    var fq = S.fcQ, c = fcQuarter(fq), w = fcWeeks(fq)[fcSelIdx(fq)];
+    c.weeks[w.no] = c.weeks[w.no] || {};
+    FC.q[fq] = c;
+    return c.weeks[w.no];
+  }
+  // A saved point in the week's history, so the next edit can show what moved.
+  function fcLog(e) {
+    if (e.secure == null && e.won == null) return;
+    var sw = (e.secure || 0) + (e.won || 0), log = e.log = e.log || [];
+    if (log.length && Math.round(log[log.length - 1].sw * 10) === Math.round(sw * 10)) return;
+    log.push({ at: Date.now(), sw: sw, secure: e.secure, won: e.won });
+    if (log.length > 30) log.splice(0, log.length - 30);
+  }
+  function fcNum(v) { if (v === '' || v == null) return null; var n = parseFloat(v); return isNaN(n) ? null : n; }
+
   function renderView() {
     var v = $('#view');
-    var fn = { pipeline: viewPipeline, claim: viewClaim, zebra: viewZebra, vst: viewVst, stock: viewStock, help: viewHelp }[S.tab] || viewPipeline;
+    var fn = { pipeline: viewPipeline, forecast: viewForecast, claim: viewClaim, zebra: viewZebra, vst: viewVst, stock: viewStock, help: viewHelp }[S.tab] || viewPipeline;
     v.innerHTML = fn();
   }
 
@@ -909,6 +1109,17 @@ tfoot td { font-weight: 600; border-bottom: 0; }
         'Source': PIECE[x.p.kind], 'PO': x.p.dsr ? x.p.dsr.po : '', 'SO': x.p.dsr ? x.p.dsr.orderNo : '', 'VAD': x.p.stock ? x.p.stock.dist : (x.p.dsr ? x.p.dsr.account : ''),
         'Std unit': x.std, 'Deal unit': x.deal, 'Indicative claim USD': x.est };
     })), 'Backend claim');
+    var fcOut = [];
+    Object.keys(FC.q).sort().forEach(function (q) {
+      fcRows(q).forEach(function (r) {
+        var en = r.e || {};
+        if (!r.has && !r.fcstOwn) return;
+        fcOut.push({ 'Week': fcLabel(q, r.w.no), 'Week starts': isoDay(r.w.from), 'Quota $K': FC.q[q].quota, 'Forecast $K': r.fcst, 'Forecast WoW': r.fcstWoW,
+          'Secure $K': en.secure, 'Won $K': en.won, 'Secure + Won $K': r.sw, 'vs Forecast $K': r.vsF, '% of quota': r.pct, 'Gap $K': r.gap,
+          'RFID $K': en.rfid, 'Validate $K': en.validate, 'Qualify $K': en.qualify, 'V + Q $K': r.vq });
+      });
+    });
+    if (fcOut.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(fcOut), 'Forecast tracker');
     XLSX.writeFile(wb, 'HK_pipeline_order_check_' + new Date().toISOString().slice(0, 10) + '.xlsx');
   }
 
@@ -932,6 +1143,19 @@ tfoot td { font-weight: 600; border-bottom: 0; }
     if (t.id === 'exportBtn') return exportXlsx();
     if (t.id === 'closeSheet') return closeSheet();
     if (t.id === 'fstock') { S.f.stockOnly = !S.f.stockOnly; saveFilters(); renderFilters(); return renderView(); }
+    if (t.dataset.fcweek) { S.fcWeek = +t.dataset.fcweek; return renderView(); }
+    if (t.id === 'fcFill') {
+      var pf = fcPipe(S.fcQ), en = fcEntry();
+      if (!pf) return;
+      Object.keys(FC_PIPE).forEach(function (k) { en[k] = Math.round(pf[k] * 10) / 10; });
+      en.at = Date.now(); fcLog(en); fcSave(); renderView();
+      return toast('Filled from the pipeline file');
+    }
+    if (t.id === 'fcClear') {
+      var cq = fcQuarter(S.fcQ), cw = fcWeeks(S.fcQ)[fcSelIdx(S.fcQ)];
+      delete cq.weeks[cw.no]; fcKeep(S.fcQ, cq); renderView();
+      return toast(fcLabel(S.fcQ, cw.no) + ' cleared');
+    }
     if (t.dataset.tab) { S.tab = t.dataset.tab; LS.set('zhk.tab', S.tab); S.limit = 300; renderTabs(); renderFilters(); return renderView(); }
     if (t.dataset.group) {
       S.f.group = S.f.group === t.dataset.group ? '' : t.dataset.group;
@@ -954,10 +1178,25 @@ tfoot td { font-weight: 600; border-bottom: 0; }
     var id = e.target.id, v = e.target.value;
     var map = { ffq: 'fqScope', fdist: 'dist', fgroup: 'group', fsort: 'sort', ftie: 'tie', fzebra: 'zebra', fconf: 'claimConf' };
     if (id === 'fileInput') { handleFiles(e.target.files); e.target.value = ''; return; }
+    if (id === 'fc-q') { S.fcQ = v; S.fcWeek = null; return renderView(); }
+    if (id === 'fc-quota' || id === 'fc-start' || id === 'fc-first') {
+      var c = fcQuarter(S.fcQ);
+      if (id === 'fc-quota') c.quota = fcNum(v);
+      if (id === 'fc-start' && parseDay(v)) { c.start = v; S.fcWeek = null; }
+      if (id === 'fc-first' && fcNum(v) >= 1) c.firstWeek = Math.round(fcNum(v));
+      fcKeep(S.fcQ, c); return renderView();
+    }
+    if (e.target.dataset && e.target.dataset.fc) { var en = fcEntry(); fcLog(en); fcSave(); return fcRefresh(); }
     if (map[id]) { S.f[map[id]] = v; S.limit = 300; saveFilters(); render(); }
   });
   var qT;
   document.addEventListener('input', function (e) {
+    if (e.target.dataset && e.target.dataset.fc) {
+      var en = fcEntry();
+      en[e.target.dataset.fc] = fcNum(e.target.value);
+      en.at = Date.now(); fcSave(); fcRefresh();
+      return;
+    }
     if (e.target.id !== 'fq') return;
     clearTimeout(qT);
     qT = setTimeout(function () { S.f.q = e.target.value; S.limit = 300; saveFilters(); renderTabs(); renderView(); }, 200);
