@@ -87,6 +87,7 @@ button { cursor: pointer; }
 .pick select { width: 100%; min-width: 0; border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 6px 8px; }
 .pick .note { grid-column: 2; font-size: .8rem; color: var(--ink-3); }
 .pick .none { grid-column: 2; font-size: .82rem; color: var(--warn-ink); }
+.pick .note a, .faint a { color: var(--accent); }
 
 details { border-top: 1px solid var(--line); padding-top: 10px; }
 summary { cursor: pointer; font-weight: 500; }
@@ -150,7 +151,8 @@ summary { cursor: pointer; font-weight: 500; }
           <span class="label">Competitor model (edit if needed)</span>
           <input id="compModel" placeholder="Pick above or type">
         </label>
-        <div class="faint">Suggested by product class from public product pages, checked 22 Oct 2026. Check the model fits the deal before you submit.</div>
+        <div class="faint" id="srcNote">Suggested by product class from public product pages, checked 22 Oct 2026. Check the model fits the deal before you submit.</div>
+        <div class="faint" id="askedNote" hidden></div>
       </div>
 
       <div class="row2">
@@ -212,6 +214,11 @@ summary { cursor: pointer; font-weight: 500; }
   var modelEdited = false; // the user typed in the competitor model box
   var autoFrom = null;      // brand before the page switched it automatically
   var lastAuto = null;      // autoBrand() for the products last seen; a manual pick holds until it changes
+  // Online copy only: rows from the monthly web check, and the models asked so far.
+  var db = null;
+  var live = { models: {}, categories: {} };
+  var asked = {};
+  var lastRun = '';
 
   function opt(sel, value, text) { var o = document.createElement('option'); o.value = value; o.textContent = text; sel.appendChild(o); }
   opt($('demand'), '', 'Select…');
@@ -240,7 +247,7 @@ summary { cursor: pointer; font-weight: 500; }
   }
 
   function renderPicks() {
-    var rows = P.suggest($('zebraProduct').value, $('brand').value);
+    var rows = P.suggest($('zebraProduct').value, $('brand').value, live);
     var key = function (r) { return $('brand').value + '|' + r.zebra.toUpperCase(); };
     picks = rows.map(function (r) {
       var c = chosen[key(r)];
@@ -268,18 +275,34 @@ summary { cursor: pointer; font-weight: 500; }
         d.appendChild(s);
         var n = document.createElement('div');
         n.className = 'note';
-        n.textContent = picks[i] >= 0 ? r.options[picks[i]].note : '';
+        noteFor(n, picks[i] >= 0 ? r.options[picks[i]] : null, r.checkedAt);
         d.appendChild(n);
       } else {
         var w = document.createElement('div');
         w.className = 'none';
-        w.textContent = r.category ? 'No confirmed ' + $('brand').value + ' match for this class. Type the model below.'
-                                   : 'Type the competitor model below.';
+        w.textContent = r.from === 'model' ? 'No ' + $('brand').value + ' match found online' + (r.checkedAt ? ' (' + r.checkedAt + ')' : '') + '. Type the model below.'
+                      : r.category ? 'No confirmed ' + $('brand').value + ' match for this class. Type the model below.'
+                      : 'Type the competitor model below.' + (db ? ' It will be looked up online in the next monthly check.' : '');
         d.appendChild(w);
       }
       box.appendChild(d);
     });
     return rows;
+  }
+
+  // "5.7", IP67 · source · checked 2026-11-01"
+  function noteFor(el, o, checkedAt) {
+    el.textContent = o && o.note || '';
+    var add = function (node) { if (el.childNodes.length) el.appendChild(document.createTextNode(' · ')); el.appendChild(node); };
+    if (o && o.source) {
+      var a = document.createElement('a');
+      a.href = o.source;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.textContent = 'source';
+      add(a);
+    }
+    if (checkedAt) add(document.createTextNode('checked ' + checkedAt));
   }
 
   function fillModel(rows) {
@@ -321,7 +344,7 @@ summary { cursor: pointer; font-weight: 500; }
   // Only one brand matches what was typed (e.g. ZC300 → Evolis): pick it, and
   // put the previous brand back once the products no longer call for it.
   function applyAutoBrand() {
-    var b = P.autoBrand($('zebraProduct').value);
+    var b = P.autoBrand($('zebraProduct').value, live);
     if (b === lastAuto) return;
     lastAuto = b;
     if (b && $('brand').value !== b) {
@@ -370,7 +393,7 @@ summary { cursor: pointer; font-weight: 500; }
   $('compModel').oninput = function () { modelEdited = true; update(); };
   $('form').addEventListener('input', update);
   $('form').addEventListener('change', update);
-  $('copyBtn').onclick = copy;
+  $('copyBtn').onclick = function () { copy(); remember(); };
   $('clearBtn').onclick = function () {
     ['previousPc', 'contact', 'zebraProduct', 'compModel', 'otherComments', 'attachment'].forEach(function (k) { $(k).value = ''; });
     $('demand').value = '';
@@ -384,9 +407,73 @@ summary { cursor: pointer; font-weight: 500; }
     refreshCompetitor();
   };
 
+  function today() {
+    var d = new Date();
+    var p2 = function (n) { return (n < 10 ? '0' : '') + n; };
+    return d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate());
+  }
+
+  // Remember each Zebra model on Copy, so the monthly check looks it up.
+  // Only model names and the competitor picked are stored, never contacts.
+  async function remember() {
+    if (!db || mode !== 'new') return;
+    var rows = P.suggest($('zebraProduct').value, $('brand').value, live);
+    for (var i = 0; i < rows.length; i++) {
+      var key = P.modelKey(rows[i].zebra);
+      if (!key) continue;
+      var o = picks[i] >= 0 ? rows[i].options[picks[i]] : null;
+      var doc = { zebra: rows[i].zebra.slice(0, 80), lastAsked: today(), brand: $('brand').value, model: o ? o.model : '' };
+      var old = asked[key];
+      if (old && old.zebra === doc.zebra && old.lastAsked === doc.lastAsked && old.brand === doc.brand && old.model === doc.model) continue;
+      try { await db.collection('asked').doc(key).set(doc); } catch (e) { console.warn('remember', key, e && e.code); return; }
+      asked[key] = doc;
+    }
+    renderLiveNotes();
+  }
+
+  function renderLiveNotes() {
+    if (!db) return;
+    $('srcNote').textContent = 'Suggestions are checked online every month' + (lastRun ? ' (last ' + lastRun + ')' : '') +
+      '. Check the model fits the deal before you submit.';
+    var keys = Object.keys(asked).sort(function (a, b) { return String(asked[b].lastAsked).localeCompare(String(asked[a].lastAsked)); });
+    $('askedNote').hidden = !keys.length;
+    $('askedNote').textContent = 'Remembered models (' + keys.length + '): ' +
+      keys.slice(0, 15).map(function (k) { return asked[k].zebra || k; }).join(', ') + (keys.length > 15 ? ' …' : '');
+  }
+
+  function onLive() {
+    applyAutoBrand();
+    fillModel(renderPicks());
+    update();
+    renderLiveNotes();
+  }
+
+  function byId(snap) {
+    var o = {};
+    snap.docs.forEach(function (d) { var v = d.data(); if (v) o[d.id] = v; });
+    return o;
+  }
+
   $('distMargin').value = MARGINS.new.distMargin;
   $('resellerMargin').value = MARGINS.new.resellerMargin;
   setMode('new');
   refreshCompetitor();
+
+  if (window.claude && window.claude.use) {
+    window.claude.use('db').then(function (d) {
+      if (!d) return;
+      db = d;
+      var fail = function (e) { console.warn('db', e && e.code); };
+      db.collection('models').onSnapshot(function (s) { live.models = byId(s); onLive(); }, fail);
+      db.collection('categories').onSnapshot(function (s) { live.categories = byId(s); onLive(); }, fail);
+      db.collection('asked').onSnapshot(function (s) { asked = byId(s); renderLiveNotes(); }, fail);
+      db.doc('meta/update').onSnapshot(function (s) {
+        var v = s.exists && s.data() || {};
+        lastRun = typeof v.lastRun === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v.lastRun) ? v.lastRun : '';
+        renderLiveNotes();
+      }, fail);
+      renderLiveNotes();
+    }, function () {});
+  }
 })();
 </script>

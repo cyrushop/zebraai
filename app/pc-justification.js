@@ -6,6 +6,8 @@
  * Competitor models are suggestions from public product pages and reseller
  * listings, checked 2026-10-22. Only models found in a source are listed; a
  * category with no confirmed model is left empty for the user to fill in.
+ * The online page also reads rows that a monthly web check writes (see
+ * tools/UPDATE_COMPETITORS.md); those come before this built-in table.
  */
 (function (root) {
   'use strict';
@@ -135,23 +137,66 @@
     return String(s || '').split(/[,，、\/+&;\n]| and /i).map(function (x) { return x.trim(); }).filter(Boolean);
   }
 
-  // Suggestions for one brand across every Zebra product the user typed.
-  // Returns [{zebra, category, options: [{model, note}]}].
-  function suggest(zebraProducts, brand) {
-    return splitProducts(zebraProducts).map(function (z) {
-      var cat = category(z);
-      var opts = cat && COMPETITORS[cat.key][brand] || [];
-      return { zebra: z, category: cat, options: opts.slice() };
+  // Document id for a Zebra model in the live store: "tc53-e" → "TC53E".
+  function modelKey(zebraModel) {
+    return normModel(zebraModel).replace(/[^A-Z0-9]/g, '').slice(0, 60);
+  }
+
+  function str(v, max) { return typeof v === 'string' ? v.trim().slice(0, max) : ''; }
+
+  // Store rows are written by the monthly update and are untrusted: keep
+  // known brands, short strings and https sources only.
+  function cleanBrands(brands) {
+    var out = {};
+    if (!brands || typeof brands !== 'object') return out;
+    BRANDS.forEach(function (b) {
+      if (!Array.isArray(brands[b])) return;
+      out[b] = brands[b].slice(0, 6).map(function (o) {
+        o = o || {};
+        var src = str(o.source, 500);
+        return { model: str(o.model, 60), note: str(o.note, 160), source: /^https:\/\//.test(src) ? src : '' };
+      }).filter(function (o) { return o.model; });
     });
+    return out;
+  }
+
+  function cleanDate(v) { var d = str(v, 10); return /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : ''; }
+
+  // Where a product's options come from, best first: a row researched for
+  // this exact model, a row for its product class, the built-in table.
+  // `live` is {models: {KEY: row}, categories: {key: row}}; rows are
+  // {brands: {Brand: [{model, note, source}]}, checkedAt, category?}.
+  function resolve(z, brand, live) {
+    live = live || {};
+    var cat = category(z);
+    var m = (live.models || {})[modelKey(z)];
+    if (m && m.brands && typeof m.brands === 'object') {
+      var label = str(m.category, 60);
+      return { zebra: z, category: cat || (label ? { key: '', label: label } : null), from: 'model',
+               checkedAt: cleanDate(m.checkedAt), options: cleanBrands(m.brands)[brand] || [] };
+    }
+    var c = cat && (live.categories || {})[cat.key];
+    if (c && c.brands && typeof c.brands === 'object') {
+      return { zebra: z, category: cat, from: 'category', checkedAt: cleanDate(c.checkedAt),
+               options: cleanBrands(c.brands)[brand] || [] };
+    }
+    return { zebra: z, category: cat, from: cat ? 'builtin' : 'none', checkedAt: '',
+             options: cat && (COMPETITORS[cat.key][brand] || []).slice() || [] };
+  }
+
+  // Suggestions for one brand across every Zebra product the user typed.
+  // Returns [{zebra, category, from, checkedAt, options: [{model, note, source?}]}].
+  function suggest(zebraProducts, brand, live) {
+    return splitProducts(zebraProducts).map(function (z) { return resolve(z, brand, live); });
   }
 
   // The one brand with a match for every product typed (card printers →
   // Evolis), or null when several brands fit or none fits them all.
-  function autoBrand(zebraProducts) {
-    var cats = splitProducts(zebraProducts).map(category);
-    if (!cats.length || cats.some(function (c) { return !c; })) return null;
+  function autoBrand(zebraProducts, live) {
+    var zs = splitProducts(zebraProducts);
+    if (!zs.length) return null;
     var fits = BRANDS.filter(function (b) {
-      return cats.every(function (c) { return (COMPETITORS[c.key][b] || []).length; });
+      return zs.every(function (z) { return resolve(z, b, live).options.length; });
     });
     return fits.length === 1 ? fits[0] : null;
   }
@@ -228,7 +273,7 @@
 
   var api = {
     BRANDS: BRANDS, DEMANDS: DEMANDS, CATEGORIES: CATEGORIES, COMPETITORS: COMPETITORS, DEFAULTS: DEFAULTS,
-    category: category, splitProducts: splitProducts, suggest: suggest, autoBrand: autoBrand, buildNew: buildNew, buildRepeat: buildRepeat
+    category: category, splitProducts: splitProducts, modelKey: modelKey, suggest: suggest, autoBrand: autoBrand, buildNew: buildNew, buildRepeat: buildRepeat
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.PCJ = api;

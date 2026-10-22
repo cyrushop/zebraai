@@ -107,4 +107,37 @@ assert.strictEqual(P.autoBrand('TC53, ZC300'), null);
 assert.strictEqual(P.autoBrand('ZC300, XYZ'), null);
 assert.strictEqual(P.autoBrand(''), null);
 
+// ------------------------------------------------------------ live rows
+assert.strictEqual(P.modelKey(' tc53-e '), 'TC53E');
+assert.strictEqual(P.modelKey('ZD421 (300dpi)'), 'ZD421300DPI');
+const live = {
+  models: {
+    TC53: { checkedAt: '2026-11-01', brands: { Honeywell: [{ model: 'CT48', note: 'new', source: 'https://example.com/ct48' }] } },
+    NEWX1: { category: 'Mystery device', checkedAt: '2026-11-01', brands: { Urovo: [{ model: 'U9', source: 'javascript:alert(1)' }] } },
+    ZC300: { checkedAt: '2026-11-01', brands: { Evolis: [{ model: 'Primacy 3' }], Bogus: [{ model: 'X' }] } }
+  },
+  categories: { 'printer-desktop': { checkedAt: 'bad', brands: { Honeywell: [{ model: 'PC45d' }, { note: 'no model' }] } } }
+};
+let r = P.suggest('TC53', 'Honeywell', live)[0];
+assert.strictEqual(r.from, 'model');
+assert.strictEqual(r.checkedAt, '2026-11-01');
+assert.deepStrictEqual(r.options, [{ model: 'CT48', note: 'new', source: 'https://example.com/ct48' }]);
+// A researched model with no row for the brand means none was confirmed.
+assert.deepStrictEqual(P.suggest('TC53', 'Urovo', live)[0].options, []);
+// A model the built-in table doesn't know is covered once researched.
+r = P.suggest('NEWX1', 'Urovo', live)[0];
+assert.strictEqual(r.category.label, 'Mystery device');
+assert.deepStrictEqual(r.options, [{ model: 'U9', note: '', source: '' }]);
+// Class rows replace the built-in table; bad dates and empty models are dropped.
+r = P.suggest('ZD421', 'Honeywell', live)[0];
+assert.strictEqual(r.from, 'category');
+assert.strictEqual(r.checkedAt, '');
+assert.deepStrictEqual(r.options.map(o => o.model), ['PC45d']);
+// Other classes still use the built-in table.
+assert.strictEqual(P.suggest('MC3400', 'Honeywell', live)[0].from, 'builtin');
+assert.strictEqual(P.suggest('XYZ', 'Honeywell', live)[0].from, 'none');
+assert.strictEqual(P.autoBrand('ZC300', live), 'Evolis');
+assert.strictEqual(P.autoBrand('NEWX1', live), 'Urovo');
+assert.strictEqual(P.autoBrand('TC53', live), 'Honeywell');
+
 console.log('pc-justification tests passed');
