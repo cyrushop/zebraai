@@ -68,21 +68,28 @@ It reads the SFDC **PC list** export (`*_PC_List-*.xls`, HTML table). Upload it 
 | 客戶紀錄 | Every part a customer has had on a PC, first vs latest price and the trend. |
 | 加價規則 | Edit the rates and the "already raised" test. Saved in the browser. |
 
-**Already raised.** The baseline is the customer's latest Approved or Expired PC for the part (Pending too, if switched on). It counts as raised when it was created on or after the price-increase date (default 2026-10-05), or when it was created this year (default from 2026-01-01) and its price is at least 0.5% above the customer's previous PC.
+**How the uplift is worked out.** The baseline is the customer's latest Approved or Expired PC for the part (Pending too, if switched on). Each price-increase event is checked against it:
 
-**Uplift on the last PC price** (defaults, editable):
+- Last PC before the event: the increase is not passed on yet, so the event's rate is added.
+- Last PC after the event: compare it with the customer's last PC before the event. A rise of at least 0.5% means the increase was passed on. No rise means a PC was made after the increase without raising the price, so the event's rate is still added. No PC before the event means the first PC was already at the new list price.
+- Several events not passed on are compounded (15% and 15% = 32.25%). When every event has been passed on, the RP rate applies.
+- If the last PC is before an event but was already raised this year against the PC before it (for example ADC +2% ahead of October), that event gets the RP rate instead.
 
-| Category | Not raised yet | Already raised (RP) |
-|---|---|---|
-| EMC mobile computers (Mobile Computing) | 15% | no rule |
-| ADC scanners (Adv Data Capture) | 4% | 1% |
-| AIT printers, supplies and parts | 3% | 1% |
-| RFID Fixed Readers and accessories | 5% | 3% |
-| RFID HH Readers (not MC33XXR / TC22R) | 5% | 3% |
-| MC33XXR, TC22R | 15% | 3% |
-| EMC accessories, services, RFID OH readers, other | no rule | no rule |
+Default events and rates (all editable on the 加價規則 tab):
 
-Where there is no rule, the suggestion uses the list-price change since the last PC, taken from the newest PC in the file that carries the part. The table says so, and warns when that list price predates the increase date.
+| Category | 2026-03-19 | 2026-10-05 | Already raised (RP) |
+|---|---|---|---|
+| EMC mobile computers (Mobile Computing) | 15% | 15% | 15% (less if margin allows; ask the sales manager) |
+| MC33XXR, TC22R | 15% | 15% | 3% |
+| RFID Fixed Readers and accessories | | 5% | 3% |
+| RFID HH Readers (not MC33XXR / TC22R) | | 5% | 3% |
+| ADC scanners (Adv Data Capture) | | 4% | 1% |
+| AIT printers, supplies and parts | | 3% | 1% |
+| EMC accessories, services, RFID OH readers, other | | | |
+
+2026-03-19 is the first PC in the HK PC list that carries the new EMC list prices. A category with no rate at all uses the list-price change since the last PC, taken from the newest PC in the file that carries the part. The table says so, and warns when that list price predates the latest event.
+
+**Standard net price.** The PC list's `Discount` column is the standard discount: standard net = list × (1 − Discount). It differs by part and fulfillment type, so the app uses the newest PC with the same fulfillment type as the customer's last PC. When the suggested price is at or above the new standard net price, the row says no PC is needed.
 
 ```sh
 node tests/pc-engine.test.js

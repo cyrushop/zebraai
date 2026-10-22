@@ -90,26 +90,26 @@
     { id: 'other', label: 'Other', test: function () { return true; } }
   ];
 
-  // Uplift in % on the last PC unit price. `full`: the last PC was not raised
-  // yet. `repeat`: it was (RP). null = no rule; the app falls back to the list
-  // price change since that PC.
+  /* Price-increase events and RP rates, in % on the last PC unit price.
+   *
+   * events: Zebra list-price increases. For each event that the customer's
+   * last PC has not absorbed, the event's rate for the part's category is
+   * added (compounded when there are several).
+   * rp: the smaller uplift for a repeat PC whose price already carries every
+   * increase. A category with no event and no RP rate has no rule; the app
+   * then uses the list-price change since the last PC.
+   */
   var DEFAULT_RULES = {
-    effDate: '2026-10-05',
     liftFrom: '2026-01-01',
     liftThreshold: 0.5,
     includePending: false,
-    rates: {
-      rfid15: { full: 15, repeat: 3 },
-      rfidFixed: { full: 5, repeat: 3 },
-      rfidHH: { full: 5, repeat: 3 },
-      rfidOther: { full: null, repeat: null },
-      adc: { full: 4, repeat: 1 },
-      emcAcc: { full: null, repeat: null },
-      emc: { full: 15, repeat: null },
-      ait: { full: 3, repeat: 1 },
-      svc: { full: null, repeat: null },
-      other: { full: null, repeat: null }
-    }
+    events: [
+      // First PCs at the new EMC list prices appear on 2026-03-19 in the HK PC list.
+      { id: 'e2026-03', label: '2026 年 3 月', date: '2026-03-19', rates: { emc: 15, rfid15: 15 } },
+      { id: 'e2026-10', label: '2026 年 10 月', date: '2026-10-05',
+        rates: { emc: 15, rfid15: 15, rfidFixed: 5, rfidHH: 5, adc: 4, ait: 3 } }
+    ],
+    rp: { emc: 15, rfid15: 3, rfidFixed: 3, rfidHH: 3, adc: 1, ait: 1 }
   };
 
   function categoryOf(r) {
@@ -149,7 +149,9 @@
         minQty: num(g(r, 'Min Qty')),
         maxQty: num(g(r, 'Max Qty')),
         list: num(g(r, 'Siebel List Price (converted)')),
+        stdDisc: num(g(r, 'Discount')),
         stdNet: num(g(r, 'Standard Net Price (converted)')),
+        fulfil: str(g(r, 'Fulfillment Type')),
         unit: num(g(r, 'Unit Special Price (converted)')),
         totalDisc: num(g(r, 'Total Discount'))
       };
@@ -180,7 +182,12 @@
       (byPart[r.part] = byPart[r.part] || []).push(r);
       (byAcct[r.acctKey] = byAcct[r.acctKey] || []).push(r);
       // rows are newest first, so the first list price seen is the latest
-      if (r.list != null && !latestList[r.part]) latestList[r.part] = { list: r.list, date: r.created, pc: r.pc };
+      // Standard discount differs by fulfillment type, so keep the latest per type too.
+      if (r.list != null) {
+        var lv = { list: r.list, stdDisc: r.stdDisc, date: r.created, pc: r.pc };
+        if (!latestList[r.part]) latestList[r.part] = lv;
+        if (!latestList[r.part + '|' + r.fulfil]) latestList[r.part + '|' + r.fulfil] = lv;
+      }
       if (!info[r.part]) info[r.part] = { part: r.part, line: r.line, subLine: r.subLine, family: r.family, bu: r.bu, cat: r.cat };
       var a = accounts[r.acctKey];
       if (!a) a = accounts[r.acctKey] = { key: r.acctKey, no: r.accountNo, name: r.account, names: {}, pcs: {}, parts: {}, last: r.created };
@@ -218,49 +225,96 @@
   function pct(a, b) { return a != null && b ? a / b - 1 : null; }
   function round2(n) { return Math.round(n * 100) / 100; }
 
+  function blank(v) { return v == null || v === '' || isNaN(+v); }
+
+  // Events that carry a rate for the category, oldest first.
+  function eventsFor(rules, cat) {
+    return (rules.events || []).filter(function (e) { return e.rates && !blank(e.rates[cat]) && date(e.date); })
+      .map(function (e) { return { id: e.id, label: e.label, date: date(e.date), rate: +e.rates[cat] }; })
+      .sort(function (a, b) { return a.date - b.date; });
+  }
+
   /* Recommendation for one customer + part.
    * hist: that customer's rows for the part, newest first.
+   *
+   * state: 'new' (no granted PC), 'full' (at least one increase not passed
+   * on yet), 'repeat' (every increase already in the last PC price, or
+   * raised ahead of it: RP rate), 'norule' (no event or RP rate for the
+   * category: list-price change since the last PC).
+   * steps: one entry per event, explaining what was added and why.
    */
   function assess(idx, hist, rules, partNo) {
     rules = rules || DEFAULT_RULES;
     var p = partNo || (hist[0] && hist[0].part);
     var inf = idx.info[p] || null;
     var cat = inf ? inf.cat : null;
-    var rate = cat && rules.rates[cat] ? rules.rates[cat] : { full: null, repeat: null };
     var granted = perPc(hist.filter(function (r) { return counts(r.statusGroup, rules); }));
-    var res = { part: p, info: inf, cat: cat, history: perPc(hist), granted: granted, latest: idx.latestList[p] || null };
+    var res = { part: p, info: inf, cat: cat, history: perPc(hist), granted: granted, latest: idx.latestList[p] || null, steps: [] };
     if (!granted.length) { res.state = 'new'; return res; }
     var last = granted[0];
+    if (idx.latestList[p + '|' + last.fulfil]) res.latest = idx.latestList[p + '|' + last.fulfil];
     var prev = null;
     for (var i = 1; i < granted.length; i++) {
       if (granted[i].created && last.created && granted[i].created < last.created) { prev = granted[i]; break; }
     }
-    var eff = date(rules.effDate), from = date(rules.liftFrom);
+    var thr = (+rules.liftThreshold || 0) / 100, from = date(rules.liftFrom);
+    var rp = rules.rp && !blank(rules.rp[cat]) ? +rules.rp[cat] : null;
     res.last = last;
     res.prev = prev;
     res.lift = prev ? pct(last.unit, prev.unit) : null;
     res.listChange = res.latest ? pct(res.latest.list, last.list) : null;
-    var byDate = !!(eff && last.created && last.created >= eff);
-    var byPrice = !byDate && res.lift != null && (!from || (last.created && last.created >= from)) &&
-      res.lift * 100 >= (rules.liftThreshold || 0);
-    res.raised = byDate || byPrice;
-    res.reason = byDate ? 'date' : byPrice ? 'price' : null;
-    res.state = res.raised ? 'repeat' : 'full';
-    var r = res.raised ? rate.repeat : rate.full;
-    if (r != null && r !== '') {
-      res.rate = +r;
+
+    var evs = eventsFor(rules, cat), lastDone = null, pending = [];
+    evs.forEach(function (e) {
+      if (!last.created || last.created < e.date) { pending.push(e); return; }
+      lastDone = e;
+      var before = null;
+      for (var j = 0; j < granted.length; j++) if (granted[j].created && granted[j].created < e.date) { before = granted[j]; break; }
+      if (!before) { res.steps.push({ event: e, kind: 'covered', rate: 0 }); return; }
+      var l = pct(last.unit, before.unit);
+      if (l >= thr - 1e-12) res.steps.push({ event: e, kind: 'raised', rate: 0, base: before, lift: l });
+      else res.steps.push({ event: e, kind: 'notRaised', rate: e.rate, base: before, lift: l });
+    });
+    // A rise on the last PC that no earlier event explains was a price
+    // increase ahead of the next event: that event gets the RP rate.
+    var early = pending.length && rp != null && res.lift != null && res.lift >= thr - 1e-12 &&
+      (!from || last.created >= from) && (!lastDone || prev.created >= lastDone.date);
+    pending.forEach(function (e, k) {
+      if (k === 0 && early) res.steps.push({ event: e, kind: 'early', rate: rp, base: prev, lift: res.lift });
+      else res.steps.push({ event: e, kind: 'pending', rate: e.rate });
+    });
+
+    var adds = res.steps.filter(function (x) { return x.kind === 'notRaised' || x.kind === 'pending' || x.kind === 'early'; });
+    if (adds.length) {
+      res.state = adds.every(function (x) { return x.kind === 'early'; }) ? 'repeat' : 'full';
+      res.rate = round2((adds.reduce(function (m, x) { return m * (1 + x.rate / 100); }, 1) - 1) * 100);
       res.rateSource = 'rule';
-    } else if (res.listChange != null) {
-      res.rate = round2(Math.max(0, res.listChange) * 100);
-      res.rateSource = 'list';
-    } else {
+    } else if (rp != null) {
+      res.state = 'repeat';
+      res.rate = rp;
+      res.rateSource = 'rule';
+    } else if (evs.length) {
+      res.state = 'repeat';
       res.rate = null;
       res.rateSource = null;
+    } else {
+      res.state = 'norule';
+      res.rate = res.listChange != null ? round2(Math.max(0, res.listChange) * 100) : null;
+      res.rateSource = res.rate != null ? 'list' : null;
     }
     if (res.rate != null) {
       res.suggested = round2(last.unit * (1 + res.rate / 100));
-      if (res.raised && res.lift != null) res.cumulative = (1 + res.lift) * (1 + res.rate / 100) - 1;
-      if (res.latest && res.latest.list) res.newDisc = 1 - res.suggested / res.latest.list;
+      // Total rise against the price before the earliest raise we credited.
+      var base = null;
+      res.steps.forEach(function (x) { if ((x.kind === 'raised' || x.kind === 'early') && x.base && (!base || x.base.created < base.created)) base = x.base; });
+      if (base) { res.cumulativeBase = base; res.cumulative = res.suggested / base.unit - 1; }
+      if (res.latest && res.latest.list) {
+        res.newDisc = 1 - res.suggested / res.latest.list;
+        if (!blank(res.latest.stdDisc)) {
+          res.newStdNet = round2(res.latest.list * (1 - res.latest.stdDisc / 100));
+          res.aboveStd = res.suggested >= res.newStdNet;
+        }
+      }
     }
     if (last.list) res.lastDisc = 1 - last.unit / last.list;
     return res;
