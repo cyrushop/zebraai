@@ -1,0 +1,89 @@
+/* PPL 合規檢查介面。顏色沿用宿主 App 的 token（--ink / --fg、--line、--accent…），沒有就用預設值。 */
+.ppl {
+  --p-surface: var(--surface, #ffffff);
+  --p-sunk: var(--surface-2, var(--sunk, #eef1f5));
+  --p-ink: var(--ink, var(--fg, #13171d));
+  --p-ink2: var(--muted, var(--fg-2, var(--ink-2, #586172)));
+  --p-faint: var(--faint, var(--fg-3, var(--ink-3, #7d8796)));
+  --p-line: var(--line, #dce1e8);
+  --p-accent: var(--accent, #1c5cab);
+  --p-accent-soft: var(--accent-soft, #e3eefb);
+  --p-bad: #b42318; --p-bad-bg: #fde7e4; --p-warn: #8a5a00; --p-warn-bg: #fdf0d5; --p-good: #1a7f37; --p-good-bg: #e2f4e6;
+  --p-r1: #2a78d6; --p-r2: #eb6834; --p-r3: #b42318; --p-r4: #8a5a00; --p-r5: #6250d6; --p-r6: #b8457a; --p-r7: #0f7d6a;
+  position: relative; display: grid; gap: 12px; min-width: 0;
+  background: var(--p-surface); color: var(--p-ink); border: 1px solid var(--p-line); border-radius: 10px; padding: 16px;
+  font-family: var(--f-body, var(--font-body, "IBM Plex Sans", system-ui)), "PingFang HK", "Noto Sans HK", "Microsoft JhengHei", sans-serif;
+  font-size: 14px; line-height: 1.5;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .ppl {
+    --p-bad: #f2877c; --p-bad-bg: #3a1a17; --p-warn: #e3a63a; --p-warn-bg: #33280f; --p-good: #5cc97a; --p-good-bg: #133020;
+    --p-r1: #6da7ec; --p-r2: #f08a5d; --p-r3: #f2877c; --p-r4: #e3a63a; --p-r5: #9085e9; --p-r6: #e37fa8; --p-r7: #4cc3a8;
+  }
+}
+:root[data-theme="dark"] .ppl {
+  --p-bad: #f2877c; --p-bad-bg: #3a1a17; --p-warn: #e3a63a; --p-warn-bg: #33280f; --p-good: #5cc97a; --p-good-bg: #133020;
+  --p-r1: #6da7ec; --p-r2: #f08a5d; --p-r3: #f2877c; --p-r4: #e3a63a; --p-r5: #9085e9; --p-r6: #e37fa8; --p-r7: #4cc3a8;
+}
+.ppl { grid-template-columns: minmax(0, 1fr); }
+.ppl > * { min-width: 0; }
+.ppl [hidden] { display: none !important; }
+.ppl h2 { font-family: var(--f-display, var(--font-display, inherit)); font-size: 21px; font-weight: 700; margin: 0; }
+.ppl h3 { font-size: 15px; margin: 6px 0 2px; }
+.ppl-eyebrow { font-family: var(--f-mono, var(--font-mono, ui-monospace, monospace)); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--p-accent); }
+.ppl-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 10px 20px; }
+.ppl-sub { margin: 2px 0 0; color: var(--p-ink2); font-size: 13px; max-width: 72ch; }
+.ppl-btn { border: 1px solid var(--p-line); background: var(--p-surface); color: var(--p-ink); border-radius: 6px; padding: 6px 12px; font: inherit; font-weight: 500; cursor: pointer; white-space: nowrap; }
+.ppl-btn:hover { border-color: var(--p-accent); }
+.ppl-primary { background: var(--p-accent); border-color: var(--p-accent); color: var(--p-surface); font-weight: 600; }
+.ppl-drop { position: absolute; inset: 0; z-index: 4; border: 2px dashed var(--p-accent); border-radius: 10px; background: color-mix(in srgb, var(--p-accent-soft) 88%, transparent); display: grid; place-items: center; font-weight: 700; font-size: 16px; }
+.ppl-meta { display: flex; flex-wrap: wrap; gap: 4px 18px; font-size: 13px; color: var(--p-ink2); }
+.ppl-meta b { color: var(--p-ink); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.ppl-flag { color: var(--p-bad); font-weight: 700; }
+.ppl-notes { display: grid; gap: 4px; }
+.ppl-notes:empty { display: none; }
+.ppl-note { background: var(--p-warn-bg); color: var(--p-warn); border-radius: 6px; padding: 5px 10px; font-size: 12.5px; }
+.ppl-note.ppl-info { background: var(--p-sunk); color: var(--p-ink2); }
+.ppl-note.ppl-bad { background: var(--p-bad-bg); color: var(--p-bad); }
+.ppl-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--p-line); overflow-x: auto; }
+.ppl-tabs button { border: 0; background: none; color: var(--p-ink2); font: inherit; font-weight: 600; padding: 8px 12px; border-bottom: 3px solid transparent; cursor: pointer; white-space: nowrap; }
+.ppl-tabs button[aria-selected="true"] { color: var(--p-ink); border-bottom-color: var(--p-accent); }
+.ppl-count { margin-left: 5px; font-weight: 500; font-size: 12px; color: var(--p-faint); }
+.ppl-filters { display: grid; gap: 8px; }
+.ppl-filters:empty { display: none; }
+.ppl-row { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; }
+.ppl-row input[type=search] { flex: 1 1 220px; min-width: 0; width: auto; }
+.ppl-row select { width: auto; }
+.ppl-row input, .ppl-row select { border: 1px solid var(--p-line); background: var(--p-surface); color: var(--p-ink); border-radius: 6px; padding: 6px 8px; font: inherit; max-width: 100%; }
+.ppl-row input[type=url] { width: min(320px, 100%); font-family: var(--f-mono, var(--font-mono, ui-monospace, monospace)); font-size: 12.5px; }
+.ppl-lbl { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 13px; color: var(--p-ink2); min-width: 0; }
+.ppl-spacer { flex: 1 1 auto; }
+.ppl-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ppl-chip { --c: var(--p-r1); border: 1px solid var(--p-line); border-left: 4px solid var(--c); background: var(--p-surface); color: var(--p-ink2); border-radius: 6px; padding: 4px 9px; font: inherit; font-size: 12.5px; cursor: pointer; }
+.ppl-chip b { color: var(--p-ink); }
+.ppl-chip .ppl-n { font-family: var(--f-mono, var(--font-mono, ui-monospace, monospace)); font-weight: 600; color: var(--p-ink); margin-left: 2px; }
+.ppl-chip[aria-pressed="true"] { background: var(--p-accent-soft); border-color: var(--p-accent); border-left-color: var(--c); color: var(--p-ink); }
+.ppl .r1 { --c: var(--p-r1); } .ppl .r2 { --c: var(--p-r2); } .ppl .r3 { --c: var(--p-r3); } .ppl .r4 { --c: var(--p-r4); }
+.ppl .r5 { --c: var(--p-r5); } .ppl .r6 { --c: var(--p-r6); } .ppl .r7 { --c: var(--p-r7); }
+.ppl-table { overflow: auto; max-height: 70vh; border: 1px solid var(--p-line); border-radius: 8px; }
+.ppl-table table { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 760px; font-size: 13px; }
+.ppl-table th { position: sticky; top: 0; z-index: 1; background: var(--p-sunk); color: var(--p-ink2); text-align: left; font-size: 11.5px; font-weight: 600; letter-spacing: .04em; padding: 7px 10px; border-bottom: 1px solid var(--p-line); white-space: nowrap; }
+.ppl-table td { padding: 7px 10px; border-bottom: 1px solid var(--p-line); vertical-align: top; }
+.ppl-r { text-align: right !important; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ppl-nowrap { white-space: nowrap; }
+.ppl-hot { background: var(--p-bad-bg); color: var(--p-bad); font-weight: 700; }
+.ppl-tot td { font-weight: 700; background: var(--p-sunk); }
+.ppl-grp td { background: var(--p-accent-soft); font-weight: 700; }
+.ppl-sf { color: var(--p-accent); font-family: var(--f-mono, var(--font-mono, ui-monospace, monospace)); font-size: 12.5px; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
+.ppl-mini { margin-left: 6px; border: 1px solid var(--p-line); background: var(--p-surface); color: var(--p-ink2); border-radius: 4px; padding: 0 6px; font: inherit; font-size: 11.5px; cursor: pointer; }
+.ppl-issues { margin: 0; padding: 0; list-style: none; display: grid; gap: 3px; min-width: 280px; }
+.ppl-tag { --c: var(--p-r1); display: inline-block; margin-right: 6px; padding: 0 6px; border-radius: 4px; font-size: 11px; font-weight: 700; color: var(--c); border: 1px solid var(--c); white-space: nowrap; }
+.ppl-empty { padding: 24px 16px; text-align: center; color: var(--p-ink2); background: var(--p-sunk); border-radius: 8px; }
+.ppl-empty.ppl-good { color: var(--p-good); background: var(--p-good-bg); }
+.ppl-faint { color: var(--p-faint); font-size: 12.5px; margin: 0; }
+.ppl-help { display: grid; gap: 6px; max-width: 900px; }
+.ppl-help p, .ppl-help li { max-width: 80ch; margin: 0; }
+.ppl-help ol { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+.ppl-copybox { width: 100%; height: 120px; font-family: var(--f-mono, ui-monospace, monospace); font-size: 12px; border: 1px solid var(--p-line); border-radius: 6px; background: var(--p-surface); color: var(--p-ink); }
+.ppl-toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(20px + env(safe-area-inset-bottom, 0px)); z-index: 70; background: var(--p-ink); color: var(--p-surface); padding: 9px 14px; border-radius: 8px; font-size: 13px; max-width: calc(100% - 32px); }
+@media (max-width: 640px) { .ppl { padding: 12px; } .ppl h2 { font-size: 18px; } }

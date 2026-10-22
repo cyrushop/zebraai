@@ -47,10 +47,31 @@ python3 -I tools/build_initial_data.py app/initial-data.js path/to/pipeline.xls 
 
 `app/initial-data.js` contains customer data and is git-ignored. **Do not commit it.** This repository is public.
 
+## PPL compliance checker (`ppl/`)
+
+A Traditional Chinese port of the PPL 合規檢查器. It reads the latest SFDC pipeline report and lists the opportunities that break any of seven rules. `ppl/index.html` runs it on its own. `tools/embed_ppl.py` puts the same code into the single-file HK Pipeline Weekly Review and POS Revenue Desk pages.
+
+Scope: record type *Zebra Opportunity* (every row is checked if the report has no record-type column), stages Identify, Qualify, Validate, Secure and Closed - Won, and First Ship Date on or after 2026-01-01. Lines are merged per Opportunity Number: amounts are summed and every other field takes the first non-empty value. The cutoff is next Wednesday, or today when today is a Wednesday.
+
+| Rule | Flagged when |
+|---|---|
+| 1 | Commit Category does not match the stage: Identify / Qualify blank, Validate = Upside, Secure = Commit, Closed - Won = Shipped/booked |
+| 2 | Identify / Qualify last modified on or after 2026-05-01 and more than 90 days before the cutoff |
+| 3 | First Ship Date is on or before the cutoff and the stage is not Closed |
+| 4 | Validate / Secure, opportunity total ≥ US$50,000, Forecast Notes blank |
+| 5 | Fulfillment Type blank |
+| 6 | Closed - Won with First Ship Date after the cutoff |
+| 7 | First Ship Date on or after 2026-08-01, and CRSD is blank, or in a different quarter from First Ship Date, or not before today while Commit = Shipped/booked |
+
+A rule is skipped, with a notice, when the report lacks its columns. The page also has a quarter × stage pivot and a list of Secure opportunities where *Reseller has ordered via Distribution* = 0.
+
+Clicking an opportunity number copies it to the clipboard and opens SFDC in a new tab. If the report has an *Opportunity ID* column (the 15- or 18-character ID starting with 006), the link opens the record directly (`/lightning/r/Opportunity/{id}/view`). Otherwise it opens Lightning global search for the number. That search URL uses an undocumented Salesforce format, so if SFDC opens without the search, paste the copied number into the search box.
+
 ## Tests
 
 ```sh
 node tests/engine.test.js
+node tests/ppl-check.test.js
 ```
 
 The tests use synthetic fixtures only.

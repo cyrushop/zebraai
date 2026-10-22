@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="zh-Hant-HK">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PPL 合規檢查</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="ppl-widget.css">
+<style>
+:root { --bg: #f3f5f7; --surface: #ffffff; --ink: #15212c; --line: #d9dfe5; --accent: #1d5cc2; --accent-soft: #e3ecfa; color-scheme: light; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #11171d; --surface: #182029; --ink: #e7edf3; --line: #2b3742; --accent: #6ea2f0; --accent-soft: #1d2d45; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --bg: #11171d; --surface: #182029; --ink: #e7edf3; --line: #2b3742; --accent: #6ea2f0; --accent-soft: #1d2d45; color-scheme: dark; }
+body { margin: 0; background: var(--bg); padding: 16px; }
+main { max-width: 1280px; margin: 0 auto; }
+</style>
+<main><section id="ppl"></section></main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="ppl-check.js"></script>
+<script src="ppl-widget.js"></script>
+<script>PPLWidget.mount(document.getElementById('ppl'), { storageKey: 'ppl.standalone' });</script>
+</html>
