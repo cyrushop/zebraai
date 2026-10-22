@@ -144,6 +144,7 @@ summary { cursor: pointer; font-weight: 500; }
           <span class="label">Competitor brand</span>
           <select id="brand"></select>
         </label>
+        <div class="faint" id="autoNote" hidden></div>
         <div id="picks"></div>
         <label class="field">
           <span class="label">Competitor model (edit if needed)</span>
@@ -206,8 +207,11 @@ summary { cursor: pointer; font-weight: 500; }
   ];
   var MARGINS = { new: { distMargin: '5', resellerMargin: '12' }, repeat: { distMargin: '5', resellerMargin: '15' } };
   var mode = 'new';
-  var picks = [];          // chosen option index per Zebra product, -1 = none
+  var picks = [];          // option index shown per Zebra product row, -1 = none
+  var chosen = {};         // option index the user picked, by brand + product
   var modelEdited = false; // the user typed in the competitor model box
+  var autoFrom = null;      // brand before the page switched it automatically
+  var lastAuto = null;      // autoBrand() for the products last seen; a manual pick holds until it changes
 
   function opt(sel, value, text) { var o = document.createElement('option'); o.value = value; o.textContent = text; sel.appendChild(o); }
   opt($('demand'), '', 'Select…');
@@ -237,7 +241,11 @@ summary { cursor: pointer; font-weight: 500; }
 
   function renderPicks() {
     var rows = P.suggest($('zebraProduct').value, $('brand').value);
-    picks = rows.map(function (r, i) { return picks[i] != null && picks[i] < r.options.length ? picks[i] : (r.options.length ? 0 : -1); });
+    var key = function (r) { return $('brand').value + '|' + r.zebra.toUpperCase(); };
+    picks = rows.map(function (r) {
+      var c = chosen[key(r)];
+      return c != null && c < r.options.length ? c : (r.options.length ? 0 : -1);
+    });
     var box = $('picks');
     box.innerHTML = '';
     rows.forEach(function (r, i) {
@@ -256,7 +264,7 @@ summary { cursor: pointer; font-weight: 500; }
         r.options.forEach(function (o, j) { opt(s, j, o.model); });
         opt(s, -1, 'None');
         s.value = picks[i];
-        s.onchange = function () { picks[i] = +s.value; modelEdited = false; fillModel(rows); update(); };
+        s.onchange = function () { picks[i] = chosen[key(r)] = +s.value; modelEdited = false; renderPicks(); fillModel(rows); update(); };
         d.appendChild(s);
         var n = document.createElement('div');
         n.className = 'note';
@@ -310,6 +318,23 @@ summary { cursor: pointer; font-weight: 500; }
     $('missing').textContent = 'Still blank: ' + miss.join(', ');
   }
 
+  // Only one brand matches what was typed (e.g. ZC300 → Evolis): pick it, and
+  // put the previous brand back once the products no longer call for it.
+  function applyAutoBrand() {
+    var b = P.autoBrand($('zebraProduct').value);
+    if (b === lastAuto) return;
+    lastAuto = b;
+    if (b && $('brand').value !== b) {
+      if (autoFrom == null) autoFrom = $('brand').value;
+      $('brand').value = b;
+    } else if (!b && autoFrom != null) {
+      $('brand').value = autoFrom;
+      autoFrom = null;
+    }
+    $('autoNote').hidden = autoFrom == null;
+    $('autoNote').textContent = 'Picked automatically: only ' + $('brand').value + ' has a match for this product.';
+  }
+
   function refreshCompetitor() { modelEdited = false; fillModel(renderPicks()); update(); }
 
   function toast(msg) {
@@ -340,8 +365,8 @@ summary { cursor: pointer; font-weight: 500; }
 
   $('tabNew').onclick = function () { setMode('new'); };
   $('tabRepeat').onclick = function () { setMode('repeat'); };
-  $('zebraProduct').oninput = refreshCompetitor;
-  $('brand').onchange = function () { picks = []; refreshCompetitor(); };
+  $('zebraProduct').oninput = function () { applyAutoBrand(); refreshCompetitor(); };
+  $('brand').onchange = function () { autoFrom = null; $('autoNote').hidden = true; refreshCompetitor(); };
   $('compModel').oninput = function () { modelEdited = true; update(); };
   $('form').addEventListener('input', update);
   $('form').addEventListener('change', update);
@@ -353,7 +378,9 @@ summary { cursor: pointer; font-weight: 500; }
     TOGGLES.forEach(function (t) { $(t[0]).value = P.DEFAULTS[t[0]] ? '1' : '0'; });
     $('distMargin').value = MARGINS[mode].distMargin;
     $('resellerMargin').value = MARGINS[mode].resellerMargin;
-    picks = [];
+    chosen = {};
+    autoFrom = lastAuto = null;
+    $('autoNote').hidden = true;
     refreshCompetitor();
   };
 

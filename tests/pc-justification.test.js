@@ -100,5 +100,11 @@ assert.strictEqual(P.suggest('ZC300', 'Evolis')[0].options[0].model, 'Primacy 2'
 assert.strictEqual(P.suggest('ZXP9', 'Evolis')[0].options[0].model, 'Avansia');
 assert.deepStrictEqual(P.suggest('TC53', 'Evolis')[0].options, []);
 assert.deepStrictEqual(P.suggest('', 'Honeywell'), []);
+assert.strictEqual(P.autoBrand('ZC300'), 'Evolis');
+assert.strictEqual(P.autoBrand('ZC300, ZXP Series 9'), 'Evolis');
+assert.strictEqual(P.autoBrand('TC53'), null);
+assert.strictEqual(P.autoBrand('TC53, ZC300'), null);
+assert.strictEqual(P.autoBrand('ZC300, XYZ'), null);
+assert.strictEqual(P.autoBrand(''), null);
 
 console.log('pc-justification tests passed');

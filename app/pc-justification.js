@@ -145,6 +145,17 @@
     });
   }
 
+  // The one brand with a match for every product typed (card printers →
+  // Evolis), or null when several brands fit or none fits them all.
+  function autoBrand(zebraProducts) {
+    var cats = splitProducts(zebraProducts).map(category);
+    if (!cats.length || cats.some(function (c) { return !c; })) return null;
+    var fits = BRANDS.filter(function (b) {
+      return cats.every(function (c) { return (COMPETITORS[c.key][b] || []).length; });
+    });
+    return fits.length === 1 ? fits[0] : null;
+  }
+
   // ------------------------------------------------------------------ text
   function pad(n) { var s = n + '.'; return s + (s.length < 3 ? '    ' : '  '); }
   function yn(v) { return v ? 'Yes' : 'No'; }
@@ -217,7 +228,7 @@
 
   var api = {
     BRANDS: BRANDS, DEMANDS: DEMANDS, CATEGORIES: CATEGORIES, COMPETITORS: COMPETITORS, DEFAULTS: DEFAULTS,
-    category: category, splitProducts: splitProducts, suggest: suggest, buildNew: buildNew, buildRepeat: buildRepeat
+    category: category, splitProducts: splitProducts, suggest: suggest, autoBrand: autoBrand, buildNew: buildNew, buildRepeat: buildRepeat
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.PCJ = api;
