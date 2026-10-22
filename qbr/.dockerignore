@@ -1,0 +1,27 @@
+# Dependencies and build output are recreated inside the image
+node_modules
+dist
+dist-single
+
+# Generated at build time from data/QBR_Data_<date>.md
+src/data/qbr.json
+src/data/narrative.ts
+
+# Local artefacts and docs not needed for the build
+Zebra_HK_FY26_Q4_QBR.html
+*.zip
+*.xlsx
+README.md
+
+# Docker / VCS / editor noise
+Dockerfile
+.dockerignore
+.git
+.gitignore
+.vscode
+.idea
+.DS_Store
+*.log
+npm-debug.log*
+.env
+.env.*

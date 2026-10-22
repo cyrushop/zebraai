@@ -1,0 +1,6 @@
+node_modules
+dist
+dist-single
+# Generated from data/QBR_Data_<date>.md at build time (confidential figures)
+src/data/qbr.json
+src/data/narrative.ts

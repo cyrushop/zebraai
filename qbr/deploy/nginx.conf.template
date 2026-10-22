@@ -1,0 +1,45 @@
+# Rendered at start-up: ${PORT} is substituted, nginx variables ($uri etc.) are left alone.
+server {
+    listen ${PORT};
+    server_name _;
+    root /usr/share/nginx/html;
+    index index.html;
+    server_tokens off;
+    # Written at start-up by /docker-entrypoint.d/40-basic-auth.sh
+    include /tmp/nginx-auth.conf;
+
+    gzip on;
+    gzip_types text/css application/javascript application/json image/svg+xml;
+    gzip_min_length 1024;
+
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    # Confidential QBR data: keep the deck out of search engines.
+    add_header X-Robots-Tag "noindex, nofollow" always;
+
+    location = /healthz {
+        auth_basic off;
+        access_log off;
+        default_type text/plain;
+        return 200 "ok\n";
+    }
+
+    # Vite assets have content hashes in their names, so cache them for a year.
+    location /assets/ {
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Robots-Tag "noindex, nofollow" always;
+        try_files $uri =404;
+    }
+
+    # index.html must always be revalidated so a new data build shows up at once.
+    location / {
+        add_header Cache-Control "no-cache" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header X-Robots-Tag "noindex, nofollow" always;
+        try_files $uri $uri/ /index.html;
+    }
+}

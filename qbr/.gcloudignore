@@ -1,0 +1,14 @@
+# Files NOT uploaded by `gcloud run deploy --source .`
+.gcloudignore
+.git
+.gitignore
+node_modules
+dist
+dist-single
+src/data/qbr.json
+src/data/narrative.ts
+Zebra_HK_FY26_Q4_QBR.html
+*.zip
+*.xlsx
+.env
+.env.*

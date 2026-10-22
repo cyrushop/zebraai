@@ -1,0 +1,25 @@
+{
+  "name": "zebra-hk-qbr",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "extract": "node scripts/extract-data.mjs",
+    "dev": "npm run extract && vite",
+    "build": "npm run extract && tsc --noEmit && vite build",
+    "build:single": "npm run extract && tsc --noEmit && SINGLE=1 vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "18.3.12",
+    "@types/react-dom": "18.3.1",
+    "@vitejs/plugin-react": "4.3.4",
+    "typescript": "5.6.3",
+    "vite": "5.4.11",
+    "vite-plugin-singlefile": "2.0.3"
+  }
+}

@@ -54,3 +54,7 @@ node tests/engine.test.js
 ```
 
 The tests use synthetic fixtures only.
+
+## Other projects in this repository
+
+- [`qbr/`](qbr/) — Zebra HK QBR web app (browser slide deck, Docker image and Cloud Run deploy script). See [`qbr/README.md`](qbr/README.md).
