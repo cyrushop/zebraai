@@ -91,6 +91,8 @@ The 地區 buttons above the tabs show Hong Kong (the default), Taiwan or both. 
 | PC Justification | The PC justification writer (`pc-justification.html`) as a tab. It works without a PC list. With one loaded, pick a customer and press 帶入 Repeat PC or 帶入 New PC: the previous PC# (the customer's newest granted PC, for the parts on the check tab when they have one), the contact and margins from the newest justification that names a contact, and for a new PC the demand, the products on the check tab and the last competitor. |
 | 加價規則 | Edit the rates and the "already raised" test. Saved in the browser. |
 
+The 中文 / English switch in the header changes the page language and is remembered in the browser. The justification text itself is always English.
+
 Customers and parts can be typed or picked from dropdowns: customers list the 15 with the most PCs first, then all A–Z; parts are grouped by rule category, and the 加價檢查 tab can add the chosen customer's parts one by one. The 客戶紀錄 tab can hide parts with only one PC. A collapsible strip on 加價檢查 shows the current rules.
 
 **How the uplift is worked out.** The baseline is the customer's latest Approved or Expired PC for the part (Pending too, if switched on). Each price-increase event is checked against it:

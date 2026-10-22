@@ -236,10 +236,11 @@ svg.spark circle { fill: var(--spark); }
   <header class="top">
     <div>
       <h1>HK PC Price Check</h1>
-      <div class="sub">做 PC 前查一查：上次特價幾多、上次有冇加過價、今次應該加幾多。</div>
+      <div class="sub" id="subTitle">做 PC 前查一查：上次特價幾多、上次有冇加過價、今次應該加幾多。</div>
     </div>
     <div class="actions">
       <input id="fileInput" type="file" accept=".xls,.xlsx,.htm,.html" hidden>
+      <div class="seg" id="langSeg" role="group" aria-label="Language"><button data-lang="zh" aria-pressed="true">中文</button><button data-lang="en" aria-pressed="false">English</button></div>
       <button class="btn primary" id="uploadBtn">上載 PC list</button>
       <a class="btn" href="index.html" id="orderLink">Order Check</a>
     </div>
@@ -257,7 +258,7 @@ svg.spark circle { fill: var(--spark); }
         <button role="tab" id="pj-tabNew" aria-selected="true" data-mode="new">New PC</button>
         <button role="tab" id="pj-tabRepeat" aria-selected="false" data-mode="repeat">Repeat PC</button>
       </div>
-      <span class="small faint">填空格，撳 Copy，貼入 PC request。</span>
+      <span class="small faint" id="jHint">填空格，撳 Copy，貼入 PC request。</span>
     </div>
     <section class="jfill" id="jPrefill" aria-label="由 PC 紀錄帶入"></section>
     <div class="cols">
@@ -341,7 +342,7 @@ svg.spark circle { fill: var(--spark); }
 
 <div class="sheet-bg" id="sheetBg" hidden></div>
 <aside class="sheet" id="sheet" hidden aria-label="PC 紀錄"></aside>
-<div class="drop" id="drop" hidden><div>放低 SFDC PC list (.xls)</div></div>
+<div class="drop" id="drop" hidden><div id="dropText">放低 SFDC PC list (.xls)</div></div>
 <div class="toast" id="toast" hidden></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -360,22 +361,32 @@ svg.spark circle { fill: var(--spark); }
   var pctPlain = function (x) { return x == null || isNaN(x) ? '—' : (x * 100).toFixed(1) + '%'; };
   var cls = function (x) { return x == null || Math.abs(x) < 0.0005 ? '' : x > 0 ? 'up' : 'down'; };
 
+  // Language: Chinese (default) or English. T(zh, en) picks the text.
+  var LANG = (function () { try { return JSON.parse(localStorage.getItem('zpc.lang')) || 'zh'; } catch (e) { return 'zh'; } })();
+  function T(zh, en) { return LANG === 'en' ? en : zh; }
+  var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  // Increase names are stored in Chinese ("2026 年 3 月"); show them as "Mar 2026" in English.
+  function evLabel(l) {
+    if (LANG !== 'en') return l;
+    var m = String(l).match(/^(\d{4})\s*年\s*(\d{1,2})\s*月$/);
+    return m ? MONTHS[+m[2] - 1] + ' ' + m[1] : l === '新加價' ? 'New increase' : l;
+  }
   var CAT_LABEL = {};
   E.CATEGORIES.forEach(function (c) { CAT_LABEL[c.id] = c.label; });
-  var STATE = {
-    full: { label: '未加過價 → 全額加', short: '全額加' },
-    repeat: { label: '已加過價 → RP 加少啲', short: 'RP 加少啲' },
-    new: { label: '冇 PC 紀錄', short: '新產品' },
-    norule: { label: '冇加價規則 → 參考牌價', short: '冇規則' }
-  };
+  function STATE() { return {
+    full: { label: T('未加過價 → 全額加', 'Not raised yet → full uplift'), short: T('全額加', 'Full uplift') },
+    repeat: { label: T('已加過價 → RP 加少啲', 'Already raised → smaller RP uplift'), short: T('RP 加少啲', 'RP (smaller)') },
+    new: { label: T('冇 PC 紀錄', 'No PC history'), short: T('新產品', 'New product') },
+    norule: { label: T('冇加價規則 → 參考牌價', 'No uplift rule → see list price'), short: T('冇規則', 'No rule') }
+  }; }
   // How each price-increase event was treated for this customer + part.
   function stepText(x, short) {
-    var ev = x.event.label;
-    if (x.kind === 'pending') return ev + '：上次 PC 喺加價前 → +' + x.rate + '%';
-    if (x.kind === 'notRaised') return ev + '：加價後做過 PC 但冇加價' + (short ? '' : '（' + usd(x.base.unit) + ' → ' + usd(x.base.unit * (1 + x.lift)) + '）') + ' → +' + x.rate + '%';
-    if (x.kind === 'early') return ev + '：之前已提前加 ' + pctS(x.lift) + ' → RP +' + x.rate + '%';
-    if (x.kind === 'raised') return ev + '：已加過 ' + pctS(x.lift) + (short ? '' : '（對比 ' + fmtDs(x.base.created) + ' ' + usd(x.base.unit) + '）');
-    return ev + '：第一張 PC 已按新牌價做';
+    var ev = evLabel(x.event.label);
+    if (x.kind === 'pending') return ev + T('：上次 PC 喺加價前 → +', ': last PC before the increase → +') + x.rate + '%';
+    if (x.kind === 'notRaised') return ev + T('：加價後做過 PC 但冇加價', ': PC after the increase kept the old price') + (short ? '' : T('（', ' (') + usd(x.base.unit) + ' → ' + usd(x.base.unit * (1 + x.lift)) + T('）', ')')) + ' → +' + x.rate + '%';
+    if (x.kind === 'early') return ev + T('：之前已提前加 ', ': raised early by ') + pctS(x.lift) + ' → RP +' + x.rate + '%';
+    if (x.kind === 'raised') return ev + T('：已加過 ', ': already raised ') + pctS(x.lift) + (short ? '' : T('（對比 ', ' (vs ') + fmtDs(x.base.created) + ' ' + usd(x.base.unit) + T('）', ')'));
+    return ev + T('：第一張 PC 已按新牌價做', ': first PC already at the new list price');
   }
   function eventsSorted() {
     return (S.rules.events || []).slice().sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
@@ -385,8 +396,8 @@ svg.spark circle { fill: var(--spark); }
     return ev.length ? E.date(ev[ev.length - 1].date) : null;
   }
   var STATUS_TAG = { approved: '', pending: 'warn', notgranted: 'bad' };
-  var STATUS_ZH = { 'Approved': '已批', 'Expired': '已批 (過期)', 'Pending': '審批中', 'Awaiting Approval': '審批中',
-    'Expired before Approval': '未批已過期', 'Rejected': '拒絕', 'Cancelled': '取消' };
+  function STATUS_ZH() { return { 'Approved': T('已批', 'Approved'), 'Expired': T('已批 (過期)', 'Approved (expired)'), 'Pending': T('審批中', 'Pending'), 'Awaiting Approval': T('審批中', 'Pending'),
+    'Expired before Approval': T('未批已過期', 'Expired before approval'), 'Rejected': T('拒絕', 'Rejected'), 'Cancelled': T('取消', 'Cancelled') }; }
 
   // ------------------------------------------------------------ storage
   var LS = {
@@ -472,7 +483,7 @@ svg.spark circle { fill: var(--spark); }
           }));
         });
       } else {
-        if (!window.XLSX) throw new Error('Excel reader 未載入，請檢查網絡後重新整理。');
+        if (!window.XLSX) throw new Error(T('Excel reader 未載入，請檢查網絡後重新整理。', 'The Excel reader did not load. Check your connection and reload.'));
         var wb = XLSX.read(buf, { type: 'array', cellDates: true });
         wb.SheetNames.forEach(function (n) {
           grids.push(XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: true, defval: null }));
@@ -482,21 +493,21 @@ svg.spark circle { fill: var(--spark); }
         var t = E.tableFromGrid(grids[i], file.name);
         if (t) return t;
       }
-      throw new Error(file.name + '：唔係 PC list（搵唔到 "PC #"、"Price Concession Name"、"Unit Special Price (converted)" 欄）。');
+      throw new Error(file.name + T('：唔係 PC list（搵唔到 "PC #"、"Price Concession Name"、"Unit Special Price (converted)" 欄）。', ': not a PC list (no "PC #", "Price Concession Name" or "Unit Special Price (converted)" column).'));
     });
   }
   function handleFiles(files) {
     var f = files && files[0];
     if (!f) return;
-    toast('讀取 ' + f.name + '…');
+    toast(T('讀取 ', 'Reading ') + f.name + '…');
     readFile(f).then(function (t) {
       var rows = E.normPc(t);
-      if (!rows.length) throw new Error(f.name + '：冇可用的 PC 行。');
+      if (!rows.length) throw new Error(f.name + T('：冇可用的 PC 行。', ': no usable PC rows.'));
       var meta = { name: f.name, loadedAt: new Date().toISOString(), raw: t.rows.length };
       S.sample = false;
       setData(rows, meta);
       IDB.set('pc', { rows: rows, meta: meta });
-      toast('已載入 ' + rows.length.toLocaleString() + ' 行 PC', 4000);
+      toast(T('已載入 ', 'Loaded ') + rows.length.toLocaleString() + T(' 行 PC', ' PC rows'), 4000);
     }).catch(function (e) { toast(e.message || String(e), 7000); });
   }
   function setData(rows, meta) {
@@ -548,7 +559,7 @@ svg.spark circle { fill: var(--spark); }
       out.push([String(++n), n + ' : ' + acct[1], unit, d, st || 'Expired', acct[0], acct[1], 'Demo Partner Ltd', 'Demo VAD',
         a[0], a[1], a[2], a[3], p, 1, 50, list, acct[2]]);
     }
-    var A = ['DEMO1', '示範客戶 Alpha Logistics', 'Hong Kong'], B = ['DEMO2', '示範客戶 Beta Retail', 'Taiwan'];
+    var A = ['DEMO1', T('示範客戶 Alpha Logistics', 'Demo customer Alpha Logistics'), 'Hong Kong'], B = ['DEMO2', T('示範客戶 Beta Retail', 'Demo customer Beta Retail'), 'Taiwan'];
     add(A, '12/03/2025', 'TC530E-DEMO', 1200, 780); add(A, '20/02/2026', 'TC530E-DEMO', 1260, 790);
     add(A, '15/01/2026', 'DS2278-DEMO', 200, 118); add(A, '02/07/2026', 'DS2278-DEMO', 200, 120.36);
     add(A, '01/06/2026', 'ZD421-DEMO', 600, 402); add(A, '09/10/2026', 'ZD421-DEMO', 618, 414.06);
@@ -560,18 +571,28 @@ svg.spark circle { fill: var(--spark); }
   }
 
   // ------------------------------------------------------------ render
-  var REGION_ZH = { 'Hong Kong': '香港 HK', 'Taiwan': '台灣 TW' };
+  function REGION_ZH() { return { 'Hong Kong': T('香港 HK', 'Hong Kong'), 'Taiwan': T('台灣 TW', 'Taiwan') }; }
   function renderRegion() {
     var el = $('#region');
     if (!S.idx || !hasRegion()) { el.hidden = true; return; }
     var c = regionCounts(), list = regionList();
     el.hidden = false;
-    el.innerHTML = '<span class="label">地區</span><div class="seg" role="group" aria-label="地區">' +
-      [['all', '全部', S.rows.length]].concat(list.map(function (k) { return [k, REGION_ZH[k] || k, c[k]]; })).map(function (x) {
+    el.innerHTML = T('<span class="label">地區</span><div class="seg" role="group" aria-label="地區">', '<span class="label">Region</span><div class="seg" role="group" aria-label="Region">') +
+      [['all', T('全部', 'All'), S.rows.length]].concat(list.map(function (k) { return [k, REGION_ZH()[k] || k, c[k]]; })).map(function (x) {
         return '<button data-region="' + esc(x[0]) + '" aria-pressed="' + (S.region === x[0]) + '">' + esc(x[1]) + '<span class="n">' + x[2].toLocaleString() + '</span></button>';
-      }).join('') + '</div><span class="small faint">按 PC Owner Sub Region；填咗 China 的當香港</span>';
+      }).join('') + T('</div><span class="small faint">按 PC Owner Sub Region；填咗 China 的當香港</span>', '</div><span class="small faint">By PC Owner Sub Region; China counts as Hong Kong</span>');
+  }
+  // Text outside the rendered views, and the language switch.
+  function renderStatic() {
+    document.documentElement.lang = T('zh-Hant-HK', 'en');
+    $('#subTitle').textContent = T('做 PC 前查一查：上次特價幾多、上次有冇加過價、今次應該加幾多。', 'Before a new PC: the last special price, whether it was raised, and how much to add now.');
+    $('#uploadBtn').textContent = T('上載 PC list', 'Upload PC list');
+    $('#jHint').textContent = T('填空格，撳 Copy，貼入 PC request。', 'Fill the blanks, press Copy, paste into the PC request.');
+    $('#dropText').textContent = T('放低 SFDC PC list (.xls)', 'Drop the SFDC PC list (.xls)');
+    Array.prototype.forEach.call(document.querySelectorAll('#langSeg button'), function (b) { b.setAttribute('aria-pressed', String(b.dataset.lang === LANG)); });
   }
   function render() {
+    renderStatic();
     renderRegion();
     renderFresh();
     renderTabs();
@@ -583,23 +604,23 @@ svg.spark circle { fill: var(--spark); }
     f.hidden = false;
     var m = S.meta || {};
     f.innerHTML = [
-      ['PC list', S.sample ? '示範資料' : esc(m.name || ''), m.loadedAt ? '載入於 ' + fmtD(new Date(m.loadedAt)) : ''],
-      ['PC 行數' + (S.region === 'all' ? '' : '（' + esc(REGION_ZH[S.region] || S.region) + '）'), S.idx.rows.length.toLocaleString(), S.idx.accounts.length + ' 個客戶 · ' + S.idx.parts.length + ' 個產品'],
-      ['PC 日期', fmtDs(S.idx.from) + ' – ' + fmtDs(S.idx.to), '按 PC 建立日期'],
-      ['加價日', eventsSorted().map(function (e) { return esc(e.date); }).join('、') || '—', '可喺「加價規則」改']
+      ['PC list', S.sample ? T('示範資料', 'Demo data') : esc(m.name || ''), m.loadedAt ? T('載入於 ', 'Loaded ') + fmtD(new Date(m.loadedAt)) : ''],
+      [T('PC 行數', 'PC rows') + (S.region === 'all' ? '' : T('（', ' (') + esc(REGION_ZH()[S.region] || S.region) + T('）', ')')), S.idx.rows.length.toLocaleString(), S.idx.accounts.length + T(' 個客戶 · ', ' customers · ') + S.idx.parts.length + T(' 個產品', ' parts')],
+      [T('PC 日期', 'PC dates'), fmtDs(S.idx.from) + ' – ' + fmtDs(S.idx.to), T('按 PC 建立日期', 'By PC created date')],
+      [T('加價日', 'Price increases'), eventsSorted().map(function (e) { return esc(e.date); }).join(T('、', ', ')) || '—', T('可喺「加價規則」改', 'Edit under Uplift rules')]
     ].map(function (x) { return '<div><div class="label">' + x[0] + '</div><div class="v">' + x[1] + '</div><div class="f">' + x[2] + '</div></div>'; }).join('');
     if (S.sample) {
       n.hidden = false;
-      n.innerHTML = '而家顯示嘅係<b>示範資料</b>（虛構客戶同價錢）。上載 SFDC PC list 先會用你的真實紀錄。';
+      n.innerHTML = T('而家顯示嘅係<b>示範資料</b>（虛構客戶同價錢）。上載 SFDC PC list 先會用你的真實紀錄。', 'You are looking at <b>demo data</b> (made-up customers and prices). Upload the SFDC PC list to use your own records.');
     } else if (!hasRegion()) {
       n.hidden = false;
-      n.innerHTML = '呢份資料係舊版 app 載入的，冇地區欄。重新上載 PC list 就可以揀香港 / 台灣。';
+      n.innerHTML = T('呢份資料係舊版 app 載入的，冇地區欄。重新上載 PC list 就可以揀香港 / 台灣。', 'This data was loaded by an older version and has no region. Upload the PC list again to pick Hong Kong or Taiwan.');
     } else n.hidden = true;
   }
-  var TABS = [['check', '加價檢查'], ['part', '產品紀錄'], ['cust', '客戶紀錄'], ['just', 'PC Justification'], ['rules', '加價規則']];
+  function TABS() { return [['check', T('加價檢查', 'Uplift check')], ['part', T('產品紀錄', 'By part')], ['cust', T('客戶紀錄', 'By customer')], ['just', 'PC Justification'], ['rules', T('加價規則', 'Uplift rules')]]; }
   function renderTabs() {
     // The justification tab works without a PC list, so the tabs always show.
-    $('#tabs').innerHTML = TABS.map(function (t) {
+    $('#tabs').innerHTML = TABS().map(function (t) {
       return '<button role="tab" data-tab="' + t[0] + '" aria-selected="' + (S.tab === t[0]) + '">' + t[1] + '</button>';
     }).join('');
   }
@@ -615,20 +636,20 @@ svg.spark circle { fill: var(--spark); }
     else v.innerHTML = checkView();
   }
   function startHtml() {
-    return '<section class="start"><h2>上載 PC list 開始</h2><ol>' +
-      '<li>喺 SFDC 匯出 PC list report（.xls，即係你平時 download 嗰個）。</li>' +
-      '<li>撳「上載 PC list」或者直接拖個檔案入嚟。資料只會存喺呢部機嘅瀏覽器，唔會上傳去任何 server。</li>' +
-      '<li>喺「加價檢查」揀客戶，貼上今次 PC 的產品編號，就會見到上次特價、有冇加過價同建議加幅。</li></ol>' +
-      '<div class="actions"><button class="btn primary" id="uploadBtn2">上載 PC list</button><button class="btn" id="demoBtn">用示範資料試</button></div></section>';
+    return T('<section class="start"><h2>上載 PC list 開始</h2><ol>', '<section class="start"><h2>Upload the PC list to start</h2><ol>') +
+      T('<li>喺 SFDC 匯出 PC list report（.xls，即係你平時 download 嗰個）。</li>', '<li>Export the PC list report from SFDC (.xls, the one you usually download).</li>') +
+      T('<li>撳「上載 PC list」或者直接拖個檔案入嚟。資料只會存喺呢部機嘅瀏覽器，唔會上傳去任何 server。</li>', '<li>Press Upload PC list or drop the file on the page. The data stays in this browser and is not sent to any server.</li>') +
+      T('<li>喺「加價檢查」揀客戶，貼上今次 PC 的產品編號，就會見到上次特價、有冇加過價同建議加幅。</li></ol>', '<li>On Uplift check, pick a customer and paste the parts for the new PC to see the last special price, whether it was raised and the suggested uplift.</li></ol>') +
+      T('<div class="actions"><button class="btn primary" id="uploadBtn2">上載 PC list</button><button class="btn" id="demoBtn">用示範資料試</button></div></section>', '<div class="actions"><button class="btn primary" id="uploadBtn2">Upload PC list</button><button class="btn" id="demoBtn">Try demo data</button></div></section>');
   }
 
   // ---- account picker (shared by check + customer tabs)
   function acctPicker(idPrefix) {
     var a = S.acct ? S.idx.accounts.filter(function (x) { return x.key === S.acct; })[0] : null;
     var q = S.acctQ;
-    var html = '<div class="field"><label class="label" for="' + idPrefix + 'Acct">客戶：打字搵，或者喺右邊揀</label><div class="combo">' +
-      '<input type="search" id="' + idPrefix + 'Acct" data-acctq value="' + esc(q || (a ? a.name : '')) + '" placeholder="輸入公司名或 Siebel account no." autocomplete="off">' +
-      '<select id="' + idPrefix + 'AcctSel" data-acctsel aria-label="揀客戶">' + acctOptions() + '</select></div></div>';
+    var html = '<div class="field"><label class="label" for="' + idPrefix + T('Acct">客戶：打字搵，或者喺右邊揀</label><div class="combo">', 'Acct">Customer: type to search, or pick on the right</label><div class="combo">') +
+      '<input type="search" id="' + idPrefix + 'Acct" data-acctq value="' + esc(q || (a ? a.name : '')) + T('" placeholder="輸入公司名或 Siebel account no." autocomplete="off">', '" placeholder="Company name or Siebel account no." autocomplete="off">') +
+      '<select id="' + idPrefix + T('AcctSel" data-acctsel aria-label="揀客戶">', 'AcctSel" data-acctsel aria-label="Pick a customer">') + acctOptions() + '</select></div></div>';
     return { html: html, acct: a };
   }
   // Dropdown: the 15 customers with the most PCs first, then everyone A–Z.
@@ -637,13 +658,13 @@ svg.spark circle { fill: var(--spark); }
     accs.forEach(function (a) { var k = a.name.toUpperCase(); dup[k] = (dup[k] || 0) + 1; });
     var opt = function (a) {
       return '<option value="' + esc(a.key) + '"' + (a.key === S.acct ? ' selected' : '') + '>' + esc(a.name) +
-        (dup[a.name.toUpperCase()] > 1 && a.no ? '（' + esc(a.no) + '）' : '') + ' · ' + a.pcCount + ' 張 PC</option>';
+        (dup[a.name.toUpperCase()] > 1 && a.no ? T('（', ' (') + esc(a.no) + T('）', ')') : '') + ' · ' + a.pcCount + T(' 張 PC</option>', ' PCs</option>');
     };
     var top = accs.slice().sort(function (x, y) { return y.pcCount - x.pcCount || (+y.last || 0) - (+x.last || 0); }).slice(0, 15);
     var all = accs.slice().sort(function (x, y) { return x.name.localeCompare(y.name, 'en', { sensitivity: 'base' }); });
-    return '<option value=""' + (S.acct ? '' : ' selected') + '>▼ 揀客戶（' + accs.length + ' 間）</option>' +
-      '<optgroup label="最多 PC">' + top.map(opt).join('') + '</optgroup>' +
-      '<optgroup label="全部客戶（A–Z）">' + all.map(opt).join('') + '</optgroup>';
+    return '<option value=""' + (S.acct ? '' : ' selected') + T('>▼ 揀客戶（', '>▼ Pick a customer (') + accs.length + T(' 間）</option>', ')</option>') +
+      T('<optgroup label="最多 PC">', '<optgroup label="Most PCs">') + top.map(opt).join('') + '</optgroup>' +
+      T('<optgroup label="全部客戶（A–Z）">', '<optgroup label="All customers (A–Z)">') + all.map(opt).join('') + '</optgroup>';
   }
   // Dropdown of parts grouped by rule category; `parts` limits it (e.g. one customer's parts).
   function partOptions(parts, placeholder, selected) {
@@ -659,17 +680,17 @@ svg.spark circle { fill: var(--spark); }
   function ruleStrip() {
     var evs = eventsSorted();
     var chips = E.CATEGORIES.map(function (c) {
-      var parts = evs.filter(function (e) { return e.rates[c.id] != null && e.rates[c.id] !== ''; }).map(function (e) { return esc(e.label) + ' +' + e.rates[c.id] + '%'; });
+      var parts = evs.filter(function (e) { return e.rates[c.id] != null && e.rates[c.id] !== ''; }).map(function (e) { return esc(evLabel(e.label)) + ' +' + e.rates[c.id] + '%'; });
       var rp = S.rules.rp[c.id];
       if (rp != null && rp !== '') parts.push('RP +' + rp + '%');
-      return parts.length ? '<span class="rulechip"><b>' + esc(c.label) + '</b>：' + parts.join(' · ') + '</span>' : '';
+      return parts.length ? '<span class="rulechip"><b>' + esc(c.label) + T('</b>：', '</b>: ') + parts.join(' · ') + '</span>' : '';
     }).join('');
     var open = LS.get('zpc.ruleOpen', null);
     if (open === null) open = window.innerWidth > 720;
-    return '<details class="rulestrip" id="ruleStrip"' + (open ? ' open' : '') + '><summary class="label">加價規則一覽</summary><div class="chips">' + chips + '</div></details>';
+    return '<details class="rulestrip" id="ruleStrip"' + (open ? ' open' : '') + T('><summary class="label">加價規則一覽</summary><div class="chips">', '><summary class="label">Uplift rules at a glance</summary><div class="chips">') + chips + '</div></details>';
   }
   function regionHint() {
-    return S.region === 'all' ? '' : '（而家只睇 ' + esc(REGION_ZH[S.region] || S.region) + '，可以揀「全部」）';
+    return S.region === 'all' ? '' : T('（而家只睇 ', ' (showing ') + esc(REGION_ZH()[S.region] || S.region) + T('，可以揀「全部」）', ' only; pick All to see every region)');
   }
   function acctMatches() {
     var q = S.acctQ.trim();
@@ -679,17 +700,17 @@ svg.spark circle { fill: var(--spark); }
   function acctPicks() {
     var list = acctMatches();
     if (!S.acctQ.trim()) return '';
-    if (!list.length) return '<div class="empty">搵唔到客戶「' + esc(S.acctQ) + '」' + regionHint() + '。</div>';
+    if (!list.length) return T('<div class="empty">搵唔到客戶「', '<div class="empty">No customer matches "') + esc(S.acctQ) + T('」', '"') + regionHint() + T('。</div>', '.</div>');
     return '<div class="picks">' + list.map(function (a) {
       return '<button class="pick" data-acct="' + esc(a.key) + '" aria-pressed="' + (a.key === S.acct) + '"><span class="pn">' + esc(a.name) + '</span>' +
-        '<span class="pd">' + esc(a.no || '冇 account no.') + ' · ' + a.pcCount + ' 張 PC · ' + a.partCount + ' 個產品 · 最近 ' + fmtDs(a.last) + '</span></button>';
+        '<span class="pd">' + esc(a.no || T('冇 account no.', 'no account no.')) + ' · ' + a.pcCount + T(' 張 PC · ', ' PCs · ') + a.partCount + T(' 個產品 · 最近 ', ' parts · last ') + fmtDs(a.last) + '</span></button>';
     }).join('') + '</div>';
   }
   function acctHead(a, extra) {
     return '<section class="head"><div class="row"><div><h2>' + esc(a.name) + '</h2><div class="small muted">' + esc(a.no || '') +
-      (a.alias.length > 1 ? ' · 又名 ' + esc(a.alias.filter(function (x) { return x !== a.name; }).join(' / ')) : '') +
-      ' · ' + a.pcCount + ' 張 PC · 最近 PC ' + fmtD(a.last) + '</div></div>' +
-      '<div><button class="btn small" data-clearacct>換客戶</button></div></div>' + (extra || '') + '</section>';
+      (a.alias.length > 1 ? T(' · 又名 ', ' · also ') + esc(a.alias.filter(function (x) { return x !== a.name; }).join(' / ')) : '') +
+      ' · ' + a.pcCount + T(' 張 PC · 最近 PC ', ' PCs · last PC ') + fmtD(a.last) + '</div></div>' +
+      T('<div><button class="btn small" data-clearacct>換客戶</button></div></div>', '<div><button class="btn small" data-clearacct>Change customer</button></div></div>') + (extra || '') + '</section>';
   }
 
   // ---- 加價檢查
@@ -697,14 +718,14 @@ svg.spark circle { fill: var(--spark); }
     var p = acctPicker('c');
     var myParts = p.acct ? Object.keys((S.idx.byAcct[S.acct] || []).reduce(function (m, r) { m[r.part] = 1; return m; }, {})) : [];
     var html = ruleStrip() + '<section class="query">' + p.html +
-      '<div class="field"><label class="label" for="cParts">今次 PC 產品編號（可留空 = 呢個客戶做過的全部產品）</label>' +
+      T('<div class="field"><label class="label" for="cParts">今次 PC 產品編號（可留空 = 呢個客戶做過的全部產品）</label>', '<div class="field"><label class="label" for="cParts">Parts for the new PC (blank = every part this customer has had)</label>') +
       '<textarea id="cParts" placeholder="TC530E-0T1E6B1B00-A6&#10;CRD-NGTC5N-5SC4B">' + esc(S.parts) + '</textarea>' +
-      '<div class="combo"><select id="cPartSel" data-addpart aria-label="加入產品">' +
-      partOptions(myParts.length ? myParts : S.idx.parts, myParts.length ? '＋ 加入呢個客戶做過的產品（' + myParts.length + ' 個）' : '＋ 加入產品（' + S.idx.parts.length + ' 個）') +
-      '</select>' + (S.parts.trim() ? '<button class="btn small" id="clearParts">清空產品</button>' : '') + '</div></div>' +
-      '<div class="opts"><label class="chk"><input type="checkbox" id="optPending"' + (S.rules.includePending ? ' checked' : '') + '> 審批中的 PC 都當「上次 PC」</label>' +
-      '<span class="faint small">判斷規則同加幅可以喺「加價規則」改。</span></div></section>';
-    if (!p.acct) return html + acctPicks() + (S.acctQ.trim() ? '' : '<div class="empty">揀一個客戶開始。</div>');
+      T('<div class="combo"><select id="cPartSel" data-addpart aria-label="加入產品">', '<div class="combo"><select id="cPartSel" data-addpart aria-label="Add a part">') +
+      partOptions(myParts.length ? myParts : S.idx.parts, myParts.length ? T('＋ 加入呢個客戶做過的產品（', '+ Add a part this customer has had (') + myParts.length + T(' 個）', ')') : T('＋ 加入產品（', '+ Add a part (') + S.idx.parts.length + T(' 個）', ')')) +
+      '</select>' + (S.parts.trim() ? T('<button class="btn small" id="clearParts">清空產品</button>', '<button class="btn small" id="clearParts">Clear parts</button>') : '') + '</div></div>' +
+      '<div class="opts"><label class="chk"><input type="checkbox" id="optPending"' + (S.rules.includePending ? ' checked' : '') + T('> 審批中的 PC 都當「上次 PC」</label>', '> Count pending PCs as the last PC</label>') +
+      T('<span class="faint small">判斷規則同加幅可以喺「加價規則」改。</span></div></section>', '<span class="faint small">Change the test and the rates under Uplift rules.</span></div></section>');
+    if (!p.acct) return html + acctPicks() + (S.acctQ.trim() ? '' : T('<div class="empty">揀一個客戶開始。</div>', '<div class="empty">Pick a customer to start.</div>'));
     var only = E.parsePartList(S.parts);
     var res = E.customerParts(S.idx, S.acct, S.rules, only);
     if (!only.length) res.sort(function (a, b) { return (b.last ? +b.last.created : 0) - (a.last ? +a.last.created : 0); });
@@ -712,19 +733,19 @@ svg.spark circle { fill: var(--spark); }
     var k = { full: 0, repeat: 0, new: 0, norule: 0 };
     res.forEach(function (r) { k[r.state]++; });
     var kp = '<div class="kpis">' + ['full', 'repeat', 'norule', 'new'].filter(function (s) { return s !== 'norule' || k[s]; }).map(function (s) {
-      return '<div class="kpi"><div class="v">' + k[s] + '</div><div class="st ' + s + '">' + STATE[s].label + '</div></div>';
+      return '<div class="kpi"><div class="v">' + k[s] + '</div><div class="st ' + s + '">' + STATE()[s].label + '</div></div>';
     }).join('') + '</div>';
     html += acctHead(p.acct, kp);
     var rows = res.map(function (r, i) { return checkRow(r, i); }).join('');
-    html += '<div class="tools"><button class="btn small" id="copyBtn">複製表格（貼去 Excel）</button></div>';
-    html += '<div class="tablebox"><table><thead><tr><th>產品</th><th>上次 PC</th><th class="num">上次特價</th><th class="num">再之前</th>' +
-      '<th>判斷</th><th class="num">建議加幅</th><th class="num">建議特價</th><th class="num">最新牌價 / 標準淨價</th></tr></thead><tbody>' +
-      (rows || '<tr><td colspan="8" class="empty">冇資料。</td></tr>') + '</tbody></table></div>';
+    html += T('<div class="tools"><button class="btn small" id="copyBtn">複製表格（貼去 Excel）</button></div>', '<div class="tools"><button class="btn small" id="copyBtn">Copy table (paste into Excel)</button></div>');
+    html += T('<div class="tablebox"><table><thead><tr><th>產品</th><th>上次 PC</th><th class="num">上次特價</th><th class="num">再之前</th>', '<div class="tablebox"><table><thead><tr><th>Part</th><th>Last PC</th><th class="num">Last price</th><th class="num">Before that</th>') +
+      T('<th>判斷</th><th class="num">建議加幅</th><th class="num">建議特價</th><th class="num">最新牌價 / 標準淨價</th></tr></thead><tbody>', '<th>Decision</th><th class="num">Uplift</th><th class="num">Suggested price</th><th class="num">Latest list / standard net</th></tr></thead><tbody>') +
+      (rows || T('<tr><td colspan="8" class="empty">冇資料。</td></tr>', '<tr><td colspan="8" class="empty">No data.</td></tr>')) + '</tbody></table></div>';
     return html;
   }
   function catHtml(r) {
     var i = r.info;
-    return '<div class="sub">' + (i ? esc(i.family) + ' · ' + esc(CAT_LABEL[i.cat] || '') : '呢個 PC list 冇呢個產品') + '</div>';
+    return '<div class="sub">' + (i ? esc(i.family) + ' · ' + esc(CAT_LABEL[i.cat] || '') : T('呢個 PC list 冇呢個產品', 'Not in this PC list')) + '</div>';
   }
   // The latest list price we know comes from the newest PC; before the increase it may be out of date.
   function listStale(r) {
@@ -733,46 +754,46 @@ svg.spark circle { fill: var(--spark); }
   }
   function rateHtml(r) {
     if (r.state === 'new') return '<span class="faint">—</span>';
-    if (r.rate == null) return '<span class="tag warn">冇 RP 規則</span>';
-    var src = r.rateSource === 'list' ? '<div class="sub">冇規則，按牌價變動</div>' + (listStale(r) ? '<span class="tag warn">牌價資料舊，自己再查</span>' : '') : '<div class="sub">' + (r.state === 'repeat' ? 'RP 加幅' : '加價未轉嫁') + '</div>';
+    if (r.rate == null) return T('<span class="tag warn">冇 RP 規則</span>', '<span class="tag warn">No RP rule</span>');
+    var src = r.rateSource === 'list' ? T('<div class="sub">冇規則，按牌價變動</div>', '<div class="sub">No rule; list price change</div>') + (listStale(r) ? T('<span class="tag warn">牌價資料舊，自己再查</span>', '<span class="tag warn">List price is old; check it</span>') : '') : '<div class="sub">' + (r.state === 'repeat' ? T('RP 加幅', 'RP uplift') : T('加價未轉嫁', 'Increase not passed on')) + '</div>';
     return '<span class="big">' + (r.rate > 0 ? '+' : '') + r.rate + '%</span>' + src;
   }
   function checkRow(r, i) {
     var last = r.last, prev = r.prev;
-    var lastHtml = last ? '<div class="mono">' + esc(last.pc) + '</div><div class="sub">' + fmtDs(last.created) + ' · ' + esc(STATUS_ZH[last.status] || last.status) + '</div>' :
-      '<span class="faint">' + (r.history.length ? '只有未批的 PC' : '冇') + '</span>';
-    var judge = '<span class="st ' + r.state + '">' + STATE[r.state].short + '</span>';
+    var lastHtml = last ? '<div class="mono">' + esc(last.pc) + '</div><div class="sub">' + fmtDs(last.created) + ' · ' + esc(STATUS_ZH()[last.status] || last.status) + '</div>' :
+      '<span class="faint">' + (r.history.length ? T('只有未批的 PC', 'Only PCs not approved') : T('冇', 'None')) + '</span>';
+    var judge = '<span class="st ' + r.state + '">' + STATE()[r.state].short + '</span>';
     if (r.steps.length) judge += '<ul class="steps">' + r.steps.map(function (x) { return '<li>' + esc(stepText(x, true)) + '</li>'; }).join('') + '</ul>';
-    if (r.cat === 'emc' && r.state !== 'new') judge += '<span class="tag">Margin 夠可加少啲：問 Kevin</span>';
+    if (r.cat === 'emc' && r.state !== 'new') judge += T('<span class="tag">Margin 夠可加少啲：問 Kevin</span>', '<span class="tag">Less if margin allows: ask Kevin</span>');
     var sug = r.suggested != null ? '<span class="big">' + usd(r.suggested) + '</span>' +
-      (r.cumulative != null ? '<div class="sub">比 ' + fmtDs(r.cumulativeBase.created) + ' 累計 ' + pctS(r.cumulative) + '</div>' : '') +
-      (r.aboveStd ? '<span class="tag bad">≥ 標準淨價，唔使做 PC</span>' : '') : '<span class="faint">—</span>';
-    var newList = r.latest ? usd(r.latest.list) + '<div class="sub">' + (last && r.listChange != null ? '比上次 PC ' + '<span class="' + cls(r.listChange) + '">' + pctS(r.listChange) + '</span> · ' : '') +
-      (r.newDisc != null ? '建議折扣 ' + pctPlain(r.newDisc) : fmtDs(r.latest.date)) + '</div>' +
-      (r.newStdNet != null ? '<div class="sub">標準淨價 ' + usd(r.newStdNet) + '（Std disc ' + r.latest.stdDisc + '%）</div>' : '') + (listStale(r) ? '<span class="tag warn">牌價最後見於 ' + fmtDs(r.latest.date) + '，未有加價後資料</span>' : '') : '<span class="faint">—</span>';
+      (r.cumulative != null ? T('<div class="sub">比 ', '<div class="sub">Since ') + fmtDs(r.cumulativeBase.created) + T(' 累計 ', ': total ') + pctS(r.cumulative) + '</div>' : '') +
+      (r.aboveStd ? T('<span class="tag bad">≥ 標準淨價，唔使做 PC</span>', '<span class="tag bad">≥ standard net, no PC needed</span>') : '') : '<span class="faint">—</span>';
+    var newList = r.latest ? usd(r.latest.list) + '<div class="sub">' + (last && r.listChange != null ? T('比上次 PC ', 'vs last PC ') + '<span class="' + cls(r.listChange) + '">' + pctS(r.listChange) + '</span> · ' : '') +
+      (r.newDisc != null ? T('建議折扣 ', 'Suggested discount ') + pctPlain(r.newDisc) : fmtDs(r.latest.date)) + '</div>' +
+      (r.newStdNet != null ? T('<div class="sub">標準淨價 ', '<div class="sub">Standard net ') + usd(r.newStdNet) + T('（Std disc ', ' (std disc ') + r.latest.stdDisc + T('%）</div>', '%)</div>') : '') + (listStale(r) ? T('<span class="tag warn">牌價最後見於 ', '<span class="tag warn">List price last seen ') + fmtDs(r.latest.date) + T('，未有加價後資料</span>', ', nothing since the increase</span>') : '') : '<span class="faint">—</span>';
     return '<tr class="click" tabindex="0" data-row="' + i + '"><td><div class="pn mono">' + esc(r.part) + '</div>' + catHtml(r) + '</td>' +
       '<td>' + lastHtml + '</td>' +
-      '<td class="num">' + (last ? '<span class="big">' + usd(last.unit) + '</span><div class="sub">折扣 ' + pctPlain(r.lastDisc) + '</div>' : '—') + '</td>' +
+      '<td class="num">' + (last ? '<span class="big">' + usd(last.unit) + T('</span><div class="sub">折扣 ', '</span><div class="sub">Discount ') + pctPlain(r.lastDisc) + '</div>' : '—') + '</td>' +
       '<td class="num">' + (prev ? usd(prev.unit) + '<div class="sub">' + fmtDs(prev.created) + ' · <span class="' + cls(r.lift) + '">' + pctS(r.lift) + '</span></div>' : '<span class="faint">—</span>') + '</td>' +
       '<td>' + judge + '</td><td class="num">' + rateHtml(r) + '</td><td class="num">' + sug + '</td><td class="num">' + newList + '</td></tr>';
   }
 
   // ---- 產品紀錄
   function partView() {
-    var html = '<section class="query"><div class="field"><label class="label" for="pQ">產品編號：打字搵，或者喺右邊揀</label><div class="combo">' +
-      '<input type="search" id="pQ" value="' + esc(S.partQ) + '" placeholder="例如 TC530E、DS2278、ZD421" autocomplete="off">' +
-      '<select id="pPartSel" data-partsel aria-label="揀產品">' + partOptions(S.idx.parts, '▼ 揀產品（' + S.idx.parts.length + ' 個）', S.part || S.partQ.trim().toUpperCase()) + '</select></div></div>' +
-      '<div class="opts"><label class="chk"><input type="checkbox" id="optGranted"' + (S.onlyGranted ? ' checked' : '') + '> 只顯示已批的 PC</label></div></section>';
+    var html = T('<section class="query"><div class="field"><label class="label" for="pQ">產品編號：打字搵，或者喺右邊揀</label><div class="combo">', '<section class="query"><div class="field"><label class="label" for="pQ">Part number: type to search, or pick on the right</label><div class="combo">') +
+      '<input type="search" id="pQ" value="' + esc(S.partQ) + T('" placeholder="例如 TC530E、DS2278、ZD421" autocomplete="off">', '" placeholder="e.g. TC530E, DS2278, ZD421" autocomplete="off">') +
+      T('<select id="pPartSel" data-partsel aria-label="揀產品">', '<select id="pPartSel" data-partsel aria-label="Pick a part">') + partOptions(S.idx.parts, T('▼ 揀產品（', '▼ Pick a part (') + S.idx.parts.length + T(' 個）', ')'), S.part || S.partQ.trim().toUpperCase()) + '</select></div></div>' +
+      '<div class="opts"><label class="chk"><input type="checkbox" id="optGranted"' + (S.onlyGranted ? ' checked' : '') + T('> 只顯示已批的 PC</label></div></section>', '> Approved PCs only</label></div></section>');
     var q = S.partQ.trim();
-    if (!q) return html + '<div class="empty">輸入產品編號（打頭幾個字都得）。</div>';
+    if (!q) return html + T('<div class="empty">輸入產品編號（打頭幾個字都得）。</div>', '<div class="empty">Type a part number (the first few characters are enough).</div>');
     var list = E.findParts(S.idx, q);
-    if (!list.length) return html + '<div class="empty">PC list 入面冇「' + esc(q) + '」' + regionHint() + '。</div>';
+    if (!list.length) return html + T('<div class="empty">PC list 入面冇「', '<div class="empty">Not in the PC list: "') + esc(q) + T('」', '"') + regionHint() + T('。</div>', '.</div>');
     var sel = list.indexOf(S.part) >= 0 ? S.part : list[0];
     if (list.length > 1) {
       html += '<div class="picks">' + list.slice(0, 40).map(function (p) {
         var inf = S.idx.info[p];
-        return '<button class="pick" data-part="' + esc(p) + '" aria-pressed="' + (p === sel) + '"><span class="pn mono">' + esc(p) + '</span><span class="pd">' + esc(inf.family) + ' · ' + S.idx.byPart[p].length + ' 行</span></button>';
-      }).join('') + (list.length > 40 ? '<span class="faint small">另外 ' + (list.length - 40) + ' 個，打多幾個字收窄。</span>' : '') + '</div>';
+        return '<button class="pick" data-part="' + esc(p) + '" aria-pressed="' + (p === sel) + '"><span class="pn mono">' + esc(p) + '</span><span class="pd">' + esc(inf.family) + ' · ' + S.idx.byPart[p].length + T(' 行</span></button>', ' rows</span></button>');
+      }).join('') + (list.length > 40 ? T('<span class="faint small">另外 ', '<span class="faint small">') + (list.length - 40) + T(' 個，打多幾個字收窄。</span>', ' more; type more to narrow the list.</span>') : '') + '</div>';
     }
     var all = S.idx.byPart[sel] || [];
     var rows = all.filter(function (r) { return !S.onlyGranted || r.statusGroup === 'approved'; });
@@ -782,11 +803,11 @@ svg.spark circle { fill: var(--spark); }
     var inf = S.idx.info[sel], lat = S.idx.latestList[sel];
     var median = granted.length ? granted[Math.floor((granted.length - 1) / 2)] : null;
     html += '<section class="head"><div class="row"><div><h2 class="mono">' + esc(sel) + '</h2><div class="small muted">' + esc(inf.line) + ' · ' + esc(inf.subLine) + ' · ' + esc(inf.family) +
-      ' · 規則分類：' + esc(CAT_LABEL[inf.cat]) + '</div></div></div><div class="kpis">' +
-      kpi(lat ? usd(lat.list) : '—', '最新牌價 (' + (lat ? fmtDs(lat.date) : '') + ')') +
-      kpi(granted.length ? usd(granted[0]) : '—', '最低已批特價') + kpi(median != null ? usd(median) : '—', '中位數') +
-      kpi(granted.length ? usd(granted[granted.length - 1]) : '—', '最高已批特價') +
-      kpi(Object.keys(custs).length, '個客戶') + kpi(all.length, '行 PC') + '</div></section>';
+      T(' · 規則分類：', ' · Rule category: ') + esc(CAT_LABEL[inf.cat]) + '</div></div></div><div class="kpis">' +
+      kpi(lat ? usd(lat.list) : '—', T('最新牌價 (', 'Latest list (') + (lat ? fmtDs(lat.date) : '') + ')') +
+      kpi(granted.length ? usd(granted[0]) : '—', T('最低已批特價', 'Lowest approved price')) + kpi(median != null ? usd(median) : '—', T('中位數', 'Median')) +
+      kpi(granted.length ? usd(granted[granted.length - 1]) : '—', T('最高已批特價', 'Highest approved price')) +
+      kpi(Object.keys(custs).length, T('個客戶', 'customers')) + kpi(all.length, T('行 PC', 'PC rows')) + '</div></section>';
     S.cur = rows;
     html += pcTable(rows, true);
     return html;
@@ -798,16 +819,16 @@ svg.spark circle { fill: var(--spark); }
       var disc = r.list ? 1 - r.unit / r.list : null;
       return '<tr class="' + (withCust ? 'click ' : '') + (r.statusGroup === 'approved' ? '' : 'dim') + '"' + (withCust ? ' tabindex="0" data-pcrow="' + i + '"' : '') + '>' +
         '<td class="num">' + fmtDs(r.created) + '</td><td class="mono">' + esc(r.pc) + '</td>' +
-        '<td><span class="tag ' + STATUS_TAG[r.statusGroup] + '">' + esc(STATUS_ZH[r.status] || r.status) + '</span></td>' +
+        '<td><span class="tag ' + STATUS_TAG[r.statusGroup] + '">' + esc(STATUS_ZH()[r.status] || r.status) + '</span></td>' +
         (withCust ? '<td><div class="pn">' + esc(r.account) + '</div><div class="sub">' + esc(r.reseller) + (r.distributor ? ' · ' + esc(r.distributor) : '') + '</div></td>' :
           '<td><div class="sub">' + esc(r.reseller) + (r.distributor ? ' · ' + esc(r.distributor) : '') + '</div></td>') +
         '<td class="num">' + qtyS(r) + '</td><td class="num">' + usd(r.list) + '</td><td class="num"><b>' + usd(r.unit) + '</b></td><td class="num">' + pctPlain(disc) + '</td>' +
         '<td class="mono small">' + esc(r.opp) + '</td></tr>';
     }).join('');
-    return '<div class="tablebox"><table><thead><tr><th class="num">建立日期</th><th>PC #</th><th>狀態</th><th>' + (withCust ? '客戶 / Reseller · VAD' : 'Reseller · VAD') + '</th>' +
-      '<th class="num">數量</th><th class="num">牌價</th><th class="num">特價</th><th class="num">折扣</th><th>Opp</th></tr></thead><tbody>' +
-      (body || '<tr><td colspan="9" class="empty">冇 PC。</td></tr>') + '</tbody></table>' +
-      (rows.length > S.limit ? '<div class="more"><button class="btn" id="moreBtn">顯示全部 ' + rows.length + ' 行</button></div>' : '') + '</div>';
+    return T('<div class="tablebox"><table><thead><tr><th class="num">建立日期</th><th>PC #</th><th>狀態</th><th>', '<div class="tablebox"><table><thead><tr><th class="num">Created</th><th>PC #</th><th>Status</th><th>') + (withCust ? T('客戶 / Reseller · VAD', 'Customer / Reseller · VAD') : 'Reseller · VAD') + '</th>' +
+      T('<th class="num">數量</th><th class="num">牌價</th><th class="num">特價</th><th class="num">折扣</th><th>Opp</th></tr></thead><tbody>', '<th class="num">Qty</th><th class="num">List</th><th class="num">Special</th><th class="num">Discount</th><th>Opp</th></tr></thead><tbody>') +
+      (body || T('<tr><td colspan="9" class="empty">冇 PC。</td></tr>', '<tr><td colspan="9" class="empty">No PCs.</td></tr>')) + '</tbody></table>' +
+      (rows.length > S.limit ? T('<div class="more"><button class="btn" id="moreBtn">顯示全部 ', '<div class="more"><button class="btn" id="moreBtn">Show all ') + rows.length + T(' 行</button></div>', ' rows</button></div>') : '') + '</div>';
   }
   function qtyS(r) {
     if (r.minQty == null && r.maxQty == null) return '—';
@@ -818,9 +839,9 @@ svg.spark circle { fill: var(--spark); }
   // ---- 客戶紀錄
   function custView() {
     var p = acctPicker('u');
-    var html = '<section class="query">' + p.html + '<div class="opts"><label class="chk"><input type="checkbox" id="optGranted"' + (S.onlyGranted ? ' checked' : '') + '> 只計已批的 PC</label>' +
-      '<label class="chk"><input type="checkbox" id="optMulti"' + (S.multiOnly ? ' checked' : '') + '> 只顯示做過多次 PC 的產品</label></div></section>';
-    if (!p.acct) return html + acctPicks() + (S.acctQ.trim() ? '' : '<div class="empty">揀一個客戶睇佢做過特價的產品同價錢變化。</div>');
+    var html = '<section class="query">' + p.html + '<div class="opts"><label class="chk"><input type="checkbox" id="optGranted"' + (S.onlyGranted ? ' checked' : '') + T('> 只計已批的 PC</label>', '> Approved PCs only</label>') +
+      '<label class="chk"><input type="checkbox" id="optMulti"' + (S.multiOnly ? ' checked' : '') + T('> 只顯示做過多次 PC 的產品</label></div></section>', '> Only parts with several PCs</label></div></section>');
+    if (!p.acct) return html + acctPicks() + (S.acctQ.trim() ? '' : T('<div class="empty">揀一個客戶睇佢做過特價的產品同價錢變化。</div>', '<div class="empty">Pick a customer to see the parts they had special prices for and how the prices changed.</div>'));
     var rows = (S.idx.byAcct[S.acct] || []).filter(function (r) { return !S.onlyGranted || r.statusGroup === 'approved'; });
     var by = {};
     rows.forEach(function (r) { (by[r.part] = by[r.part] || []).push(r); });
@@ -831,31 +852,31 @@ svg.spark circle { fill: var(--spark); }
     var allCount = list.length;
     if (S.multiOnly) list = list.filter(function (x) { return x.pcs > 1; });
     S.cur = list;
-    html += acctHead(p.acct, '<div class="kpis">' + kpi(allCount, '個產品做過特價') + (S.multiOnly ? kpi(list.length, '個做過多次') : '') +
-      kpi(list.filter(function (x) { return x.last.unit > x.first.unit + 1e-9; }).length, '個加過價') +
-      kpi(list.filter(function (x) { return x.last.unit < x.first.unit - 1e-9; }).length, '個減過價') + '</div>');
+    html += acctHead(p.acct, '<div class="kpis">' + kpi(allCount, T('個產品做過特價', 'parts with special prices')) + (S.multiOnly ? kpi(list.length, T('個做過多次', 'with several PCs')) : '') +
+      kpi(list.filter(function (x) { return x.last.unit > x.first.unit + 1e-9; }).length, T('個加過價', 'raised')) +
+      kpi(list.filter(function (x) { return x.last.unit < x.first.unit - 1e-9; }).length, T('個減過價', 'lowered')) + '</div>');
     var body = list.map(function (x, i) {
       var ch = x.first.unit ? x.last.unit / x.first.unit - 1 : null;
       return '<tr class="click" tabindex="0" data-crow="' + i + '"><td><div class="pn mono">' + esc(x.part) + '</div>' + catHtml({ info: S.idx.info[x.part] }) + '</td>' +
         '<td class="num">' + x.pcs + '</td>' +
         '<td class="num">' + usd(x.first.unit) + '<div class="sub">' + fmtDs(x.first.created) + '</div></td>' +
-        '<td class="num"><b>' + usd(x.last.unit) + '</b><div class="sub">' + fmtDs(x.last.created) + ' · ' + esc(STATUS_ZH[x.last.status] || x.last.status) + '</div></td>' +
+        '<td class="num"><b>' + usd(x.last.unit) + '</b><div class="sub">' + fmtDs(x.last.created) + ' · ' + esc(STATUS_ZH()[x.last.status] || x.last.status) + '</div></td>' +
         '<td class="num"><span class="' + cls(ch) + '">' + (x.pcs > 1 ? pctS(ch) : '—') + '</span></td>' +
         '<td>' + spark(x.h) + '</td></tr>';
     }).join('');
-    html += '<div class="tablebox"><table><thead><tr><th>產品</th><th class="num">PC 次數</th><th class="num">第一次特價</th><th class="num">最近特價</th><th class="num">變化</th><th>走勢</th></tr></thead><tbody>' +
-      (body || '<tr><td colspan="6" class="empty">冇 PC。</td></tr>') + '</tbody></table></div>';
+    html += T('<div class="tablebox"><table><thead><tr><th>產品</th><th class="num">PC 次數</th><th class="num">第一次特價</th><th class="num">最近特價</th><th class="num">變化</th><th>走勢</th></tr></thead><tbody>', '<div class="tablebox"><table><thead><tr><th>Part</th><th class="num">PCs</th><th class="num">First price</th><th class="num">Latest price</th><th class="num">Change</th><th>Trend</th></tr></thead><tbody>') +
+      (body || T('<tr><td colspan="6" class="empty">冇 PC。</td></tr>', '<tr><td colspan="6" class="empty">No PCs.</td></tr>')) + '</tbody></table></div>';
     return html;
   }
   function spark(h) {
-    if (h.length < 2) return '<span class="faint small">只有一次</span>';
+    if (h.length < 2) return T('<span class="faint small">只有一次</span>', '<span class="faint small">Only once</span>');
     var w = 120, ht = 26, xs = h.map(function (r) { return +r.created; }), ys = h.map(function (r) { return r.unit; });
     var x0 = Math.min.apply(null, xs), x1 = Math.max.apply(null, xs), y0 = Math.min.apply(null, ys), y1 = Math.max.apply(null, ys);
     var X = function (v) { return x1 === x0 ? w / 2 : 3 + (v - x0) / (x1 - x0) * (w - 6); };
     var Y = function (v) { return y1 === y0 ? ht / 2 : ht - 3 - (v - y0) / (y1 - y0) * (ht - 6); };
     var d = h.map(function (r, i) { return (i ? 'L' : 'M') + X(+r.created).toFixed(1) + ' ' + Y(r.unit).toFixed(1); }).join(' ');
     var l = h[h.length - 1];
-    return '<svg class="spark" width="' + w + '" height="' + ht + '" viewBox="0 0 ' + w + ' ' + ht + '" role="img" aria-label="特價由 ' + usd(h[0].unit) + ' 到 ' + usd(l.unit) + '">' +
+    return '<svg class="spark" width="' + w + '" height="' + ht + '" viewBox="0 0 ' + w + ' ' + ht + T('" role="img" aria-label="特價由 ', '" role="img" aria-label="Special price from ') + usd(h[0].unit) + T(' 到 ', ' to ') + usd(l.unit) + '">' +
       '<path d="' + d + '"/><circle cx="' + X(+l.created).toFixed(1) + '" cy="' + Y(l.unit).toFixed(1) + '" r="2.5"/></svg>';
   }
 
@@ -864,9 +885,9 @@ svg.spark circle { fill: var(--spark); }
     var R = S.rules, evs = eventsSorted();
     var v = function (x) { return x == null || x === '' ? '' : x; };
     var head = evs.map(function (e) {
-      return '<th class="num"><input type="text" class="evlabel" data-ev="' + esc(e.id) + '|label" value="' + esc(e.label) + '" aria-label="加價名稱">' +
-        '<input type="date" data-ev="' + esc(e.id) + '|date" value="' + esc(e.date) + '" aria-label="生效日">' +
-        '<button class="btn small" data-delev="' + esc(e.id) + '">刪除</button></th>';
+      return '<th class="num"><input type="text" class="evlabel" data-ev="' + esc(e.id) + '|label" value="' + esc(e.label) + T('" aria-label="加價名稱">', '" aria-label="Increase name">') +
+        '<input type="date" data-ev="' + esc(e.id) + '|date" value="' + esc(e.date) + T('" aria-label="生效日">', '" aria-label="Effective date">') +
+        '<button class="btn small" data-delev="' + esc(e.id) + T('">刪除</button></th>', '">Delete</button></th>');
     }).join('');
     var rows = E.CATEGORIES.map(function (c) {
       return '<tr><td>' + esc(c.label) + '</td>' + evs.map(function (e) {
@@ -874,24 +895,24 @@ svg.spark circle { fill: var(--spark); }
       }).join('') + '<td class="num"><input type="number" step="0.1" data-rp="' + c.id + '" value="' + v(R.rp[c.id]) + '" placeholder="—"> %</td></tr>';
     }).join('');
     return '<section class="rules">' +
-      '<div><h2>點計</h2><ul class="small muted">' +
-      '<li>用客戶 + 產品最近一張已批的 PC（「上次 PC」）做基準，逐個加價日檢查：</li>' +
-      '<li><b>上次 PC 喺加價日之前</b> → 呢次加價未轉嫁，加該欄 %。</li>' +
-      '<li><b>上次 PC 喺加價日之後</b> → 對比加價日前最後一張 PC：特價有升（≥ 下面門檻）= 已加過；冇升 = 加價後做過 PC 但冇加價，照加該欄 %。加價日前冇 PC = 第一張已按新牌價做。</li>' +
-      '<li>幾個加價日都未轉嫁就連乘（例如 15% 再 15% = 32.25%）。全部都已加過 → 用 RP 欄。</li>' +
-      '<li>上次 PC 喺加價日前、但今年已經比之前一張 PC 加咗價（例如 ADC 提前加 2%）→ 嗰次加價用 RP 欄（ADC +1%，累計約 3%）。</li>' +
-      '<li>欄位留空 = 呢個分類冇呢次加價。全部留空嘅分類 = 冇規則，改用上次 PC 至今牌價變動做參考。</li></ul></div>' +
+      T('<div><h2>點計</h2><ul class="small muted">', '<div><h2>How it works</h2><ul class="small muted">') +
+      T('<li>用客戶 + 產品最近一張已批的 PC（「上次 PC」）做基準，逐個加價日檢查：</li>', '<li>The baseline is the newest approved PC for the customer and part (the "last PC"). Each price increase date is checked against it:</li>') +
+      T('<li><b>上次 PC 喺加價日之前</b> → 呢次加價未轉嫁，加該欄 %。</li>', '<li><b>Last PC before the increase date</b> → the increase is not passed on yet, so the % in that column is added.</li>') +
+      T('<li><b>上次 PC 喺加價日之後</b> → 對比加價日前最後一張 PC：特價有升（≥ 下面門檻）= 已加過；冇升 = 加價後做過 PC 但冇加價，照加該欄 %。加價日前冇 PC = 第一張已按新牌價做。</li>', '<li><b>Last PC after the increase date</b> → compare it with the last PC before that date. A rise (at least the threshold below) means the increase was passed on. No rise means a PC was made after the increase without raising the price, so the % is still added. No PC before the date means the first PC was already at the new list price.</li>') +
+      T('<li>幾個加價日都未轉嫁就連乘（例如 15% 再 15% = 32.25%）。全部都已加過 → 用 RP 欄。</li>', '<li>Increases not passed on are compounded (15% then 15% = 32.25%). When every increase has been passed on, the RP column applies.</li>') +
+      T('<li>上次 PC 喺加價日前、但今年已經比之前一張 PC 加咗價（例如 ADC 提前加 2%）→ 嗰次加價用 RP 欄（ADC +1%，累計約 3%）。</li>', '<li>If the last PC is before an increase but was already raised this year against the PC before it (for example ADC +2% early), that increase gets the RP rate (ADC +1%, about 3% in total).</li>') +
+      T('<li>欄位留空 = 呢個分類冇呢次加價。全部留空嘅分類 = 冇規則，改用上次 PC 至今牌價變動做參考。</li></ul></div>', '<li>A blank cell means the category had no such increase. A category with every cell blank has no rule and uses the list price change since the last PC.</li></ul></div>') +
       '<div class="grid">' +
-      '<label><span class="label">提前加價由幾時起計</span><input type="date" id="rFrom" value="' + esc(R.liftFrom) + '"></label>' +
-      '<label><span class="label">特價上升最少（%）當加過</span><input type="number" step="0.1" id="rThr" value="' + esc(R.liftThreshold) + '"></label></div>' +
-      '<div class="tablebox"><table><thead><tr><th>產品分類</th>' + head + '<th class="num">已加過 → RP</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
-      '<div class="tools" style="justify-content:flex-start"><button class="btn" id="addEvent">新增加價日</button><button class="btn" id="resetRules">還原預設</button></div>' +
-      '<div><h3>預設值來源</h3><ul class="small muted">' +
-      '<li>2026-10-05：EMC 15%、AIT 3%、ADC 4%、RFID Fixed / HH 5%、MC33XXR / TC22R 15%，來自你提供的加價表。PC list 入面的牌價喺 10 月都有相同升幅。</li>' +
-      '<li>2026-03-19：PC list 入面第一張用新 EMC 牌價（+15%）的 PC 喺 2026-03-19。呢次只計 EMC，RFID HH（包括 MC33XXR / TC22R）唔加。</li>' +
-      '<li>RP：EMC 15%（margin 夠可以少啲，要問 Kevin）、RFID 3%、打印機 1%、ADC 1%，來自你提供的規則。</li>' +
-      '<li>EMC 配件、服務 (OneCare)、RFID OH readers 未有規則。PC list 見到 EMC 配件喺 2026-02 同 2026-10 各升咗 5%，但未經你確認，所以冇預設。</li>' +
-      '<li>標準淨價 = 最新牌價 × (1 − PC list 的「Discount」)。Discount 按產品同 Fulfillment Type（VAD / Direct to Partner）唔同，用同一 Fulfillment Type 最新一張 PC 的數。</li>' +
+      T('<label><span class="label">提前加價由幾時起計</span><input type="date" id="rFrom" value="', '<label><span class="label">Count early rises from</span><input type="date" id="rFrom" value="') + esc(R.liftFrom) + '"></label>' +
+      T('<label><span class="label">特價上升最少（%）當加過</span><input type="number" step="0.1" id="rThr" value="', '<label><span class="label">Minimum rise (%) that counts as raised</span><input type="number" step="0.1" id="rThr" value="') + esc(R.liftThreshold) + '"></label></div>' +
+      T('<div class="tablebox"><table><thead><tr><th>產品分類</th>', '<div class="tablebox"><table><thead><tr><th>Category</th>') + head + T('<th class="num">已加過 → RP</th></tr></thead><tbody>', '<th class="num">Already raised → RP</th></tr></thead><tbody>') + rows + '</tbody></table></div>' +
+      T('<div class="tools" style="justify-content:flex-start"><button class="btn" id="addEvent">新增加價日</button><button class="btn" id="resetRules">還原預設</button></div>', '<div class="tools" style="justify-content:flex-start"><button class="btn" id="addEvent">Add increase date</button><button class="btn" id="resetRules">Reset to defaults</button></div>') +
+      T('<div><h3>預設值來源</h3><ul class="small muted">', '<div><h3>Where the defaults come from</h3><ul class="small muted">') +
+      T('<li>2026-10-05：EMC 15%、AIT 3%、ADC 4%、RFID Fixed / HH 5%、MC33XXR / TC22R 15%，來自你提供的加價表。PC list 入面的牌價喺 10 月都有相同升幅。</li>', '<li>2026-10-05: EMC 15%, AIT 3%, ADC 4%, RFID Fixed / HH 5%, MC33XXR / TC22R 15%, from the increase table you gave. List prices in the PC list rose by the same amounts in October.</li>') +
+      T('<li>2026-03-19：PC list 入面第一張用新 EMC 牌價（+15%）的 PC 喺 2026-03-19。呢次只計 EMC，RFID HH（包括 MC33XXR / TC22R）唔加。</li>', '<li>2026-03-19: the first PC in the PC list with the new EMC list price (+15%). This increase covers EMC only, not RFID handhelds (MC33XXR / TC22R included).</li>') +
+      T('<li>RP：EMC 15%（margin 夠可以少啲，要問 Kevin）、RFID 3%、打印機 1%、ADC 1%，來自你提供的規則。</li>', '<li>RP: EMC 15% (less if the margin allows; ask Kevin), RFID 3%, printers 1%, ADC 1%, from the rules you gave.</li>') +
+      T('<li>EMC 配件、服務 (OneCare)、RFID OH readers 未有規則。PC list 見到 EMC 配件喺 2026-02 同 2026-10 各升咗 5%，但未經你確認，所以冇預設。</li>', '<li>EMC accessories, services (OneCare) and RFID OH readers have no rule. The PC list shows EMC accessories up 5% in February and again in October 2026, but that is not confirmed, so there is no default.</li>') +
+      T('<li>標準淨價 = 最新牌價 × (1 − PC list 的「Discount」)。Discount 按產品同 Fulfillment Type（VAD / Direct to Partner）唔同，用同一 Fulfillment Type 最新一張 PC 的數。</li>', '<li>Standard net = latest list × (1 − the PC list "Discount"). Discount differs by part and fulfillment type (VAD / Direct to Partner), so the newest PC with the same fulfillment type is used.</li>') +
       '</ul></div></section>';
   }
 
@@ -918,23 +939,23 @@ svg.spark circle { fill: var(--spark); }
   function renderPrefill() {
     var box = $('#jPrefill');
     if (!S.idx) {
-      box.innerHTML = '<div class="small muted">上載 PC list 之後，揀客戶就可以由上次 PC 帶入 Previous PC#、聯絡人、margin 同產品。</div>';
+      box.innerHTML = T('<div class="small muted">上載 PC list 之後，揀客戶就可以由上次 PC 帶入 Previous PC#、聯絡人、margin 同產品。</div>', '<div class="small muted">Once the PC list is uploaded, pick a customer to fill the previous PC#, contact, margins and products from their last PC.</div>');
       return;
     }
     var a = S.acct ? S.idx.accounts.filter(function (x) { return x.key === S.acct; })[0] : null;
-    var html = '<div class="label">由 PC 紀錄帶入</div><div class="combo"><select id="jAcctSel" data-acctsel aria-label="揀客戶">' + acctOptions() + '</select></div>';
+    var html = T('<div class="label">由 PC 紀錄帶入</div><div class="combo"><select id="jAcctSel" data-acctsel aria-label="揀客戶">', '<div class="label">Fill from PC history</div><div class="combo"><select id="jAcctSel" data-acctsel aria-label="Pick a customer">') + acctOptions() + '</select></div>';
     var d = prefillData();
-    if (!a || !d) { box.innerHTML = html + '<div class="small faint">揀客戶（或者喺「加價檢查」揀）就會見到上次 PC 的資料。</div>'; return; }
+    if (!a || !d) { box.innerHTML = html + T('<div class="small faint">揀客戶（或者喺「加價檢查」揀）就會見到上次 PC 的資料。</div>', '<div class="small faint">Pick a customer (here or on Uplift check) to see their last PC.</div>'); return; }
     var lp = d.lp, f = d.fields;
     html += '<dl class="facts">' +
-      '<dt>上次 PC#</dt><dd>' + (lp.last ? '<span class="mono">' + esc(lp.last.pc) + '</span>（' + fmtDs(lp.last.created) + '，' + esc(STATUS_ZH[lp.last.status] || lp.last.status) +
-        (lp.forParts ? '，加價檢查入面的產品' : '') + '）' : '<span class="faint">冇已批的 PC</span>') + '</dd>' +
-      '<dt>聯絡人</dt><dd>' + (f.contact ? esc(f.contact) + ' <span class="faint">（PC ' + esc(lp.just.pc) + '，' + fmtDs(lp.just.created) + '）</span>' : '<span class="faint">上次 justification 冇寫</span>') + '</dd>' +
-      '<dt>Margin</dt><dd>' + (f.distMargin || f.resellerMargin ? 'Distributor ' + esc(f.distMargin || '—') + '% · Reseller ' + esc(f.resellerMargin || '—') + '%' : '<span class="faint">冇</span>') + '</dd>' +
-      '<dt>產品</dt><dd>' + (d.products ? esc(d.products) + (justProducts(E.parsePartList(S.parts)) ? ' <span class="faint">（加價檢查入面的產品）</span>' : ' <span class="faint">（上次 justification）</span>') : '<span class="faint">喺「加價檢查」貼產品就會帶入</span>') + '</dd>' +
-      (f.competitor ? '<dt>上次對手</dt><dd>' + esc(f.competitor) + '</dd>' : '') +
-      '</dl><div class="actions"><button class="btn primary small" data-jfill="repeat">帶入 Repeat PC</button><button class="btn small" data-jfill="new">帶入 New PC</button></div>' +
-      '<div class="small faint">SFDC 匯出時「：」同中文會變成「?」，帶入後請睇一睇聯絡人。</div>';
+      T('<dt>上次 PC#</dt><dd>', '<dt>Last PC#</dt><dd>') + (lp.last ? '<span class="mono">' + esc(lp.last.pc) + T('</span>（', '</span> (') + fmtDs(lp.last.created) + T('，', ', ') + esc(STATUS_ZH()[lp.last.status] || lp.last.status) +
+        (lp.forParts ? T('，加價檢查入面的產品', ', for the parts on Uplift check') : '') + T('）', ')') : T('<span class="faint">冇已批的 PC</span>', '<span class="faint">No approved PC</span>')) + '</dd>' +
+      T('<dt>聯絡人</dt><dd>', '<dt>Contact</dt><dd>') + (f.contact ? esc(f.contact) + T(' <span class="faint">（PC ', ' <span class="faint">(PC ') + esc(lp.just.pc) + T('，', ', ') + fmtDs(lp.just.created) + T('）</span>', ')</span>') : T('<span class="faint">上次 justification 冇寫</span>', '<span class="faint">Not in the last justification</span>')) + '</dd>' +
+      '<dt>Margin</dt><dd>' + (f.distMargin || f.resellerMargin ? 'Distributor ' + esc(f.distMargin || '—') + '% · Reseller ' + esc(f.resellerMargin || '—') + '%' : T('<span class="faint">冇</span>', '<span class="faint">None</span>')) + '</dd>' +
+      T('<dt>產品</dt><dd>', '<dt>Products</dt><dd>') + (d.products ? esc(d.products) + (justProducts(E.parsePartList(S.parts)) ? T(' <span class="faint">（加價檢查入面的產品）</span>', ' <span class="faint">(parts on Uplift check)</span>') : T(' <span class="faint">（上次 justification）</span>', ' <span class="faint">(last justification)</span>')) : T('<span class="faint">喺「加價檢查」貼產品就會帶入</span>', '<span class="faint">Paste parts on Uplift check to fill this</span>')) + '</dd>' +
+      (f.competitor ? T('<dt>上次對手</dt><dd>', '<dt>Last competitor</dt><dd>') + esc(f.competitor) + '</dd>' : '') +
+      T('</dl><div class="actions"><button class="btn primary small" data-jfill="repeat">帶入 Repeat PC</button><button class="btn small" data-jfill="new">帶入 New PC</button></div>', '</dl><div class="actions"><button class="btn primary small" data-jfill="repeat">Fill Repeat PC</button><button class="btn small" data-jfill="new">Fill New PC</button></div>') +
+      T('<div class="small faint">SFDC 匯出時「：」同中文會變成「?」，帶入後請睇一睇聯絡人。</div>', '<div class="small faint">The SFDC export turns full-width colons and Chinese into "?". Check the contact after filling.</div>');
     box.innerHTML = html;
   }
   function fillJustification(mode) {
@@ -944,7 +965,7 @@ svg.spark circle { fill: var(--spark); }
     window.PCJUI.fill({ mode: mode, previousPc: d.lp.last ? d.lp.last.pc : '', contact: f.contact, distMargin: f.distMargin,
       resellerMargin: f.resellerMargin, zebraProduct: mode === 'new' ? d.products : '', demand: f.demand,
       competitor: mode === 'new' ? f.competitor : '' });
-    toast('已帶入 ' + (mode === 'repeat' ? 'Repeat' : 'New') + ' PC，請檢查一次先 Copy');
+    toast(T('已帶入 ', 'Filled ') + (mode === 'repeat' ? 'Repeat' : 'New') + T(' PC，請檢查一次先 Copy', ' PC. Check it before you copy.'));
   }
 
   // ------------------------------------------------------------ side sheet
@@ -954,23 +975,23 @@ svg.spark circle { fill: var(--spark); }
     var acct = S.idx.accounts.filter(function (a) { return a.key === acctKey; })[0];
     var inf = S.idx.info[partNo];
     var others = E.otherCustomers(S.idx, partNo, acctKey, S.rules).slice(0, 12);
-    var h = '<button class="btn small close" id="closeSheet">關閉</button>' +
+    var h = T('<button class="btn small close" id="closeSheet">關閉</button>', '<button class="btn small close" id="closeSheet">Close</button>') +
       '<div><div class="label">' + esc(acct ? acct.name : '') + '</div><h2 class="mono">' + esc(partNo) + '</h2>' +
       '<div class="small muted">' + (inf ? esc(inf.line + ' · ' + inf.subLine + ' · ' + inf.family) + ' · ' + esc(CAT_LABEL[inf.cat]) : '') + '</div></div>';
     if (res.state !== 'new') {
-      h += '<div class="reco"><div><span class="st ' + res.state + '">' + STATE[res.state].label + '</span></div>' +
+      h += '<div class="reco"><div><span class="st ' + res.state + '">' + STATE()[res.state].label + '</span></div>' +
         (res.steps.length ? '<ul class="steps">' + res.steps.map(function (x) { return '<li>' + esc(stepText(x)) + '</li>'; }).join('') + '</ul>' : '') +
-        (res.cat === 'emc' ? '<div class="small muted">EMC 正常加 15%；如果 margin 夠可以加少啲，margin 數據要問 Kevin。</div>' : '') +
-        (res.rate != null ? '<div>建議加 <b>' + (res.rate > 0 ? '+' : '') + res.rate + '%</b>' + (res.rateSource === 'list' ? '（冇規則，按牌價變動）' : '') +
-          '：' + usd(res.last.unit) + ' → <b>' + usd(res.suggested) + '</b>' + (res.cumulative != null ? '，比 ' + fmtDs(res.cumulativeBase.created) + ' 的 ' + usd(res.cumulativeBase.unit) + ' 累計 ' + pctS(res.cumulative) : '') + '</div>' : '<div>呢個分類冇規則，亦冇牌價變動資料。</div>') +
-        (res.newStdNet != null ? '<div class="small">新標準淨價 ' + usd(res.newStdNet) + '（牌價 ' + usd(res.latest.list) + ' × (1 − ' + res.latest.stdDisc + '%)）' +
-          (res.aboveStd ? '：<b class="up">建議特價已經 ≥ 標準淨價，用標準價就得，唔使做 PC。</b>' : '：建議特價比標準淨價低 ' + pctPlain(1 - res.suggested / res.newStdNet) + '。') + '</div>' : '') +
-        (res.latest ? '<div class="small muted">最新牌價 ' + usd(res.latest.list) + '（PC ' + esc(res.latest.pc) + '，' + fmtDs(res.latest.date) + (res.latest.region ? '，' + esc(REGION_ZH[res.latest.region] || res.latest.region) : '') + (listStale(res) ? '，喺加價生效日之前，可能已經過時' : '') + '）' +
-          (res.newDisc != null ? '，建議特價折扣 ' + pctPlain(res.newDisc) : '') + '</div>' : '') + '</div>';
-    } else h += '<div class="reco"><span class="st new">' + STATE.new.label + '</span><div class="small">呢個客戶未有已批的 PC，可以參考下面其他客戶的價錢。</div>' +
-      (res.latest && res.latest.stdDisc != null ? '<div class="small">最新牌價 ' + usd(res.latest.list) + '，Std disc ' + res.latest.stdDisc + '%，標準淨價 ' + usd(res.latest.list * (1 - res.latest.stdDisc / 100)) + '</div>' : '') + '</div>';
-    h += '<div><h3>呢個客戶的 PC 紀錄</h3></div>' + miniTable(res.history.length ? hist : [], false);
-    h += '<div><h3>其他客戶最近已批特價</h3></div>' + miniTable(others, true);
+        (res.cat === 'emc' ? T('<div class="small muted">EMC 正常加 15%；如果 margin 夠可以加少啲，margin 數據要問 Kevin。</div>', '<div class="small muted">EMC is normally +15%; less if the margin allows. Ask Kevin for the margin.</div>') : '') +
+        (res.rate != null ? T('<div>建議加 <b>', '<div>Suggested uplift <b>') + (res.rate > 0 ? '+' : '') + res.rate + '%</b>' + (res.rateSource === 'list' ? T('（冇規則，按牌價變動）', ' (no rule; list price change)') : '') +
+          T('：', ': ') + usd(res.last.unit) + ' → <b>' + usd(res.suggested) + '</b>' + (res.cumulative != null ? T('，比 ', ', since ') + fmtDs(res.cumulativeBase.created) + T(' 的 ', ' at ') + usd(res.cumulativeBase.unit) + T(' 累計 ', ': total ') + pctS(res.cumulative) : '') + '</div>' : T('<div>呢個分類冇規則，亦冇牌價變動資料。</div>', '<div>No rule for this category and no list price change.</div>')) +
+        (res.newStdNet != null ? T('<div class="small">新標準淨價 ', '<div class="small">New standard net ') + usd(res.newStdNet) + T('（牌價 ', ' (list ') + usd(res.latest.list) + ' × (1 − ' + res.latest.stdDisc + T('%)）', '%))') +
+          (res.aboveStd ? T('：<b class="up">建議特價已經 ≥ 標準淨價，用標準價就得，唔使做 PC。</b>', ': <b class="up">the suggested price is already at or above standard net. Use the standard price; no PC needed.</b>') : T('：建議特價比標準淨價低 ', ': the suggested price is below standard net by ') + pctPlain(1 - res.suggested / res.newStdNet) + T('。', '.')) + '</div>' : '') +
+        (res.latest ? T('<div class="small muted">最新牌價 ', '<div class="small muted">Latest list ') + usd(res.latest.list) + T('（PC ', ' (PC ') + esc(res.latest.pc) + T('，', ', ') + fmtDs(res.latest.date) + (res.latest.region ? T('，', ', ') + esc(REGION_ZH()[res.latest.region] || res.latest.region) : '') + (listStale(res) ? T('，喺加價生效日之前，可能已經過時', ', before the latest increase, so it may be out of date') : '') + T('）', ')') +
+          (res.newDisc != null ? T('，建議特價折扣 ', ', suggested discount ') + pctPlain(res.newDisc) : '') + '</div>' : '') + '</div>';
+    } else h += '<div class="reco"><span class="st new">' + STATE().new.label + T('</span><div class="small">呢個客戶未有已批的 PC，可以參考下面其他客戶的價錢。</div>', '</span><div class="small">This customer has no approved PC yet. See the prices for other customers below.</div>') +
+      (res.latest && res.latest.stdDisc != null ? T('<div class="small">最新牌價 ', '<div class="small">Latest list ') + usd(res.latest.list) + T('，Std disc ', ', std disc ') + res.latest.stdDisc + T('%，標準淨價 ', '%, standard net ') + usd(res.latest.list * (1 - res.latest.stdDisc / 100)) + '</div>' : '') + '</div>';
+    h += T('<div><h3>呢個客戶的 PC 紀錄</h3></div>', '<div><h3>PCs for this customer</h3></div>') + miniTable(res.history.length ? hist : [], false);
+    h += T('<div><h3>其他客戶最近已批特價</h3></div>', '<div><h3>Latest approved prices, other customers</h3></div>') + miniTable(others, true);
     var sh = $('#sheet');
     sh.innerHTML = h;
     sh.hidden = false;
@@ -979,12 +1000,12 @@ svg.spark circle { fill: var(--spark); }
     $('#closeSheet').focus();
   }
   function miniTable(rows, cust) {
-    if (!rows.length) return '<div class="faint small">冇。</div>';
-    return '<div class="tablebox"><table><thead><tr><th class="num">日期</th><th>PC #</th>' + (cust ? '<th>客戶</th>' : '<th>狀態</th>') +
-      '<th class="num">數量</th><th class="num">牌價</th><th class="num">特價</th><th class="num">折扣</th></tr></thead><tbody>' +
+    if (!rows.length) return T('<div class="faint small">冇。</div>', '<div class="faint small">None.</div>');
+    return T('<div class="tablebox"><table><thead><tr><th class="num">日期</th><th>PC #</th>', '<div class="tablebox"><table><thead><tr><th class="num">Date</th><th>PC #</th>') + (cust ? T('<th>客戶</th>', '<th>Customer</th>') : T('<th>狀態</th>', '<th>Status</th>')) +
+      T('<th class="num">數量</th><th class="num">牌價</th><th class="num">特價</th><th class="num">折扣</th></tr></thead><tbody>', '<th class="num">Qty</th><th class="num">List</th><th class="num">Special</th><th class="num">Discount</th></tr></thead><tbody>') +
       rows.map(function (r) {
         return '<tr class="' + (r.statusGroup === 'approved' ? '' : 'dim') + '"><td class="num">' + fmtDs(r.created) + '</td><td class="mono">' + esc(r.pc) + '</td>' +
-          (cust ? '<td>' + esc(r.account) + '</td>' : '<td><span class="tag ' + STATUS_TAG[r.statusGroup] + '">' + esc(STATUS_ZH[r.status] || r.status) + '</span></td>') +
+          (cust ? '<td>' + esc(r.account) + '</td>' : '<td><span class="tag ' + STATUS_TAG[r.statusGroup] + '">' + esc(STATUS_ZH()[r.status] || r.status) + '</span></td>') +
           '<td class="num">' + qtyS(r) + '</td><td class="num">' + usd(r.list) + '</td><td class="num"><b>' + usd(r.unit) + '</b></td><td class="num">' + pctPlain(r.list ? 1 - r.unit / r.list : null) + '</td></tr>';
       }).join('') + '</tbody></table></div>';
   }
@@ -992,20 +1013,20 @@ svg.spark circle { fill: var(--spark); }
 
   // ------------------------------------------------------------ copy
   function copyTable() {
-    var head = ['Part', 'Family', '分類', '上次 PC', '上次 PC 日期', '上次特價', '再之前特價', '變動', '判斷', '原因', '建議加幅 %', '加幅來源', '建議特價', '最新牌價', 'Std disc %', '標準淨價'];
+    var head = ['Part', 'Family', T('分類', 'Category'), T('上次 PC', 'Last PC'), T('上次 PC 日期', 'Last PC date'), T('上次特價', 'Last price'), T('再之前特價', 'Price before'), T('變動', 'Change'), T('判斷', 'Decision'), T('原因', 'Reason'), T('建議加幅 %', 'Uplift %'), T('加幅來源', 'Uplift source'), T('建議特價', 'Suggested price'), T('最新牌價', 'Latest list'), 'Std disc %', T('標準淨價', 'Standard net')];
     var lines = [head].concat(S.cur.map(function (r) {
       return [r.part, r.info ? r.info.family : '', r.info ? CAT_LABEL[r.info.cat] : '', r.last ? r.last.pc : '', r.last ? E.iso(r.last.created) : '',
-        r.last ? r.last.unit : '', r.prev ? r.prev.unit : '', r.lift != null ? (r.lift * 100).toFixed(2) + '%' : '', STATE[r.state].short,
-        r.steps.map(function (x) { return stepText(x, true); }).join('；'),
-        r.rate != null ? r.rate : '', r.rateSource === 'list' ? '牌價變動' : r.rateSource === 'rule' ? '規則' : '', r.suggested != null ? r.suggested : '',
+        r.last ? r.last.unit : '', r.prev ? r.prev.unit : '', r.lift != null ? (r.lift * 100).toFixed(2) + '%' : '', STATE()[r.state].short,
+        r.steps.map(function (x) { return stepText(x, true); }).join(T('；', '; ')),
+        r.rate != null ? r.rate : '', r.rateSource === 'list' ? T('牌價變動', 'List price change') : r.rateSource === 'rule' ? T('規則', 'Rule') : '', r.suggested != null ? r.suggested : '',
         r.latest ? r.latest.list : '', r.latest && r.latest.stdDisc != null ? r.latest.stdDisc : '', r.newStdNet != null ? r.newStdNet : ''];
     }));
     var tsv = lines.map(function (l) { return l.join('\t'); }).join('\n');
-    var done = function () { toast('已複製，可以貼去 Excel。'); };
+    var done = function () { toast(T('已複製，可以貼去 Excel。', 'Copied. Paste into Excel.')); };
     var fallback = function () {
       var ta = document.createElement('textarea');
       ta.value = tsv; document.body.appendChild(ta); ta.select();
-      try { document.execCommand('copy'); done(); } catch (e) { toast('瀏覽器唔俾複製，請手動選取表格。'); }
+      try { document.execCommand('copy'); done(); } catch (e) { toast(T('瀏覽器唔俾複製，請手動選取表格。', 'The browser blocked copying. Select the table and copy it.')); }
       ta.remove();
     };
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(tsv).then(done, fallback);
@@ -1036,14 +1057,20 @@ svg.spark circle { fill: var(--spark); }
     if (t.id === 'clearParts') { S.parts = ''; LS.set('zpc.parts', ''); return renderView(); }
     if (t.id === 'moreBtn') { S.limit = 1e9; return renderView(); }
     if (t.id === 'addEvent') {
-      S.rules.events.push({ id: 'e' + Date.now(), label: '新加價', date: new Date().toISOString().slice(0, 10), rates: {} });
+      S.rules.events.push({ id: 'e' + Date.now(), label: T('新加價', 'New increase'), date: new Date().toISOString().slice(0, 10), rates: {} });
       saveRules(); return renderView();
     }
     if (t.dataset.delev) {
       S.rules.events = S.rules.events.filter(function (e) { return e.id !== t.dataset.delev; });
-      saveRules(); toast('已刪除加價日'); return renderView();
+      saveRules(); toast(T('已刪除加價日', 'Increase date deleted')); return renderView();
     }
-    if (t.id === 'resetRules') { S.rules = defaultRules(); saveRules(); toast('已還原預設規則'); return renderView(); }
+    if (t.id === 'resetRules') { S.rules = defaultRules(); saveRules(); toast(T('已還原預設規則', 'Rules reset to defaults')); return renderView(); }
+    if (t.dataset.lang) {
+      LANG = t.dataset.lang === 'en' ? 'en' : 'zh';
+      LS.set('zpc.lang', LANG);
+      render();
+      return closeSheet();
+    }
     if (t.dataset.region) { S.region = t.dataset.region; LS.set('zpc.region.v2', S.region); return applyRegion(); }
     if (t.dataset.tab) { S.tab = t.dataset.tab; LS.set('zpc.tab', S.tab); S.limit = 300; renderTabs(); return renderView(); }
     if (t.dataset.acct) return setAcct(t.dataset.acct);
