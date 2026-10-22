@@ -617,7 +617,7 @@ tr.fc-future td { color: var(--ink-3); }
   // and stay in this browser like the rest of the app's data.
   var FC_KEY = 'zhk.forecast.v1', FC_WEEKS = 13;
   var FC = LS.get(FC_KEY, { q: {} });
-  var FC_FIELDS = [['fcst', 'Forecast'], ['secure', 'Secure'], ['won', 'Won'], ['validate', 'Validate'], ['qualify', 'Qualify'], ['rfid', 'RFID']];
+  var FC_FIELDS = [['fcst', 'Forecast'], ['secure', 'Secure'], ['won', 'Won'], ['validate', 'Validate'], ['qualify', 'Qualify'], ['rfid', 'RFID target']];
   var FC_PIPE = { secure: 1, won: 1, validate: 1, qualify: 1 };
   var FC_FIRST_WEEK = { 1: 2, 2: 15, 3: 28, 4: 41 };
   function fcSave() { LS.set(FC_KEY, FC); }
@@ -660,7 +660,7 @@ tr.fc-future td { color: var(--ink-3); }
   var span = function (w) { return w.from.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + ' – ' + w.to.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }); };
 
   function fcRows(fq) {
-    var c = fcQuarter(fq), lastF = null, prevSW = null;
+    var c = fcQuarter(fq), lastF = null, lastR = null, prevSW = null;
     return fcWeeks(fq).map(function (w) {
       var e = c.weeks[w.no] || null, r = { w: w, e: e };
       var f = e && e.fcst != null ? e.fcst : null;
@@ -668,6 +668,12 @@ tr.fc-future td { color: var(--ink-3); }
       r.fcstWoW = r.fcstOwn && lastF != null ? f - lastF : null;
       if (f != null) lastF = f;
       r.fcst = lastF;   // the forecast submitted earlier in the quarter carries forward
+      // RFID target is keyed in separately from quota and can change within the quarter
+      var rt = e && e.rfid != null ? e.rfid : null;
+      r.rfidOwn = rt != null;
+      r.rfidWoW = r.rfidOwn && lastR != null ? rt - lastR : null;
+      if (rt != null) lastR = rt;
+      r.rfid = lastR;
       r.has = !!(e && (e.secure != null || e.won != null));
       if (r.has) {
         r.sw = (e.secure || 0) + (e.won || 0);
@@ -690,7 +696,7 @@ tr.fc-future td { color: var(--ink-3); }
   function viewForecast() {
     if (!fqParts(S.fcQ)) S.fcQ = currentFq();
     var fq = S.fcQ, c = fcQuarter(fq), weeks = fcWeeks(fq), si = fcSelIdx(fq), w = weeks[si], ti = fcTodayIdx(fq);
-    var e = c.weeks[w.no] || {}, pipe = fcPipe(fq), carried = fcRows(fq)[si].fcst;
+    var e = c.weeks[w.no] || {}, pipe = fcPipe(fq), selRow = fcRows(fq)[si], carried = { fcst: selRow.fcst, rfid: selRow.rfid };
     var qs = {};
     [fqShift(currentFq(), -1), currentFq(), nextFq()].concat(Object.keys(FC.q)).forEach(function (q) { if (fqParts(q)) qs[q] = 1; });
     var qOpts = Object.keys(qs).sort().reverse().map(function (q) { return [q, q + (q === currentFq() ? ' (this quarter)' : '')]; });
@@ -706,7 +712,7 @@ tr.fc-future td { color: var(--ink-3); }
       '<div class="hd"><h2 style="font-size:1.15rem">Update ' + esc(fcLabel(fq, w.no)) + '</h2><span class="faint">' + esc(span(w)) + (si === ti ? ' · this week' : '') + '</span></div>' +
       '<div class="fc-fields">' + FC_FIELDS.map(function (f) {
         var pv = pipe && FC_PIPE[f[0]] ? pipe[f[0]] : null;
-        var ph = f[0] === 'fcst' && e.fcst == null && carried != null ? ' placeholder="' + kIn(carried) + ' (carried)"' : '';
+        var ph = carried[f[0]] != null && e[f[0]] == null ? ' placeholder="' + kIn(carried[f[0]]) + ' (carried)"' : '';
         return '<label><span class="label">' + f[1] + '</span><input id="fc-v-' + f[0] + '" data-fc="' + f[0] + '" type="number" step="any" inputmode="decimal" value="' + kIn(e[f[0]]) + '"' + ph + '>' +
           (pv != null ? '<span class="pipe" data-pipe="' + f[0] + '">Pipeline file: ' + k0(pv) + '</span>' : '') + '</label>';
       }).join('') + '</div>' +
@@ -716,7 +722,7 @@ tr.fc-future td { color: var(--ink-3); }
       (pipe ? '<div class="faint" style="font-size:.8rem">Pipeline file: ' + esc((S.ds.sources.pipeline || []).join(', ').replace(/^[0-9a-f]{8}-/, '')) + ' · ' + pipe.lines + ' lines scheduled in ' + esc(fq) + ', -F / -R opps included.</div>' : '') +
       '</section><section class="fc-card" id="fcResult" aria-label="Result">' + fcResultHtml(fq) + '</section></div>';
     h += '<div class="tablebox" id="fcTable">' + fcTableHtml(fq) + '</div>';
-    h += '<p class="faint" style="font-size:.82rem;margin:0">Forecast carries forward from the last week you entered it (shown grey). vs forecast = Secure + Won − forecast. Gap = quota − (Secure + Won). Saved in this browser only.</p>';
+    h += '<p class="faint" style="font-size:.82rem;margin:0">Forecast and RFID target carry forward from the last week you entered them (shown grey). vs forecast = Secure + Won − forecast. Gap = quota − (Secure + Won). Saved in this browser only.</p>';
     return h + '</div>';
   }
 
@@ -741,9 +747,9 @@ tr.fc-future td { color: var(--ink-3); }
     var c = fcQuarter(fq), rows = fcRows(fq), si = fcSelIdx(fq), ti = fcTodayIdx(fq);
     var cell = function (v, extra) { return '<td class="fcn' + (extra || '') + '">' + v + '</td>'; };
     var h = '<table><thead><tr><th>Week</th><th class="fcn">Quota</th><th class="fcn">Forecast</th><th class="fcn">Fcst WoW</th><th class="fcn">Secure</th><th class="fcn">Won</th>' +
-      '<th class="fcn">Secure + Won</th><th class="fcn">vs Forecast</th><th class="fcn">% of quota</th><th class="fcn">Gap</th><th class="fcn">RFID</th><th class="fcn">Validate</th><th class="fcn">Qualify</th><th class="fcn">V + Q</th><th>Updated</th></tr></thead><tbody>';
+      '<th class="fcn">Secure + Won</th><th class="fcn">vs Forecast</th><th class="fcn">% of quota</th><th class="fcn">Gap</th><th class="fcn">RFID target</th><th class="fcn">RFID WoW</th><th class="fcn">Validate</th><th class="fcn">Qualify</th><th class="fcn">V + Q</th><th>Updated</th></tr></thead><tbody>';
     rows.forEach(function (r, i) {
-      var e = r.e || {}, future = i > ti && !r.has && !r.fcstOwn;
+      var e = r.e || {}, future = i > ti && !r.has && !r.fcstOwn && !r.rfidOwn;
       var trc = [i === ti ? 'fc-now' : '', i === si ? 'fc-sel' : '', future ? 'fc-future' : ''].join(' ').trim();
       h += '<tr' + (trc ? ' class="' + trc + '"' : '') + '><td><button class="linkbtn" data-fcweek="' + i + '" title="' + esc(span(r.w)) + '">' + esc(fcLabel(fq, r.w.no)) + '</button></td>' +
         cell(k0(c.quota)) +
@@ -754,7 +760,9 @@ tr.fc-future td { color: var(--ink-3); }
         cell(r.has ? kSigned(r.vsF) : '—', r.has ? signCls(r.vsF) : '') +
         cell(r.pct != null ? (r.pct * 100).toFixed(2) + '%' : '—') +
         cell(r.has ? k0(r.gap) : '—') +
-        cell(k0(e.rfid)) + cell(k0(e.validate)) + cell(k0(e.qualify)) + cell(k0(r.vq)) +
+        cell(future && !r.rfidOwn ? '—' : k0(r.rfid), r.rfid != null && !r.rfidOwn ? ' carried' : '') +
+        cell(kSigned(r.rfidWoW), signCls(r.rfidWoW)) +
+        cell(k0(e.validate)) + cell(k0(e.qualify)) + cell(k0(r.vq)) +
         '<td class="faint" style="white-space:nowrap">' + (e.at ? esc(new Date(e.at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })) : '') + '</td></tr>';
     });
     return h + '</tbody></table>';
@@ -1113,10 +1121,10 @@ tr.fc-future td { color: var(--ink-3); }
     Object.keys(FC.q).sort().forEach(function (q) {
       fcRows(q).forEach(function (r) {
         var en = r.e || {};
-        if (!r.has && !r.fcstOwn) return;
+        if (!r.has && !r.fcstOwn && !r.rfidOwn) return;
         fcOut.push({ 'Week': fcLabel(q, r.w.no), 'Week starts': isoDay(r.w.from), 'Quota $K': FC.q[q].quota, 'Forecast $K': r.fcst, 'Forecast WoW': r.fcstWoW,
           'Secure $K': en.secure, 'Won $K': en.won, 'Secure + Won $K': r.sw, 'vs Forecast $K': r.vsF, '% of quota': r.pct, 'Gap $K': r.gap,
-          'RFID $K': en.rfid, 'Validate $K': en.validate, 'Qualify $K': en.qualify, 'V + Q $K': r.vq });
+          'RFID target $K': r.rfid, 'RFID target WoW': r.rfidWoW, 'Validate $K': en.validate, 'Qualify $K': en.qualify, 'V + Q $K': r.vq });
       });
     });
     if (fcOut.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(fcOut), 'Forecast tracker');

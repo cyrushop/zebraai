@@ -33,8 +33,9 @@ The **Forecast tracker** tab follows Secure + Won week by week against the forec
 
 - Set the quarter's quota, the date week 1 starts and its week number (default: first Monday of the quarter; W2, W15, W28, W41 for Q1–Q4).
 - For the current week, type the latest Secure and Won from SFDC, plus the forecast when you submit it. The forecast carries forward to later weeks until you enter a new one.
+- The RFID target is keyed in separately (it is not part of quota) and can change within the quarter. Like the forecast, it carries forward until you enter a new one, and the table shows its week-on-week change.
 - The tab shows Secure + Won above or below the forecast, % of quota, the gap to quota, and what changed since your last entry.
-- **Fill from pipeline file** copies Secure, Won, Validate and Qualify from the uploaded pipeline (lines scheduled in the quarter, `-F` / `-R` opps included). The pipeline figure is also shown under each box, so you can see how far the file is behind SFDC.
+- **Fill from pipeline file** copies Secure, Won, Validate and Qualify from the uploaded pipeline (lines whose Schedule Date falls in the quarter, `-F` / `-R` opps included). The pipeline figure is also shown under each box, so you can see how far the file is behind SFDC.
 
 Entries stay in this browser (localStorage). **Export .xlsx** adds them as a *Forecast tracker* sheet.
 
