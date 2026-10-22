@@ -70,6 +70,8 @@ The 地區 buttons above the tabs show all regions or one region at a time (Hong
 | 客戶紀錄 | Every part a customer has had on a PC, first vs latest price and the trend. |
 | 加價規則 | Edit the rates and the "already raised" test. Saved in the browser. |
 
+Customers and parts can be typed or picked from dropdowns: customers list the 15 with the most PCs first, then all A–Z; parts are grouped by rule category, and the 加價檢查 tab can add the chosen customer's parts one by one. The 客戶紀錄 tab can hide parts with only one PC. A collapsible strip on 加價檢查 shows the current rules.
+
 **How the uplift is worked out.** The baseline is the customer's latest Approved or Expired PC for the part (Pending too, if switched on). Each price-increase event is checked against it:
 
 - Last PC before the event: the increase is not passed on yet, so the event's rate is added.

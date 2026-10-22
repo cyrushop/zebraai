@@ -106,10 +106,20 @@ a { color: var(--accent); }
 .tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
 
 .query { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px 16px; align-items: start; }
-.query .field { display: grid; gap: 4px; min-width: 0; }
+.query .field { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; min-width: 0; }
 .query input[type=search], .query textarea, .rules input, .rules select {
   width: 100%; border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 7px 10px;
 }
+.combo { display: flex; flex-wrap: wrap; gap: 8px; }
+.combo > input { flex: 1 1 220px; min-width: 0; }
+.combo > select { flex: 1 1 200px; min-width: 0; max-width: 100%; width: 100%; text-overflow: ellipsis; }
+.query select { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 7px 8px; }
+#view { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+#view > * { min-width: 0; }
+.rulestrip summary { cursor: pointer; width: max-content; max-width: 100%; }
+.rulestrip .chips { display: flex; flex-wrap: wrap; gap: 6px 8px; margin-top: 6px; }
+.rulechip { font-size: .8rem; border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 3px 10px; color: var(--ink-2); }
+.rulechip b { color: var(--ink); font-weight: 600; }
 .query textarea { min-height: 76px; height: 76px; resize: vertical; font-family: var(--f-mono); font-size: .86rem; }
 .query .opts { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
 .query label.chk { display: inline-flex; gap: 6px; align-items: center; color: var(--ink-2); }
@@ -320,6 +330,7 @@ svg.spark circle { fill: var(--spark); }
     part: LS.get('zpc.part', ''),
     partQ: '',
     onlyGranted: LS.get('zpc.onlyGranted', true),
+    multiOnly: LS.get('zpc.multiOnly', false),
     rules: loadRules(),
     cur: [],
     limit: 300
@@ -489,9 +500,47 @@ svg.spark circle { fill: var(--spark); }
   function acctPicker(idPrefix) {
     var a = S.acct ? S.idx.accounts.filter(function (x) { return x.key === S.acct; })[0] : null;
     var q = S.acctQ;
-    var html = '<div class="field"><label class="label" for="' + idPrefix + 'Acct">客戶（名或 Siebel account no.）</label>' +
-      '<input type="search" id="' + idPrefix + 'Acct" data-acctq value="' + esc(q || (a ? a.name : '')) + '" placeholder="輸入公司名或 Siebel account no." autocomplete="off"></div>';
+    var html = '<div class="field"><label class="label" for="' + idPrefix + 'Acct">客戶：打字搵，或者喺右邊揀</label><div class="combo">' +
+      '<input type="search" id="' + idPrefix + 'Acct" data-acctq value="' + esc(q || (a ? a.name : '')) + '" placeholder="輸入公司名或 Siebel account no." autocomplete="off">' +
+      '<select id="' + idPrefix + 'AcctSel" data-acctsel aria-label="揀客戶">' + acctOptions() + '</select></div></div>';
     return { html: html, acct: a };
+  }
+  // Dropdown: the 15 customers with the most PCs first, then everyone A–Z.
+  function acctOptions() {
+    var accs = S.idx.accounts, dup = {};
+    accs.forEach(function (a) { var k = a.name.toUpperCase(); dup[k] = (dup[k] || 0) + 1; });
+    var opt = function (a) {
+      return '<option value="' + esc(a.key) + '"' + (a.key === S.acct ? ' selected' : '') + '>' + esc(a.name) +
+        (dup[a.name.toUpperCase()] > 1 && a.no ? '（' + esc(a.no) + '）' : '') + ' · ' + a.pcCount + ' 張 PC</option>';
+    };
+    var top = accs.slice().sort(function (x, y) { return y.pcCount - x.pcCount || (+y.last || 0) - (+x.last || 0); }).slice(0, 15);
+    var all = accs.slice().sort(function (x, y) { return x.name.localeCompare(y.name, 'en', { sensitivity: 'base' }); });
+    return '<option value=""' + (S.acct ? '' : ' selected') + '>▼ 揀客戶（' + accs.length + ' 間）</option>' +
+      '<optgroup label="最多 PC">' + top.map(opt).join('') + '</optgroup>' +
+      '<optgroup label="全部客戶（A–Z）">' + all.map(opt).join('') + '</optgroup>';
+  }
+  // Dropdown of parts grouped by rule category; `parts` limits it (e.g. one customer's parts).
+  function partOptions(parts, placeholder, selected) {
+    var by = {};
+    parts.forEach(function (p) { var c = S.idx.info[p] ? S.idx.info[p].cat : 'other'; (by[c] = by[c] || []).push(p); });
+    return '<option value="">' + placeholder + '</option>' + E.CATEGORIES.filter(function (c) { return by[c.id]; }).map(function (c) {
+      return '<optgroup label="' + esc(c.label) + '">' + by[c.id].sort().map(function (p) {
+        return '<option value="' + esc(p) + '"' + (p === selected ? ' selected' : '') + '>' + esc(p) + ' · ' + esc(S.idx.info[p].family) + '</option>';
+      }).join('') + '</optgroup>';
+    }).join('');
+  }
+  // Current rules in one line per category, so the uplift is visible without opening the rules tab.
+  function ruleStrip() {
+    var evs = eventsSorted();
+    var chips = E.CATEGORIES.map(function (c) {
+      var parts = evs.filter(function (e) { return e.rates[c.id] != null && e.rates[c.id] !== ''; }).map(function (e) { return esc(e.label) + ' +' + e.rates[c.id] + '%'; });
+      var rp = S.rules.rp[c.id];
+      if (rp != null && rp !== '') parts.push('RP +' + rp + '%');
+      return parts.length ? '<span class="rulechip"><b>' + esc(c.label) + '</b>：' + parts.join(' · ') + '</span>' : '';
+    }).join('');
+    var open = LS.get('zpc.ruleOpen', null);
+    if (open === null) open = window.innerWidth > 720;
+    return '<details class="rulestrip" id="ruleStrip"' + (open ? ' open' : '') + '><summary class="label">加價規則一覽</summary><div class="chips">' + chips + '</div></details>';
   }
   function regionHint() {
     return S.region === 'all' ? '' : '（而家只睇 ' + esc(REGION_ZH[S.region] || S.region) + '，可以揀「全部」）';
@@ -520,9 +569,13 @@ svg.spark circle { fill: var(--spark); }
   // ---- 加價檢查
   function checkView() {
     var p = acctPicker('c');
-    var html = '<section class="query">' + p.html +
+    var myParts = p.acct ? Object.keys((S.idx.byAcct[S.acct] || []).reduce(function (m, r) { m[r.part] = 1; return m; }, {})) : [];
+    var html = ruleStrip() + '<section class="query">' + p.html +
       '<div class="field"><label class="label" for="cParts">今次 PC 產品編號（可留空 = 呢個客戶做過的全部產品）</label>' +
-      '<textarea id="cParts" placeholder="TC530E-0T1E6B1B00-A6&#10;CRD-NGTC5N-5SC4B">' + esc(S.parts) + '</textarea></div>' +
+      '<textarea id="cParts" placeholder="TC530E-0T1E6B1B00-A6&#10;CRD-NGTC5N-5SC4B">' + esc(S.parts) + '</textarea>' +
+      '<div class="combo"><select id="cPartSel" data-addpart aria-label="加入產品">' +
+      partOptions(myParts.length ? myParts : S.idx.parts, myParts.length ? '＋ 加入呢個客戶做過的產品（' + myParts.length + ' 個）' : '＋ 加入產品（' + S.idx.parts.length + ' 個）') +
+      '</select>' + (S.parts.trim() ? '<button class="btn small" id="clearParts">清空產品</button>' : '') + '</div></div>' +
       '<div class="opts"><label class="chk"><input type="checkbox" id="optPending"' + (S.rules.includePending ? ' checked' : '') + '> 審批中的 PC 都當「上次 PC」</label>' +
       '<span class="faint small">判斷規則同加幅可以喺「加價規則」改。</span></div></section>';
     if (!p.acct) return html + acctPicks() + (S.acctQ.trim() ? '' : '<div class="empty">揀一個客戶開始。</div>');
@@ -580,8 +633,9 @@ svg.spark circle { fill: var(--spark); }
 
   // ---- 產品紀錄
   function partView() {
-    var html = '<section class="query"><div class="field"><label class="label" for="pQ">產品編號</label>' +
-      '<input type="search" id="pQ" value="' + esc(S.partQ) + '" placeholder="例如 TC530E、DS2278、ZD421" autocomplete="off"></div>' +
+    var html = '<section class="query"><div class="field"><label class="label" for="pQ">產品編號：打字搵，或者喺右邊揀</label><div class="combo">' +
+      '<input type="search" id="pQ" value="' + esc(S.partQ) + '" placeholder="例如 TC530E、DS2278、ZD421" autocomplete="off">' +
+      '<select id="pPartSel" data-partsel aria-label="揀產品">' + partOptions(S.idx.parts, '▼ 揀產品（' + S.idx.parts.length + ' 個）', S.part || S.partQ.trim().toUpperCase()) + '</select></div></div>' +
       '<div class="opts"><label class="chk"><input type="checkbox" id="optGranted"' + (S.onlyGranted ? ' checked' : '') + '> 只顯示已批的 PC</label></div></section>';
     var q = S.partQ.trim();
     if (!q) return html + '<div class="empty">輸入產品編號（打頭幾個字都得）。</div>';
@@ -638,7 +692,8 @@ svg.spark circle { fill: var(--spark); }
   // ---- 客戶紀錄
   function custView() {
     var p = acctPicker('u');
-    var html = '<section class="query">' + p.html + '<div class="opts"><label class="chk"><input type="checkbox" id="optGranted"' + (S.onlyGranted ? ' checked' : '') + '> 只計已批的 PC</label></div></section>';
+    var html = '<section class="query">' + p.html + '<div class="opts"><label class="chk"><input type="checkbox" id="optGranted"' + (S.onlyGranted ? ' checked' : '') + '> 只計已批的 PC</label>' +
+      '<label class="chk"><input type="checkbox" id="optMulti"' + (S.multiOnly ? ' checked' : '') + '> 只顯示做過多次 PC 的產品</label></div></section>';
     if (!p.acct) return html + acctPicks() + (S.acctQ.trim() ? '' : '<div class="empty">揀一個客戶睇佢做過特價的產品同價錢變化。</div>');
     var rows = (S.idx.byAcct[S.acct] || []).filter(function (r) { return !S.onlyGranted || r.statusGroup === 'approved'; });
     var by = {};
@@ -647,8 +702,10 @@ svg.spark circle { fill: var(--spark); }
       var h = by[k].slice().sort(function (a, b) { return +a.created - +b.created; });
       return { part: k, h: h, first: h[0], last: h[h.length - 1], pcs: Object.keys(h.reduce(function (m, r) { m[r.pc] = 1; return m; }, {})).length };
     }).sort(function (a, b) { return +b.last.created - +a.last.created; });
+    var allCount = list.length;
+    if (S.multiOnly) list = list.filter(function (x) { return x.pcs > 1; });
     S.cur = list;
-    html += acctHead(p.acct, '<div class="kpis">' + kpi(list.length, '個產品做過特價') +
+    html += acctHead(p.acct, '<div class="kpis">' + kpi(allCount, '個產品做過特價') + (S.multiOnly ? kpi(list.length, '個做過多次') : '') +
       kpi(list.filter(function (x) { return x.last.unit > x.first.unit + 1e-9; }).length, '個加過價') +
       kpi(list.filter(function (x) { return x.last.unit < x.first.unit - 1e-9; }).length, '個減過價') + '</div>');
     var body = list.map(function (x, i) {
@@ -797,6 +854,7 @@ svg.spark circle { fill: var(--spark); }
     if (t.id === 'demoBtn') { S.sample = true; setData(sampleRows(), { name: 'demo' }); S.acct = 'DEMO1'; S.tab = 'check'; return render(); }
     if (t.id === 'closeSheet') return closeSheet();
     if (t.id === 'copyBtn') return copyTable();
+    if (t.id === 'clearParts') { S.parts = ''; LS.set('zpc.parts', ''); return renderView(); }
     if (t.id === 'moreBtn') { S.limit = 1e9; return renderView(); }
     if (t.id === 'addEvent') {
       S.rules.events.push({ id: 'e' + Date.now(), label: '新加價', date: new Date().toISOString().slice(0, 10), rates: {} });
@@ -821,10 +879,18 @@ svg.spark circle { fill: var(--spark); }
     if (e.key === 'Enter' && e.target.matches && e.target.matches('tr.click')) e.target.click();
   });
   $('#sheetBg').addEventListener('click', closeSheet);
+  document.addEventListener('toggle', function (e) { if (e.target.id === 'ruleStrip') LS.set('zpc.ruleOpen', e.target.open); }, true);
   document.addEventListener('change', function (e) {
     var t = e.target, id = t.id;
     if (id === 'fileInput') { handleFiles(t.files); t.value = ''; return; }
     if (id === 'optPending') { S.rules.includePending = t.checked; saveRules(); return renderView(); }
+    if (t.hasAttribute('data-acctsel')) { if (t.value) setAcct(t.value); return; }
+    if (t.hasAttribute('data-partsel')) { if (t.value) { S.part = S.partQ = t.value; S.limit = 300; LS.set('zpc.part', S.part); renderView(); } return; }
+    if (t.hasAttribute('data-addpart')) {
+      if (t.value && E.parsePartList(S.parts).indexOf(t.value) < 0) { S.parts = (S.parts.trim() ? S.parts.replace(/\s+$/, '') + '\n' : '') + t.value; LS.set('zpc.parts', S.parts); }
+      return renderView();
+    }
+    if (id === 'optMulti') { S.multiOnly = t.checked; LS.set('zpc.multiOnly', S.multiOnly); return renderView(); }
     if (id === 'optGranted') { S.onlyGranted = t.checked; LS.set('zpc.onlyGranted', S.onlyGranted); return renderView(); }
     if (id === 'rFrom') { S.rules.liftFrom = t.value; return saveRules(); }
     if (id === 'rThr') { S.rules.liftThreshold = t.value === '' ? 0 : +t.value; return saveRules(); }
