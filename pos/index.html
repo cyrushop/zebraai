@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Zebra HK Sell-out</title>
+<style>
+  /* Layout: one column; header, file bar, tabs, then a grid of chart cards. */
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --fg: #1b1f27; --muted: #5d6573; --line: #dfe3ea;
+    --axis: #9aa3b2; --grid: #eceff4; --ok: #1d7a4a; --bad: #b3261e; --focus: #2457c5;
+    --s1: #2457c5; --s2: #e07b24; --s3: #2a9d8f; --s4: #c2417a; --s5: #7b5bd6; --s6: #8a8f25; --s7: #5d6573; --s8: #c9a227;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --radius: 10px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151b; --panel: #1a1e26; --fg: #e8ebf0; --muted: #9aa3b2; --line: #2b313c;
+      --axis: #5d6573; --grid: #242a34; --ok: #5cc28c; --bad: #f08a80; --focus: #8fb0ff;
+      --s1: #6f9bff; --s2: #f0a15c; --s3: #4cc2b4; --s4: #e57aa8; --s5: #a790f0; --s6: #c3c85a; --s7: #9aa3b2; --s8: #e6c75a;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.45 var(--sans); }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 24px max(16px, env(safe-area-inset-right)) 48px max(16px, env(safe-area-inset-left)); display: grid; gap: 18px; }
+  h1 { margin: 0; font-size: 26px; font-weight: 600; text-wrap: balance; }
+  .take { margin: 4px 0 0; color: var(--muted); max-width: 75ch; }
+  .take b { color: var(--fg); }
+  .files { background: var(--panel); border: 1px dashed var(--line); border-radius: var(--radius); padding: 14px 16px; display: grid; gap: 10px; }
+  .files.drag { border-color: var(--focus); }
+  .files-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .btn { font: inherit; border: 1px solid var(--line); background: var(--bg); color: var(--fg); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  .btn:hover { border-color: var(--axis); }
+  .btn:focus-visible, .seg button:focus-visible, th button:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+  .muted { color: var(--muted); font-size: 12px; }
+  .used { margin: 0; padding-left: 18px; font-size: 12px; color: var(--muted); display: grid; gap: 2px; }
+  .used b { color: var(--fg); font-weight: 600; }
+  .bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
+  .seg { display: flex; flex-wrap: wrap; gap: 4px; padding: 3px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+  .seg button { font: inherit; font-size: 13px; border: 0; background: transparent; color: var(--muted); padding: 6px 12px; border-radius: 7px; cursor: pointer; }
+  .seg button[aria-selected="true"], .seg button[aria-pressed="true"] { background: var(--bg); color: var(--fg); box-shadow: 0 0 0 1px var(--line); }
+  .kpis { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr)); }
+  .kpi { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 16px; display: grid; gap: 2px; }
+  .kpi-l { font-size: 12px; color: var(--muted); }
+  .kpi-v { font-size: 26px; font-variant-numeric: tabular-nums; }
+  .kpi-d { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .up { color: var(--ok); } .down { color: var(--bad); }
+  .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr)); }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; display: grid; gap: 8px; align-content: start; min-width: 0; }
+  .card.wide { grid-column: 1 / -1; }
+  .card h2 { margin: 0; font-size: 15px; font-weight: 600; }
+  .note { margin: 0; font-size: 12px; color: var(--muted); }
+  .chart { position: relative; min-height: 160px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--muted); }
+  .zc-leg { display: inline-flex; align-items: center; gap: 6px; }
+  .zc-sw { width: 10px; height: 10px; border-radius: 3px; display: inline-block; flex: none; }
+  .zc-tick { fill: var(--muted); font-size: 12px; font-family: var(--sans); }
+  .zc-note { font-style: italic; }
+  .zc-val { fill: var(--fg); font-size: 12px; font-family: var(--sans); font-variant-numeric: tabular-nums; }
+  .zc-in { fill: #fff; font-size: 11px; font-weight: 600; font-family: var(--sans); }
+  .zc-tip { position: absolute; z-index: 5; pointer-events: none; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 20px rgb(0 0 0 / .15); padding: 6px 10px; font-size: 12px; display: grid; gap: 3px; min-width: 9rem; max-width: 18rem; }
+  .zc-tip-h { color: var(--muted); }
+  .zc-tip-r { display: flex; align-items: center; gap: 6px; }
+  .zc-tip-n { flex: 1; }
+  .zc-tip-v { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .tbox { max-height: 26rem; overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+  table { border-collapse: collapse; width: 100%; font-size: 12px; font-variant-numeric: tabular-nums; }
+  th { position: sticky; top: 0; background: var(--panel); text-align: left; border-bottom: 1px solid var(--line); padding: 0; white-space: nowrap; }
+  th button { font: inherit; font-weight: 600; color: var(--fg); background: transparent; border: 0; padding: 8px 10px; cursor: pointer; width: 100%; text-align: inherit; }
+  th[data-num] { text-align: right; }
+  th[aria-sort="ascending"] button::after { content: " ↑"; }
+  th[aria-sort="descending"] button::after { content: " ↓"; }
+  td { padding: 7px 10px; border-bottom: 1px solid var(--line); }
+  td.zc-numc { text-align: right; white-space: nowrap; }
+  td.zc-up { color: var(--ok); } td.zc-down { color: var(--bad); }
+  .empty { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 28px 20px; color: var(--muted); }
+  .empty ol { margin: 8px 0 0; padding-left: 18px; }
+  ul.notes { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 13px; max-width: 80ch; }
+  @media (max-width: 640px) { .hide-narrow { display: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Zebra Hong Kong sell-out</h1>
+    <p class="take" id="takeaway">Add your POS Excel files to see the analysis.</p>
+  </header>
+
+  <section class="files" id="drop" aria-label="Files">
+    <div class="files-row">
+      <label class="btn" for="file-input">Add Excel files</label>
+      <input id="file-input" type="file" accept=".xlsx,.xls" multiple hidden>
+      <button class="btn" id="btn-csv" type="button" disabled>Download combined CSV</button>
+      <button class="btn" id="btn-clear" type="button" disabled>Clear data</button>
+      <span class="muted" id="status">Drop the yearly POS exports here. Files stay in this browser.</span>
+    </div>
+    <ul class="used" id="used"></ul>
+  </section>
+
+  <div class="empty" id="empty">
+    <b>No data loaded.</b>
+    <ol>
+      <li>Add one export per year: BI extracts (NetAmount_After_Rebate) or POS detail files (SIP After rebate).</li>
+      <li>The page finds the data sheet and the columns itself. When two files cover the same year, the one with more quarters is used.</li>
+      <li>Everything is read in this browser and kept here until you clear it.</li>
+    </ol>
+  </div>
+
+  <main id="main" hidden>
+    <div class="bar">
+      <div class="seg" role="tablist" aria-label="Sections">
+        <button role="tab" id="tab-overview" data-tab="overview" aria-selected="true">Overview</button>
+        <button role="tab" id="tab-products" data-tab="products" aria-selected="false">Products</button>
+        <button role="tab" id="tab-channel" data-tab="channel" aria-selected="false">Channel</button>
+        <button role="tab" id="tab-customers" data-tab="customers" aria-selected="false">Customers</button>
+        <button role="tab" id="tab-notes" data-tab="notes" aria-selected="false">Data notes</button>
+      </div>
+      <div class="seg" role="group" aria-label="Comparison period">
+        <button data-scope="all" aria-pressed="true">Full years</button>
+        <button data-scope="q4" aria-pressed="false">Q4 only</button>
+      </div>
+    </div>
+
+    <section id="overview" class="page" role="tabpanel" aria-labelledby="tab-overview" style="display:grid;gap:12px;margin-top:12px">
+      <div class="kpis">
+        <div class="kpi"><span class="kpi-l" id="k-sales-l">Sales</span><span class="kpi-v" id="k-sales">—</span><span class="kpi-d" id="k-sales-d">—</span></div>
+        <div class="kpi"><span class="kpi-l" id="k-q4-l">Q4 sales</span><span class="kpi-v" id="k-q4">—</span><span class="kpi-d" id="k-q4-d">—</span></div>
+        <div class="kpi"><span class="kpi-l" id="k-first-l">Against first year</span><span class="kpi-v" id="k-first">—</span><span class="kpi-d" id="k-first-d">—</span></div>
+        <div class="kpi"><span class="kpi-l" id="k-qty-l">Units</span><span class="kpi-v" id="k-qty">—</span><span class="kpi-d" id="k-qty-d">—</span></div>
+        <div class="kpi"><span class="kpi-l" id="k-eu-l">End users buying</span><span class="kpi-v" id="k-eu">—</span><span class="kpi-d" id="k-eu-d">—</span></div>
+      </div>
+      <div class="grid">
+        <div class="card"><h2>Sales by year</h2><p class="note" id="n-yearly"></p><div class="chart" id="ch-yearly"></div></div>
+        <div class="card"><h2>Sales by quarter</h2><p class="note">Every quarter loaded, coloured by year. Hover for the change against the same quarter a year earlier.</p><div class="chart" id="ch-quarterly"></div><div class="legend" id="lg-quarterly"></div></div>
+        <div class="card wide"><h2>AIT vs EVM</h2><p class="note">Sales by Zebra business division. AIT is printing and supplies; EVM is mobile computing, scanning and RFID.</p><div class="chart" id="ch-division"></div><div class="legend" id="lg-division"></div></div>
+      </div>
+    </section>
+
+    <section id="products" class="page" role="tabpanel" aria-labelledby="tab-products" hidden>
+      <div class="grid" style="margin-top:12px">
+        <div class="card"><h2>Product mix</h2><p class="note">Each year's sales split by product category. Hover a segment for the amount.</p><div class="chart" id="ch-catmix"></div><div class="legend" id="lg-catmix"></div></div>
+        <div class="card"><h2>Category sales by year</h2><p class="note">The same categories side by side, one bar per year.</p><div class="chart" id="ch-catyear"></div><div class="legend" id="lg-catyear"></div></div>
+        <div class="card wide"><h2>Top product families</h2><p class="note">The 20 largest families over all years loaded. Sort by any column.</p>
+          <div class="tbox"><table id="tb-families"><thead></thead><tbody></tbody></table></div></div>
+      </div>
+    </section>
+
+    <section id="channel" class="page" role="tabpanel" aria-labelledby="tab-channel" hidden>
+      <div class="grid" style="margin-top:12px">
+        <div class="card"><h2>Distributor share</h2><p class="note">Each year's sales by the distributor that submitted the line. Direct is DSR sell-in = sell-out (no distributor, or Tier 1).</p><div class="chart" id="ch-distmix"></div><div class="legend" id="lg-distmix"></div></div>
+        <div class="card"><h2>Distributor sales by year</h2><p class="note">One bar per year for each distributor.</p><div class="chart" id="ch-distyear"></div><div class="legend" id="lg-distyear"></div></div>
+        <div class="card wide"><h2>Top 10 resellers</h2><p class="note">Ranked by sales over all years loaded. Reseller names are spelled differently in some years.</p><div class="chart" id="ch-resellers"></div><div class="legend" id="lg-resellers"></div>
+          <div class="tbox"><table id="tb-resellers"><thead></thead><tbody></tbody></table></div></div>
+      </div>
+    </section>
+
+    <section id="customers" class="page" role="tabpanel" aria-labelledby="tab-customers" hidden>
+      <div class="grid" style="margin-top:12px">
+        <div class="card"><h2>New, retained and lost end users</h2><p class="note" id="n-churn"></p><div class="chart" id="ch-churn"></div><div class="legend" id="lg-churn"></div></div>
+        <div class="card"><h2>Sales by vertical</h2><p class="note">Only years whose files record a vertical. FY25 POS detail has none.</p><div class="chart" id="ch-vertical"></div><div class="legend" id="lg-vertical"></div></div>
+        <div class="card wide"><h2>Top 10 end users</h2><p class="note">Ranked by sales over all years loaded.</p><div class="chart" id="ch-endusers"></div><div class="legend" id="lg-endusers"></div>
+          <div class="tbox"><table id="tb-endusers"><thead></thead><tbody></tbody></table></div></div>
+      </div>
+    </section>
+
+    <section id="notes" class="page" role="tabpanel" aria-labelledby="tab-notes" hidden>
+      <div class="grid" style="margin-top:12px">
+        <div class="card"><h2>What each year covers</h2><p class="note">Quarters, sales and active accounts per year as loaded.</p>
+          <div class="tbox"><table id="tb-coverage"><thead></thead><tbody></tbody></table></div></div>
+        <div class="card"><h2>How the files are combined</h2>
+          <ul class="notes">
+            <li><b>Sales</b> is SIP / net amount after sell-out rebate, in USD: the one value every year's export carries.</li>
+            <li>Four layouts are recognised from their headers: BI extract (2021–2022), POS detail 2022, POS detail 2023–2024 and FY25 POS detail.</li>
+            <li>In a workbook, only the largest data sheet is read; smaller sheets with the same columns are pivot drill-downs.</li>
+            <li>When two files cover the same year, the one with more quarters (then more lines) is used. The file bar lists what was used and skipped.</li>
+            <li>Product lines are grouped into seven categories. Desktop, Tabletop and Mobile are barcode printers; RFID and RFID Devices are RFID.</li>
+            <li>Negative lines are credits or returns and are kept, so totals are net.</li>
+            <li>BI extracts use standardised end-user names and POS detail files use raw names, so customer counts and new/lost figures across that change are not like-for-like. Sales totals are.</li>
+          </ul></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script src="pos-engine.js"></script>
+<script src="charts.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

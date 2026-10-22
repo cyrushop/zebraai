@@ -54,3 +54,30 @@ node tests/engine.test.js
 ```
 
 The tests use synthetic fixtures only.
+
+---
+
+# HK POS Sell-out Analysis
+
+A second browser app, in `pos/`, that compares Zebra Hong Kong sell-out (POS) across fiscal years: sales by year and quarter, AIT vs EVM, product mix, distributors, resellers, end users and verticals, for full years or Q4 only.
+
+Open `pos/index.html` in a browser (or `cd pos && python3 -m http.server 8001`) and add the yearly POS exports. Data stays in the browser (IndexedDB) until you press **Clear data**. **Download combined CSV** gives the harmonised lines for checking in Excel.
+
+It recognises four export layouts from their headers:
+
+| Layout | Typical file | Sales column |
+|---|---|---|
+| BI extract | `BI-FY2021.xlsx`, `POS_Cyrus_-_2022.xlsx` | `NetAmount_After_Rebate` |
+| POS detail 2022 | `Zebra_HK_POS_2022.xlsx` | `SIP After rebate` |
+| POS detail 2023–2024 | `Zebra_HK_POS_2023.xlsx`, `Zebra_HK_POS_2024.xlsx` | `SIP After rebate` |
+| POS detail FY25 | `FY25_HKPOS.xlsx` | `SIP After rabe Amount` |
+
+Rules:
+
+- In a workbook, only the largest data sheet is read. Smaller sheets with the same columns are pivot drill-downs and would double count.
+- When two files cover the same year, the one with more quarters wins, then the one with more lines. The page lists what it used and skipped.
+- Lines with no distributor, or `PathToM = Tier 1`, are DSR sell-in = sell-out and show as Direct.
+- Product lines are grouped into seven categories that stay comparable across years.
+- Credits and returns are kept, so totals are net.
+
+The page loads SheetJS and d3 from cdnjs. Tests: `node tests/pos-engine.test.js` (synthetic fixtures only). Never commit the Excel exports: this repository is public.
