@@ -288,7 +288,12 @@ svg.spark circle { fill: var(--spark); }
 
   function defaultRules() { return JSON.parse(JSON.stringify(E.DEFAULT_RULES)); }
   function loadRules() {
-    var r = defaultRules(), saved = LS.get('zpc.rules.v2', null);
+    var r = defaultRules(), saved = LS.get('zpc.rules.v3', null);
+    if (!saved) {
+      // v2 defaults wrongly put MC33XXR / TC22R in the March 2026 increase.
+      saved = LS.get('zpc.rules.v2', null);
+      (saved && saved.events || []).forEach(function (e) { if (e.id === 'e2026-03' && e.rates) delete e.rates.rfid15; });
+    }
     if (saved) {
       ['liftFrom', 'liftThreshold', 'includePending', 'events', 'rp'].forEach(function (k) { if (saved[k] !== undefined) r[k] = saved[k]; });
     }
@@ -652,7 +657,7 @@ svg.spark circle { fill: var(--spark); }
       '<div class="tools" style="justify-content:flex-start"><button class="btn" id="addEvent">新增加價日</button><button class="btn" id="resetRules">還原預設</button></div>' +
       '<div><h3>預設值來源</h3><ul class="small muted">' +
       '<li>2026-10-05：EMC 15%、AIT 3%、ADC 4%、RFID Fixed / HH 5%、MC33XXR / TC22R 15%，來自你提供的加價表。PC list 入面的牌價喺 10 月都有相同升幅。</li>' +
-      '<li>2026-03-19：PC list 入面第一張用新 EMC 牌價（+15%）的 PC 喺 2026-03-19。MC33XXR / TC22R 都喺 3–4 月升咗 15%。</li>' +
+      '<li>2026-03-19：PC list 入面第一張用新 EMC 牌價（+15%）的 PC 喺 2026-03-19。呢次只計 EMC，RFID HH（包括 MC33XXR / TC22R）唔加。</li>' +
       '<li>RP：EMC 15%（margin 夠可以少啲，要問 Kevin）、RFID 3%、打印機 1%、ADC 1%，來自你提供的規則。</li>' +
       '<li>EMC 配件、服務 (OneCare)、RFID OH readers 未有規則。PC list 見到 EMC 配件喺 2026-02 同 2026-10 各升咗 5%，但未經你確認，所以冇預設。</li>' +
       '<li>標準淨價 = 最新牌價 × (1 − PC list 的「Discount」)。Discount 按產品同 Fulfillment Type（VAD / Direct to Partner）唔同，用同一 Fulfillment Type 最新一張 PC 的數。</li>' +
@@ -732,7 +737,7 @@ svg.spark circle { fill: var(--spark); }
   }
 
   // ------------------------------------------------------------ events
-  function saveRules() { LS.set('zpc.rules.v2', S.rules); renderFresh(); }
+  function saveRules() { LS.set('zpc.rules.v3', S.rules); renderFresh(); }
   function setAcct(k) {
     S.acct = k; S.acctQ = ''; LS.set('zpc.acct', k);
     renderView();

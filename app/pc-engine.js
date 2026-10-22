@@ -105,7 +105,8 @@
     includePending: false,
     events: [
       // First PCs at the new EMC list prices appear on 2026-03-19 in the HK PC list.
-      { id: 'e2026-03', label: '2026 年 3 月', date: '2026-03-19', rates: { emc: 15, rfid15: 15 } },
+      // RFID handhelds (incl. MC33XXR / TC22R) were not part of it.
+      { id: 'e2026-03', label: '2026 年 3 月', date: '2026-03-19', rates: { emc: 15 } },
       { id: 'e2026-10', label: '2026 年 10 月', date: '2026-10-05',
         rates: { emc: 15, rfid15: 15, rfidFixed: 5, rfidHH: 5, adc: 4, ait: 3 } }
     ],

@@ -36,7 +36,7 @@ const A = ['100', 'Alpha Logistics Limited'];
 const B = ['200', 'Beta Retail'];
 const C = ['300', 'Gamma Freight'];
 
-// Default events: 2026-03-19 (EMC, MC33xxR/TC22R 15%) and 2026-10-05 (all categories).
+// Default events: 2026-03-19 (EMC 15% only) and 2026-10-05 (all categories).
 const objs = [
   // EMC: June PC kept the January price → March not passed on, October pending → 15% twice
   row(A, '10/01/2026', 'TC53-X', EMC, 1000, 600),
@@ -47,7 +47,7 @@ const objs = [
   // Printer: raised 3% on a PC after October → RP 1%; standard discount 40%
   row(A, '01/09/2026', 'ZD421-X', PRN, 500, 300, { 'Discount': 40 }),
   row(A, '08/10/2026', 'ZD421-X', PRN, 515, 309, { 'Discount': 40 }),
-  // RFID MC33xxR, first PC after March → March covered, October pending → 15%
+  // RFID MC33xxR: no March increase, October pending → 15%
   row(A, '01/05/2026', 'MC333R-X', RF33, 2300, 1500),
   // RFID HH reader, raised in 2025 only → not ahead of October, full 5%
   row(A, '01/03/2025', 'RFD40-X', RFHH, 900, 500),
@@ -129,7 +129,7 @@ assert.strictEqual(r.aboveStd, true);
 
 // RFID
 r = get('100', 'MC333R-X');
-assert.deepStrictEqual(kinds(r), ['e2026-03:covered', 'e2026-10:pending']);
+assert.deepStrictEqual(kinds(r), ['e2026-10:pending']);
 assert.strictEqual(r.rate, 15);
 r = get('100', 'RFD40-X');
 assert.strictEqual(r.state, 'full', '2025 rise is not ahead of October');

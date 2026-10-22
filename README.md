@@ -80,14 +80,14 @@ Default events and rates (all editable on the 加價規則 tab):
 | Category | 2026-03-19 | 2026-10-05 | Already raised (RP) |
 |---|---|---|---|
 | EMC mobile computers (Mobile Computing) | 15% | 15% | 15% (less if margin allows; ask the sales manager) |
-| MC33XXR, TC22R | 15% | 15% | 3% |
+| MC33XXR, TC22R | | 15% | 3% |
 | RFID Fixed Readers and accessories | | 5% | 3% |
 | RFID HH Readers (not MC33XXR / TC22R) | | 5% | 3% |
 | ADC scanners (Adv Data Capture) | | 4% | 1% |
 | AIT printers, supplies and parts | | 3% | 1% |
 | EMC accessories, services, RFID OH readers, other | | | |
 
-2026-03-19 is the first PC in the HK PC list that carries the new EMC list prices. A category with no rate at all uses the list-price change since the last PC, taken from the newest PC in the file that carries the part. The table says so, and warns when that list price predates the latest event.
+2026-03-19 is the first PC in the HK PC list that carries the new EMC list prices. That increase covers EMC only, not RFID handhelds. A category with no rate at all uses the list-price change since the last PC, taken from the newest PC in the file that carries the part. The table says so, and warns when that list price predates the latest event.
 
 **Standard net price.** The PC list's `Discount` column is the standard discount: standard net = list × (1 − Discount). It differs by part and fulfillment type, so the app uses the newest PC with the same fulfillment type as the customer's last PC. When the suggested price is at or above the new standard net price, the row says no PC is needed.
 
