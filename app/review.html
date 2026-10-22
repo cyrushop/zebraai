@@ -1,0 +1,981 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>VST Business Review</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: a review deck on one page. Freshness strip → highlights → six numbered sections, each a headline row, a chart and the table behind it. */
+:root {
+  --bg: #f3f5f7;
+  --surface: #ffffff;
+  --sunk: #e9edf1;
+  --ink: #15212c;
+  --ink-2: #4f5f6e;
+  --ink-3: #7b8896;
+  --line: #d9dfe5;
+  --grid: #e6eaee;
+  --accent: #1d5cc2;
+  --accent-ink: #ffffff;
+  --accent-soft: #e3ecfa;
+  /* categorical slots in fixed order */
+  --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a; --s4: #eda100; --s5: #e87ba4; --s6: #008300;
+  /* ordinal stage ramp (one hue): Won → Identify */
+  --o1: #104281; --o2: #1c5cab; --o3: #2a78d6; --o4: #5598e7; --o5: #86b6ef;
+  /* status (reserved): good / warning / serious / critical */
+  --good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b; --neutral: #b9c1c9;
+  --warn-bg: #fff3d6; --warn-ink: #7a5300;
+  --bad-ink: #b42d2d; --good-ink: #136c2e;
+  --shadow: 0 8px 30px rgba(21, 33, 44, .16);
+  --f-display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11171d; --surface: #182029; --sunk: #1f2933; --ink: #e7edf3; --ink-2: #a9b6c3; --ink-3: #7d8a97;
+    --line: #2b3742; --grid: #24303a; --accent: #6ea2f0; --accent-ink: #0d1620; --accent-soft: #1d2d45;
+    --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300;
+    --o1: #86b6ef; --o2: #5598e7; --o3: #3987e5; --o4: #256abf; --o5: #184f95;
+    --neutral: #4a5662;
+    --warn-bg: #3a2e12; --warn-ink: #f2c35b; --bad-ink: #f08080; --good-ink: #6fd08c;
+    --shadow: 0 8px 30px rgba(0, 0, 0, .5);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11171d; --surface: #182029; --sunk: #1f2933; --ink: #e7edf3; --ink-2: #a9b6c3; --ink-3: #7d8a97;
+  --line: #2b3742; --grid: #24303a; --accent: #6ea2f0; --accent-ink: #0d1620; --accent-soft: #1d2d45;
+  --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300;
+  --o1: #86b6ef; --o2: #5598e7; --o3: #3987e5; --o4: #256abf; --o5: #184f95;
+  --neutral: #4a5662;
+  --warn-bg: #3a2e12; --warn-ink: #f2c35b; --bad-ink: #f08080; --good-ink: #6fd08c;
+  --shadow: 0 8px 30px rgba(0, 0, 0, .5);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { scroll-padding-top: 64px; }
+body {
+  background: var(--bg); color: var(--ink); font: 14px/1.45 var(--f-body); margin: 0;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 16px 48px;
+}
+.wrap { max-width: 1320px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+.wrap > * { min-width: 0; }
+h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; margin: 0; letter-spacing: .01em; }
+h1 { font-size: 1.6rem; font-weight: 700; }
+h2 { font-size: 1.25rem; font-weight: 600; }
+h3 { font-size: 1rem; font-weight: 600; }
+a { color: var(--accent); }
+.muted { color: var(--ink-2); }
+.faint { color: var(--ink-3); }
+.mono { font-family: var(--f-mono); font-size: .86em; }
+.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+button, select, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.label { font-family: var(--f-display); font-size: .74rem; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-3); }
+
+.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; }
+.top .sub { color: var(--ink-2); margin-top: 2px; }
+.top .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.btn { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 7px 12px; font-weight: 500; text-decoration: none; color: var(--ink); display: inline-block; }
+.btn:hover { border-color: var(--ink-3); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+select.btn { padding: 7px 8px; max-width: 100%; }
+
+.fresh { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.fresh > div { background: var(--surface); padding: 10px 12px; min-width: 0; }
+.fresh .v { font-weight: 600; font-variant-numeric: tabular-nums; }
+.fresh .f { font-size: .8rem; color: var(--ink-3); overflow-wrap: anywhere; }
+.fresh .missing .v { color: var(--warn-ink); }
+
+nav.toc { position: sticky; top: 0; z-index: 5; background: var(--bg); display: flex; gap: 2px; overflow-x: auto; border-bottom: 1px solid var(--line); margin-inline: -4px; padding-inline: 4px; }
+nav.toc a { padding: 10px 12px; font-family: var(--f-display); font-weight: 600; color: var(--ink-2); text-decoration: none; white-space: nowrap; border-bottom: 3px solid transparent; }
+nav.toc a:hover { color: var(--ink); }
+nav.toc a.on { color: var(--ink); border-bottom-color: var(--accent); }
+nav.toc .n { color: var(--ink-3); margin-right: 4px; font-weight: 500; }
+
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; display: grid; gap: 16px; min-width: 0; }
+.card > * { min-width: 0; }
+.sechead { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 6px 20px; }
+.sechead .k { font-family: var(--f-display); color: var(--ink-3); font-weight: 600; margin-right: 6px; }
+.sechead .note { color: var(--ink-3); font-size: .85rem; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 20px; }
+.grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 20px; }
+.grid2 > *, .grid3 > * { min-width: 0; }
+
+.highlights { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
+.highlights li { max-width: 110ch; }
+.highlights b { font-variant-numeric: tabular-nums; }
+
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+.tile { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; display: grid; gap: 2px; align-content: start; min-width: 0; }
+.tile .v { font-family: var(--f-display); font-size: 1.6rem; font-weight: 600; line-height: 1.15; }
+.tile .d { font-size: .84rem; color: var(--ink-2); }
+.tile.hero .v { font-size: 2.2rem; }
+.up { color: var(--good-ink); }
+.down { color: var(--bad-ink); }
+
+.legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: .84rem; color: var(--ink-2); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.chart { position: relative; min-width: 0; }
+.chart svg { display: block; overflow: visible; }
+.chart text { fill: var(--ink-3); font: 11px var(--f-body); }
+.chart text.lab { fill: var(--ink-2); font-weight: 500; }
+.chart .gridl { stroke: var(--grid); stroke-width: 1; }
+.chart .base { stroke: var(--line); stroke-width: 1; }
+.chart .hit { fill: transparent; }
+.chart .hit:hover + .mk, .chart .mk.on { filter: brightness(1.12); }
+.chart .xh { stroke: var(--ink-3); stroke-width: 1; }
+
+.stack { display: flex; gap: 2px; height: 14px; border-radius: 4px; overflow: hidden; background: var(--sunk); }
+.stack > span { height: 100%; min-width: 2px; }
+
+.tablebox { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
+table { border-collapse: collapse; width: 100%; }
+th, td { padding: 6px 10px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+th { font-family: var(--f-display); font-weight: 600; font-size: .76rem; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-3); white-space: nowrap; background: var(--surface); }
+tbody tr:hover td { background: var(--sunk); }
+tr.sub td:first-child { padding-left: 26px; color: var(--ink-2); }
+tr.tot td { font-weight: 600; border-top: 2px solid var(--line); }
+td.name { max-width: 300px; overflow-wrap: anywhere; }
+td.adv { min-width: 260px; max-width: 460px; font-size: .86rem; color: var(--ink-2); }
+.wide table { min-width: 860px; }
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; transform: translateY(1px); }
+
+.st { display: inline-flex; align-items: center; gap: 6px; font-size: .8rem; font-weight: 500; white-space: nowrap; }
+.st::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--c, var(--neutral)); flex: none; }
+.st.good { --c: var(--good); } .st.warning { --c: var(--warning); } .st.serious { --c: var(--serious); } .st.critical { --c: var(--critical); }
+.st.info { --c: var(--s1); }
+
+.chips { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.chipbtn { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 3px 10px; font-size: .84rem; color: var(--ink-2); }
+.chipbtn[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--ink); }
+.ctrl { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; font-size: .9rem; }
+.ctrl label { display: inline-flex; gap: 6px; align-items: center; }
+.ctrl input[type=number] { width: 140px; border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 5px 8px; }
+
+.heat td.h { text-align: right; font-variant-numeric: tabular-nums; font-size: .82rem; white-space: nowrap; min-width: 78px; }
+.heat td.h.zero { color: var(--ink-3); }
+.heat th.r { text-align: right; }
+
+.empty { padding: 26px 16px; text-align: center; color: var(--ink-2); border: 1px dashed var(--line); border-radius: 8px; }
+.notice { background: var(--warn-bg); color: var(--warn-ink); border-radius: 8px; padding: 9px 12px; font-size: .9rem; }
+.tip { position: fixed; z-index: 30; pointer-events: none; background: var(--ink); color: var(--bg); border-radius: 6px; padding: 6px 9px; font-size: .82rem; max-width: 280px; white-space: pre-line; font-variant-numeric: tabular-nums; }
+.drop { position: fixed; inset: 0; z-index: 40; background: color-mix(in srgb, var(--accent) 18%, transparent); display: grid; place-items: center; }
+.drop div { background: var(--surface); border: 2px dashed var(--accent); border-radius: 12px; padding: 28px 36px; font-family: var(--f-display); font-size: 1.2rem; font-weight: 600; }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(18px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg); padding: 9px 14px; border-radius: 8px; z-index: 50; max-width: calc(100% - 32px); }
+.more { justify-self: start; }
+details.how summary { cursor: pointer; color: var(--ink-2); }
+details.how ul { margin: 8px 0 0; padding-left: 20px; color: var(--ink-2); font-size: .88rem; display: grid; gap: 4px; }
+
+@media (max-width: 640px) {
+  h1 { font-size: 1.3rem; }
+  .tile .v { font-size: 1.3rem; }
+  .tile.hero .v { font-size: 1.8rem; }
+  .card { padding: 14px; }
+}
+@media print {
+  body { background: #fff; padding: 0; }
+  .top .actions, nav.toc, .ctrl, .chips, .more { display: none !important; }
+  .card { break-inside: avoid; border-color: #ccc; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1 id="title">VST Business Review</h1>
+      <div class="sub" id="subtitle">POS sell-out, SFDC pipeline and VAD stock. Hong Kong.</div>
+    </div>
+    <div class="actions">
+      <label class="faint" for="scope">Distributor</label>
+      <select class="btn" id="scope"></select>
+      <input id="fileInput" type="file" multiple accept=".xls,.xlsx,.csv,.htm,.html" hidden>
+      <button class="btn primary" id="uploadBtn">Upload files</button>
+      <button class="btn" id="resetBtn" hidden>Reset to initial data</button>
+      <a class="btn" href="index.html">Order check</a>
+    </div>
+  </header>
+
+  <section class="fresh" id="fresh" aria-label="Loaded data"></section>
+  <div class="notice" id="notice" hidden></div>
+
+  <section class="card" id="sum" aria-labelledby="sumH">
+    <div class="sechead"><h2 id="sumH">Highlights</h2><span class="note" id="sumNote"></span></div>
+    <ul class="highlights" id="highlights"></ul>
+  </section>
+
+  <nav class="toc" id="toc" aria-label="Sections">
+    <a href="#s1"><span class="n">1</span>Pipeline</a>
+    <a href="#s2"><span class="n">2</span>QTD</a>
+    <a href="#s3"><span class="n">3</span>2024–2026</a>
+    <a href="#s4"><span class="n">4</span>Product lines</a>
+    <a href="#s5"><span class="n">5</span>Partners</a>
+    <a href="#s6"><span class="n">6</span>Inventory</a>
+  </nav>
+
+  <section class="card" id="s1" aria-labelledby="s1h"></section>
+  <section class="card" id="s2" aria-labelledby="s2h"></section>
+  <section class="card" id="s3" aria-labelledby="s3h"></section>
+  <section class="card" id="s4" aria-labelledby="s4h"></section>
+  <section class="card" id="s5" aria-labelledby="s5h"></section>
+  <section class="card" id="s6" aria-labelledby="s6h"></section>
+
+  <details class="how">
+    <summary>How the numbers are worked out</summary>
+    <ul>
+      <li>POS value is net cost in USD at planned rate. The 2024 export has no net column, so it is SIP after rebate ÷ (1 − sell-out rebate %); this reproduces the 2025 net column exactly.</li>
+      <li>Quarters and weeks are Zebra fiscal ones from the POS export. "Same weeks" compares fiscal weeks up to the latest week loaded for this year.</li>
+      <li>Pipeline: Closed-Won, Secure, Validate, Qualify and Identify lines, by the quarter of the schedule date (first-ship quarter when there is none), for the selected primary distributor.</li>
+      <li>Partner status compares this year to date with the same weeks last year: growing ≥ +10%, declining ≤ −10%. New means no POS in earlier loaded years; lapsed means none this year.</li>
+      <li>Stock: free = on hand − committed − reseller backlog. Run rate is sell-out units over the latest 13 POS weeks; weeks of cover = free ÷ weekly run rate. Stocking gaps use run-rate (no PC) units only.</li>
+      <li>Files stay in this browser (IndexedDB), shared with the order check page. Nothing is uploaded.</li>
+    </ul>
+  </details>
+</div>
+
+<div class="tip" id="tip" hidden></div>
+<div class="drop" id="drop" hidden><div>Drop POS, pipeline, VAD stock or backlog files</div></div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="engine.js"></script>
+<script src="review.js"></script>
+<script src="initial-data.js" onerror="window.ZEBRA_INITIAL_DATA = null"></script>
+<script>
+(function () {
+  'use strict';
+  var E = window.ZEngine, R = window.ZReview;
+  var $ = function (s) { return document.querySelector(s); };
+  var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); };
+  var usd = function (n) { return n == null ? '—' : (n < 0 ? '−$' : '$') + Math.round(Math.abs(n)).toLocaleString('en-US'); };
+  var usdK = function (n) {
+    if (n == null) return '—';
+    var a = Math.abs(n), s = n < 0 ? '−$' : '$';
+    return a >= 1e6 ? s + (a / 1e6).toFixed(2) + 'M' : a >= 1e3 ? s + (a / 1e3).toFixed(a >= 1e5 ? 0 : 1) + 'k' : s + Math.round(a);
+  };
+  var int = function (n) { return Math.round(n).toLocaleString('en-US'); };
+  var pctRaw = function (x) { return x == null || !isFinite(x) ? '—' : Math.round(x * 100) + '%'; };
+  var chg = function (a, b) { return b ? a / b - 1 : null; };
+  function delta(a, b, label) {
+    var x = chg(a, b);
+    if (x == null) return '<span class="faint">no ' + esc(label || 'base') + '</span>';
+    var cls = x >= 0 ? 'up' : 'down', arrow = x >= 0 ? '▲' : '▼';
+    return '<span class="' + cls + '">' + arrow + ' ' + Math.abs(Math.round(x * 100)) + '%</span>';
+  }
+  function deltaTxt(a, b) { var x = chg(a, b); return x == null ? 'n/a' : (x >= 0 ? '+' : '−') + Math.abs(Math.round(x * 100)) + '%'; }
+  function toast(msg, ms) {
+    var t = $('#toast'); t.textContent = msg; t.hidden = false;
+    clearTimeout(toast.t); toast.t = setTimeout(function () { t.hidden = true; }, ms || 3000);
+  }
+
+  // ------------------------------------------------------------ storage (shared with the order check page)
+  var LS = {
+    get: function (k, d) { try { var v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
+    set: function (k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* storage unavailable */ } }
+  };
+  var IDB = {
+    open: function () {
+      return new Promise(function (res, rej) {
+        try {
+          var r = indexedDB.open('zebra-hk-order-check', 1);
+          r.onupgradeneeded = function () { r.result.createObjectStore('kv'); };
+          r.onsuccess = function () { res(r.result); };
+          r.onerror = function () { rej(r.error); };
+        } catch (e) { rej(e); }
+      });
+    },
+    get: function (k) {
+      return IDB.open().then(function (db) {
+        return new Promise(function (res) {
+          var q = db.transaction('kv').objectStore('kv').get(k);
+          q.onsuccess = function () { res(q.result); };
+          q.onerror = function () { res(undefined); };
+        });
+      }).catch(function () { return undefined; });
+    },
+    set: function (k, v) {
+      return IDB.open().then(function (db) {
+        return new Promise(function (res) {
+          var tx = db.transaction('kv', 'readwrite');
+          tx.objectStore('kv').put(v, k);
+          tx.oncomplete = function () { res(true); };
+          tx.onerror = function () { res(false); };
+        });
+      }).catch(function () { return false; });
+    },
+    del: function (k) {
+      return IDB.open().then(function (db) { db.transaction('kv', 'readwrite').objectStore('kv').delete(k); }).catch(function () {});
+    }
+  };
+
+  var S = {
+    tables: [], a: null, fromUpload: false,
+    scope: LS.get('vst.scope', 'vstecs'),
+    f: Object.assign({ forecast: true, plBasis: 'ytd', partnerStatus: '', invStatus: '', partnerAll: false, invAll: false, heatYear: 0 },
+      LS.get('vst.filters', {})),
+    targets: LS.get('vst.targets', {})
+  };
+  function saveF() { LS.set('vst.filters', S.f); }
+
+  // ------------------------------------------------------------ file reading
+  function readFile(file) {
+    return file.arrayBuffer().then(function (buf) {
+      var head = new TextDecoder().decode(buf.slice(0, 400)).replace(/^﻿/, '').trimStart();
+      var grids = [];
+      if (head.charAt(0) === '<') {
+        var html = new TextDecoder('windows-1252').decode(buf);
+        var doc = new DOMParser().parseFromString(html, 'text/html');
+        doc.querySelectorAll('table').forEach(function (t) {
+          grids.push(Array.prototype.map.call(t.rows, function (tr) {
+            return Array.prototype.map.call(tr.cells, function (c) { var v = c.textContent.trim(); return v === '' ? null : v; });
+          }));
+        });
+      } else {
+        if (!window.XLSX) throw new Error('The Excel reader did not load. Check your connection and reload.');
+        var wb = XLSX.read(buf, { type: 'array', cellDates: true });
+        wb.SheetNames.forEach(function (n) {
+          grids.push(XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: true, defval: null }));
+        });
+      }
+      var found = [];
+      for (var i = 0; i < grids.length; i++) {
+        var t = R.tableFromGrid(grids[i], file.name);
+        if (!t) continue;
+        found.push(t);
+        if (t.type !== 'pos') break;
+      }
+      var t0 = R.pickTable(found);
+      if (!t0) throw new Error(file.name + ': not recognised as a POS, pipeline, DSR, VAD inventory or backlog export.');
+      t0.rows = t0.rows.map(function (r) { return r.map(function (v) { return v instanceof Date ? v.toISOString() : v; }); });
+      if (t0.type === 'dsr') {
+        var c = t0.headers.indexOf('Account Country');
+        if (c >= 0) t0.rows = t0.rows.filter(function (r) { return r[c] === 'Hong Kong'; });
+      }
+      t0.loadedAt = new Date().toISOString();
+      return t0;
+    });
+  }
+  function tableSlot(t) {
+    if (t.type === 'pos') return R.posSlot(t);
+    if (t.type === 'pipeline' || t.type === 'dsr') return t.type;
+    var c = t.headers.indexOf('Distributor Account Number'), n = t.headers.indexOf('Distributor Name');
+    var r = t.rows[0] || [];
+    return t.type + '|' + (c >= 0 && r[c] ? String(r[c]).replace(/\.0+$/, '') : E.accountKey(n >= 0 ? r[n] : t.name));
+  }
+  function mergeTables(old, add) {
+    var slots = {};
+    add.forEach(function (t) { slots[tableSlot(t)] = 1; });
+    return old.filter(function (t) { return !slots[tableSlot(t)]; }).concat(add);
+  }
+  function handleFiles(files) {
+    files = Array.prototype.slice.call(files);
+    if (!files.length) return;
+    toast('Reading ' + files.length + ' file' + (files.length > 1 ? 's' : '') + '…', 20000);
+    var ok = [], errs = [];
+    Promise.all(files.map(function (f) {
+      return readFile(f).then(function (t) { ok.push(t); }, function (e) { errs.push(e.message || String(e)); });
+    })).then(function () {
+      if (ok.length) {
+        S.tables = mergeTables(S.tables, ok);
+        S.fromUpload = true;
+        IDB.set('tables', S.tables);
+        recompute();
+      }
+      toast(ok.map(function (t) { return 'Loaded ' + t.type + ' (' + t.rows.length + ' rows)'; }).concat(errs).join(' · ') || 'Nothing loaded', 7000);
+    });
+  }
+
+  // ------------------------------------------------------------ compute + render
+  function recompute() {
+    S.a = R.review(S.tables, { scope: S.scope, excludeForecast: !S.f.forecast });
+    $('#resetBtn').hidden = !(S.fromUpload && window.ZEBRA_INITIAL_DATA);
+    render();
+  }
+  function scopeName() {
+    if (S.scope === 'all') return 'All Hong Kong';
+    var s = (S.a.scopes || []).filter(function (x) { return x.key === S.scope; })[0];
+    return s ? s.name : S.scope;
+  }
+  function shortScope() { return S.scope === 'vstecs' ? 'VST' : S.scope === 'all' ? 'HK' : scopeName(); }
+
+  function render() {
+    var a = S.a;
+    renderScope();
+    $('#title').textContent = (S.scope === 'vstecs' ? 'VST' : shortScope()) + ' Business Review';
+    $('#subtitle').textContent = scopeName() + ' · Hong Kong · ' + a.curFq + ' review, POS to fiscal week ' + (a.asOf.posWeek || '—') +
+      (a.asOf.posDate ? ' (' + fmtDate(a.asOf.posDate) + ')' : '');
+    document.title = $('#title').textContent;
+    renderFresh(); renderHighlights();
+    renderPipeline(); renderQtd(); renderYears(); renderPl(); renderPartners(); renderInventory();
+    drawCharts();
+  }
+  function fmtDate(s) {
+    var d = new Date(String(s).slice(0, 10) + 'T00:00:00Z');
+    return isNaN(d) ? s : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+  }
+  function renderScope() {
+    var opts = [{ key: 'all', name: 'All Hong Kong' }].concat(S.a.scopes);
+    if (!opts.some(function (o) { return o.key === S.scope; })) opts.push({ key: S.scope, name: S.scope === 'vstecs' ? 'VSTECS (HK) LIMITED' : S.scope });
+    $('#scope').innerHTML = opts.map(function (o) {
+      return '<option value="' + esc(o.key) + '"' + (o.key === S.scope ? ' selected' : '') + '>' + esc(o.name) + '</option>';
+    }).join('');
+  }
+  function renderFresh() {
+    var a = S.a, yrs = a.years.years.map(function (y) { return y.year; });
+    var cell = function (label, v, f, missing) {
+      return '<div class="' + (missing ? 'missing' : '') + '"><div class="label">' + label + '</div><div class="v">' + esc(v) +
+        '</div><div class="f">' + esc(f) + '</div></div>';
+    };
+    var strip = function (n) { return String(n).replace(/^[0-9a-f]{8}-/, ''); };
+    $('#fresh').innerHTML =
+      cell('POS', yrs.length ? 'FY' + yrs.join(', FY') + ' · to wk ' + a.asOf.posWeek : 'Not loaded',
+        a.asOf.pos.map(strip).join(', ') || 'Upload Zyme POS exports', !yrs.length) +
+      cell('Pipeline', a.pipeline.loaded ? int(a.counts.pipeline) + ' lines' : 'Not loaded',
+        a.asOf.pipeline.map(strip).join(', ') || 'Upload the SFDC pipeline report (pipeline-*.xls)', !a.pipeline.loaded) +
+      cell('VAD stock', a.asOf.inventory ? 'As of ' + fmtDate(a.asOf.inventory) : 'Not loaded',
+        a.asOf.inventoryFiles.map(strip).join(', ') || 'Upload *_INV_*.xlsx', !a.asOf.inventory) +
+      cell('Reseller backlog', a.asOf.backlog ? 'As of ' + fmtDate(a.asOf.backlog) : 'Not loaded',
+        a.asOf.backlogFiles.map(strip).join(', ') || 'Upload *_BACKLOG_*.xlsx', !a.asOf.backlog);
+    var n = $('#notice');
+    n.hidden = !!a.counts.pos;
+    n.textContent = 'No POS loaded yet. Drop the POS exports for 2024, 2025 and 2026 (plus pipeline, stock and backlog) anywhere on the page.';
+  }
+
+  // ---------------------------------------------------------------- highlights
+  function renderHighlights() {
+    var a = S.a, q = a.qtd, ys = a.years.years, cyRow = ys.filter(function (y) { return y.year === a.cy; })[0];
+    var lyRow = ys.filter(function (y) { return y.year === a.cy - 1; })[0], l2 = ys.filter(function (y) { return y.year === a.cy - 2; })[0];
+    var li = [];
+    var p = a.pipeline;
+    if (p.loaded) {
+      var st = function (s) { return p.stages.filter(function (x) { return x.stage === s; })[0] || { cur: 0, next: 0 }; };
+      li.push('Pipeline <b>' + a.curFq + ': ' + usdK(p.total.cur) + '</b> (Won ' + usdK(st('Closed - Won').cur) + ', Secure ' + usdK(st('Secure').cur) +
+        ') · <b>' + a.nextFq + ': ' + usdK(p.total.next) + '</b> (Secure ' + usdK(st('Secure').next) + ').');
+    } else li.push('<span class="faint">Pipeline not loaded: drop the SFDC pipeline export to fill section 1.</span>');
+    if (a.counts.pos) {
+      li.push('QTD ' + q.fq + ' (wk ' + q.fromWeek + '–' + q.toWeek + '): <b>' + usdK(q.net) + '</b>, ' + deltaTxt(q.net, q.ly) +
+        ' vs the same weeks of ' + (a.cy - 1) + ' (' + usdK(q.ly) + '). ' + (a.cy - 1) + ' ' + 'Q' + a.cq + ' closed at ' + usdK(q.lyFull) +
+        '; QTD is ' + pctRaw(q.lyFull ? q.net / q.lyFull : null) + ' of it with ' + q.weeksIn + ' of ' + q.weeksTotal + ' weeks gone.');
+      if (cyRow) {
+        li.push('YTD wk 1–' + a.years.lastWeek + ': <b>' + usdK(cyRow.ytd) + '</b>, ' + deltaTxt(cyRow.ytd, lyRow && lyRow.ytd) + ' vs ' + (a.cy - 1) +
+          (l2 ? ' and ' + deltaTxt(cyRow.ytd, l2.ytd) + ' vs ' + (a.cy - 2) : '') + '. ' + shortScope() + ' is ' +
+          pctRaw(cyRow.hk ? cyRow.net / cyRow.hk : null) + ' of HK POS this year' + (lyRow && lyRow.hk ? ' (' + pctRaw(lyRow.net / lyRow.hk) + ' in ' + (a.cy - 1) + ')' : '') + '.');
+      }
+      var pls = a.productLines.lines.map(function (l) { return { k: l.key, d: (l.ytd[a.cy] || 0) - (l.ytd[a.cy - 1] || 0), a: l.ytd[a.cy] || 0, b: l.ytd[a.cy - 1] || 0 }; })
+        .sort(function (x, y) { return y.d - x.d; });
+      if (pls.length > 1) {
+        var up = pls[0], dn = pls[pls.length - 1];
+        li.push('Product lines YTD: biggest gain <b>' + esc(up.k) + '</b> ' + (up.d >= 0 ? '+' : '') + usdK(up.d) + (up.b ? ' (' + deltaTxt(up.a, up.b) + ')' : ' (new)') +
+          '; biggest drop <b>' + esc(dn.k) + '</b> ' + usdK(dn.d) + (dn.b ? ' (' + deltaTxt(dn.a, dn.b) + ')' : '') + '.');
+      }
+      var pp = a.partners, act = function (y) { return (pp.activeByYear.filter(function (x) { return x.year === y; })[0] || {}).n || 0; };
+      li.push('<b>' + act(a.cy) + '</b> partners bought in ' + a.cy + ' (' + act(a.cy - 1) + ' in ' + (a.cy - 1) + '): ' + (pp.statusCount.new || 0) + ' new, ' +
+        (pp.statusCount.growing || 0) + ' growing, ' + (pp.statusCount.declining || 0) + ' declining, ' + (pp.statusCount.lapsed || 0) + ' lapsed (' +
+        usdK(pp.lapsedValue) + ' in ' + (a.cy - 1) + '). Top 5 partners are ' + pctRaw(pp.top5Share) + ' of ' + a.cy + '.');
+    }
+    var inv = a.inventory;
+    if (inv.loaded) {
+      li.push('Stock <b>' + usdK(inv.totalValue) + '</b> across ' + inv.skus + ' SKUs; <b>' + usdK(inv.slowValue) + '</b> is slow, unsold or over 13 weeks of cover. ' +
+        (inv.counts.short || 0) + ' SKUs have more reseller backlog than stock; ' + (inv.counts['stock-gap'] || 0) + ' run-rate sellers are not stocked.');
+    }
+    $('#highlights').innerHTML = li.map(function (x) { return '<li>' + x + '</li>'; }).join('');
+    $('#sumNote').textContent = scopeName();
+  }
+
+  // ---------------------------------------------------------------- 1. pipeline
+  var STAGE_VAR = { 'Closed - Won': '--o1', Secure: '--o2', Validate: '--o3', Qualify: '--o4', Identify: '--o5' };
+  function renderPipeline() {
+    var a = S.a, p = a.pipeline, el = $('#s1');
+    var head = '<div class="sechead"><h2 id="s1h"><span class="k">1</span>Pipeline: ' + a.curFq + ' and ' + a.nextFq + '</h2>' +
+      '<span class="note">SFDC schedule amount, primary distributor ' + esc(scopeName()) + '</span></div>';
+    if (!p.loaded) {
+      el.innerHTML = head + '<div class="empty">No pipeline loaded. Drop the SFDC pipeline report (<span class="mono">pipeline-*.xls</span>) on the page ' +
+        'or use <b>Upload files</b>. The same file feeds the order check page.</div>';
+      return;
+    }
+    var tile = function (label, fq, tot, key) {
+      var parts = p.stages.filter(function (s) { return s[key] > 0; });
+      var commit = p.stages.filter(function (s) { return s.stage === 'Closed - Won' || s.stage === 'Secure'; }).reduce(function (x, s) { return x + s[key]; }, 0);
+      return '<div class="tile' + (key === 'cur' ? ' hero' : '') + '"><div class="label">' + label + ' · ' + fq + '</div><div class="v">' + usd(tot) + '</div>' +
+        '<div class="d">Commit (Won + Secure) ' + usd(commit) + ' · ' + pctRaw(tot ? commit / tot : null) + '</div>' +
+        '<div class="stack" role="img" aria-label="By stage">' + parts.map(function (s) {
+          return '<span style="flex:' + s[key] + ';background:var(' + STAGE_VAR[s.stage] + ')" data-tip="' + esc(s.stage + ': ' + usd(s[key]) + ' (' + pctRaw(s[key] / tot) + ')') + '"></span>';
+        }).join('') + '</div></div>';
+    };
+    var tq = p.total;
+    var rows = p.stages.map(function (s) {
+      return '<tr><td style="white-space:nowrap"><span class="sw" style="background:var(' + STAGE_VAR[s.stage] + ')"></span>' + esc(s.stage) + '</td><td class="num">' + usd(s.cur) +
+        '</td><td class="num">' + usd(s.next) + '</td><td class="num">' + usd(s.cur + s.next) + '</td><td class="num">' + s.opps + '</td></tr>';
+    }).join('');
+    var opps = p.opps.slice(0, S.f.pipeAll ? 500 : 15).map(function (o) {
+      return '<tr><td class="name"><div>' + esc(o.name || o.oppNo) + '</div><div class="faint mono">' + esc(o.oppNo) + (o.forecast ? ' · forecast/run-rate' : '') + '</div></td>' +
+        '<td>' + esc(o.stage.replace('Closed - ', '')) + '</td><td class="name">' + esc(o.endUser) + '</td><td class="name">' + esc(o.partner) + '</td>' +
+        '<td class="num">' + (o.cur ? usd(o.cur) : '—') + '</td><td class="num">' + (o.next ? usd(o.next) : '—') + '</td></tr>';
+    }).join('');
+    var pl = p.productLines.map(function (x) {
+      return '<tr><td>' + esc(x.pl) + '</td><td class="num">' + usd(x.cur) + '</td><td class="num">' + usd(x.next) + '</td></tr>';
+    }).join('');
+    el.innerHTML = head +
+      '<div class="tiles">' + tile('Current quarter', a.curFq, tq.cur, 'cur') + tile('Next quarter', a.nextFq, tq.next, 'next') +
+      '<div class="tile"><div class="label">Current + next</div><div class="v">' + usd(tq.cur + tq.next) + '</div><div class="d">' + p.opps.length + ' opportunities</div>' +
+      '<div class="d">Forecast / run-rate opps (-F, -R): ' + usd(p.forecast.cur + p.forecast.next) + '</div></div></div>' +
+      '<div class="legend">' + Object.keys(STAGE_VAR).map(function (s) { return '<span><i style="background:var(' + STAGE_VAR[s] + ')"></i>' + esc(s) + '</span>'; }).join('') + '</div>' +
+      '<div class="ctrl"><label><input type="checkbox" id="fForecast"' + (S.f.forecast ? ' checked' : '') + '> Include forecast / run-rate opps (-F, -R)</label></div>' +
+      '<div class="grid2"><div class="tablebox"><table><thead><tr><th>Stage</th><th class="num">' + a.curFq + '</th><th class="num">' + a.nextFq + '</th><th class="num">Total</th><th class="num">Opps</th></tr></thead><tbody>' +
+      rows + '<tr class="tot"><td>Total</td><td class="num">' + usd(tq.cur) + '</td><td class="num">' + usd(tq.next) + '</td><td class="num">' + usd(tq.cur + tq.next) + '</td><td class="num">' + p.opps.length + '</td></tr></tbody></table></div>' +
+      '<div class="tablebox"><table><thead><tr><th>Product line</th><th class="num">' + a.curFq + '</th><th class="num">' + a.nextFq + '</th></tr></thead><tbody>' + (pl || '<tr><td colspan="3" class="faint">None</td></tr>') + '</tbody></table></div></div>' +
+      '<h3>Top opportunities</h3><div class="tablebox wide"><table><thead><tr><th>Opportunity</th><th>Stage</th><th>End user</th><th>Partner</th><th class="num">' + a.curFq + '</th><th class="num">' + a.nextFq + '</th></tr></thead><tbody>' +
+      (opps || '<tr><td colspan="6" class="faint">No lines in these quarters</td></tr>') + '</tbody></table></div>' +
+      (p.opps.length > 15 ? '<button class="btn more" data-toggle="pipeAll">' + (S.f.pipeAll ? 'Show top 15' : 'Show all ' + p.opps.length) + '</button>' : '');
+  }
+
+  // ---------------------------------------------------------------- 2. QTD
+  function renderQtd() {
+    var a = S.a, q = a.qtd, el = $('#s2'), ly = a.cy - 1;
+    var head = '<div class="sechead"><h2 id="s2h"><span class="k">2</span>Quarter to date: ' + q.fq + '</h2><span class="note">POS net USD · fiscal weeks ' +
+      q.fromWeek + '–' + q.toWeek + ' · ' + q.weeksIn + ' of ' + q.weeksTotal + ' weeks</span></div>';
+    if (!a.counts.pos) { el.innerHTML = head + '<div class="empty">Load POS to see quarter to date.</div>'; return; }
+    var target = +S.targets[S.scope + '|' + q.fq] || 0;
+    var pipeCur = a.pipeline.loaded ? a.pipeline.total.cur : null;
+    var tiles = '<div class="tiles">' +
+      '<div class="tile hero"><div class="label">QTD POS</div><div class="v">' + usd(q.net) + '</div><div class="d">' + int(q.qty) + ' units · ' +
+        (S.scope === 'all' ? 'all distributors' : pctRaw(q.hkShare) + ' of HK') + '</div></div>' +
+      '<div class="tile"><div class="label">Same weeks ' + ly + '</div><div class="v">' + usd(q.ly) + '</div><div class="d">' + delta(q.net, q.ly) + ' this year</div></div>' +
+      '<div class="tile"><div class="label">Same weeks ' + (a.cy - 2) + '</div><div class="v">' + usd(q.ly2) + '</div><div class="d">' + delta(q.net, q.ly2) + ' this year</div></div>' +
+      '<div class="tile"><div class="label">' + ly + ' Q' + a.cq + ' full quarter</div><div class="v">' + usd(q.lyFull) + '</div><div class="d">QTD is ' +
+        pctRaw(q.lyFull ? q.net / q.lyFull : null) + ' of it; ' + usd(Math.max(0, q.lyFull - q.net)) + ' to match</div></div>' +
+      '<div class="tile"><div class="label">Quarter target</div><div class="v">' + (target ? pctRaw(q.net / target) : '—') + '</div><div class="d">' +
+        (target ? usd(q.net) + ' of ' + usd(target) + '; gap ' + usd(Math.max(0, target - q.net)) +
+          (pipeCur != null ? '. Pipeline ' + a.curFq + ' ' + usd(pipeCur) : '') : 'Enter a target below') + '</div></div>' +
+      '</div>';
+    var ctrl = '<div class="ctrl"><label>Q target (USD) <input type="number" min="0" step="1000" id="fTarget" value="' + (target || '') + '" placeholder="e.g. 500000"></label>' +
+      '<span class="faint">Saved in this browser for ' + esc(shortScope()) + ' ' + q.fq + '.</span></div>';
+    var cmpTable = function (title, rows, keyLabel, extra) {
+      return '<div><h3>' + title + '</h3><div class="tablebox"><table><thead><tr><th>' + keyLabel + '</th>' + (extra ? '<th class="num">Units</th>' : '') +
+        '<th class="num">QTD</th><th class="num">Same wks ' + ly + '</th><th class="num">Δ</th></tr></thead><tbody>' +
+        (rows.length ? rows.map(function (x) {
+          return '<tr><td class="name">' + esc(x.key) + '</td>' + (extra ? '<td class="num">' + int(x.qty) + '</td>' : '') + '<td class="num">' + usd(x.cur) +
+            '</td><td class="num">' + usd(x.prev) + '</td><td class="num">' + delta(x.cur, x.prev, 'LY') + '</td></tr>';
+        }).join('') : '<tr><td colspan="5" class="faint">No POS this quarter yet</td></tr>') + '</tbody></table></div></div>';
+    };
+    el.innerHTML = head + tiles + ctrl +
+      '<div><h3>Weekly POS, ' + q.fq + ' vs ' + ly + ' Q' + a.cq + '</h3><div class="legend"><span><i style="background:var(--s1)"></i>' + a.cy + '</span><span><i style="background:var(--s2)"></i>' + ly + '</span></div>' +
+      '<div class="chart" id="cWeeks"></div></div>' +
+      '<div class="grid2">' + cmpTable('By product line', q.byPl, 'Product line') + cmpTable('Top partners', q.partners, 'Partner') + '</div>' +
+      '<div class="grid2">' + cmpTable('Top end users', q.endUsers, 'End user') + cmpTable('Top parts', q.parts, 'Part', true) + '</div>';
+    CH.cWeeks = { type: 'columns', cats: q.weeks.map(function (w) { return 'W' + w.week; }),
+      series: [{ name: String(a.cy), color: '--s1', values: q.weeks.map(function (w) { return w.cur; }) },
+        { name: String(ly), color: '--s2', values: q.weeks.map(function (w) { return w.ly; }) }], h: 200 };
+  }
+
+  // ---------------------------------------------------------------- 3. years
+  function yearColor(y) {
+    var ys = S.a.years.years.map(function (x) { return x.year; }), i = ys.length - 1 - ys.indexOf(y);
+    return ['--s1', '--s2', '--s3', '--s4', '--s5', '--s6'][Math.max(0, i) % 6];
+  }
+  function renderYears() {
+    var a = S.a, Y = a.years, el = $('#s3');
+    var yrs = Y.years;
+    var head = '<div class="sechead"><h2 id="s3h"><span class="k">3</span>Business comparison ' + (yrs.length ? yrs[0].year + '–' + yrs[yrs.length - 1].year : '') + '</h2>' +
+      '<span class="note">POS net USD · YTD = fiscal weeks 1–' + Y.lastWeek + ' of each year</span></div>';
+    if (!yrs.length) { el.innerHTML = head + '<div class="empty">Load POS to compare years.</div>'; return; }
+    var legend = '<div class="legend">' + yrs.map(function (y) { return '<span><i style="background:var(' + yearColor(y.year) + ')"></i>' + y.year + (y.partial ? ' (to wk ' + Y.lastWeek + ')' : '') + '</span>'; }).join('') + '</div>';
+    var rows = yrs.map(function (y, i) {
+      var prev = yrs[i - 1];
+      return '<tr><td><span class="sw" style="background:var(' + yearColor(y.year) + ')"></span>' + y.year + '</td><td class="num">' + usd(y.net) + (y.partial ? ' <span class="faint">YTD</span>' : '') +
+        '</td><td class="num">' + usd(y.ytd) + '</td><td class="num">' + (prev ? delta(y.ytd, prev.ytd) : '—') + '</td>' +
+        y.quarters.map(function (v) { return '<td class="num">' + (v ? usdK(v) : '—') + '</td>'; }).join('') +
+        '<td class="num">' + (S.scope === 'all' ? '100%' : pctRaw(y.hk ? y.net / y.hk : null)) + '</td><td class="num">' + pctRaw(y.net ? y.project / y.net : null) +
+        '</td><td class="num">' + y.partners + '</td><td class="num">' + y.endUsers + '</td><td class="num">' + y.skus + '</td></tr>';
+    }).join('');
+    var dist = Y.distributors.map(function (d) {
+      return '<tr' + (d.key === S.scope ? ' style="font-weight:600"' : '') + '><td class="name">' + esc(d.name) + '</td>' + yrs.map(function (y) {
+        var v = d.years[y.year] || 0, hk = y.hk;
+        return '<td class="num">' + (v ? usdK(v) : '—') + ' <span class="faint">' + (v ? pctRaw(v / hk) : '') + '</span></td>';
+      }).join('') + '</tr>';
+    }).join('');
+    el.innerHTML = head +
+      '<div class="tablebox wide"><table><thead><tr><th>Year</th><th class="num">Full year</th><th class="num">YTD wk 1–' + Y.lastWeek + '</th><th class="num">YTD Δ</th>' +
+      '<th class="num">Q1</th><th class="num">Q2</th><th class="num">Q3</th><th class="num">Q4</th><th class="num">Share of HK</th><th class="num">Project (PC)</th>' +
+      '<th class="num">Partners</th><th class="num">End users</th><th class="num">SKUs</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+      '<div class="grid2"><div><h3>By quarter</h3>' + legend + '<div class="chart" id="cQuarters"></div></div>' +
+      '<div><h3>Cumulative by fiscal week</h3>' + legend + '<div class="chart" id="cCum"></div></div></div>' +
+      '<div><h3>Hong Kong POS by distributor</h3><div class="tablebox"><table><thead><tr><th>Distributor</th>' +
+      yrs.map(function (y) { return '<th class="num">' + y.year + (y.partial ? ' YTD' : '') + ' · share</th>'; }).join('') + '</tr></thead><tbody>' + dist + '</tbody></table></div></div>';
+    CH.cQuarters = { type: 'columns', cats: ['Q1', 'Q2', 'Q3', 'Q4'], h: 230,
+      series: yrs.map(function (y) { return { name: String(y.year), color: yearColor(y.year), values: y.quarters.map(function (v, i) { return y.partial && i + 1 > a.cq ? null : v; }) }; }) };
+    CH.cCum = { type: 'lines', n: 53, h: 230,
+      series: yrs.map(function (y) { return { name: String(y.year), color: yearColor(y.year), values: y.cum }; }) };
+  }
+
+  // ---------------------------------------------------------------- 4. product lines
+  var PL_COLOR = ['--s1', '--s2', '--s3', '--s4', '--s5', '--s6'];
+  function plColor(k) { var i = R.PL_ORDER.indexOf(k); return i < 0 ? '--neutral' : PL_COLOR[i]; }
+  function renderPl() {
+    var a = S.a, P = a.productLines, el = $('#s4'), yrs = P.years, basis = S.f.plBasis, cy = P.cy;
+    var head = '<div class="sechead"><h2 id="s4h"><span class="k">4</span>Product line comparison</h2><span class="note">POS net USD · ' +
+      (basis === 'ytd' ? 'fiscal weeks 1–' + P.lastWeek + ' of each year' : 'full fiscal years (' + cy + ' to date)') + '</span></div>';
+    if (!yrs.length) { el.innerHTML = head + '<div class="empty">Load POS to compare product lines.</div>'; return; }
+    var val = function (x, y) { return (basis === 'ytd' ? x.ytd : x.full)[y] || 0; };
+    var totals = {};
+    yrs.forEach(function (y) { totals[y] = P.lines.reduce(function (s, l) { return s + val(l, y); }, 0); });
+    var subsBy = {};
+    P.subLines.forEach(function (s) { (subsBy[s.pl] = subsBy[s.pl] || []).push(s); });
+    var row = function (x, cls) {
+      return '<tr class="' + (cls || '') + '"><td>' + (cls ? '' : '<span class="sw" style="background:var(' + plColor(x.key) + ')"></span>') + esc(x.key) + '</td>' +
+        yrs.map(function (y) { return '<td class="num">' + (val(x, y) ? usd(val(x, y)) : '—') + '</td>'; }).join('') +
+        '<td class="num">' + delta(val(x, cy), val(x, cy - 1), 'LY') + '</td><td class="num">' + pctRaw(totals[cy] ? val(x, cy) / totals[cy] : null) + '</td></tr>';
+    };
+    var body = P.lines.map(function (l) {
+      // Sub-lines only when there is more than one; a lone sub-line repeats its parent.
+      var subs = subsBy[l.key] || [];
+      if (subs.length < 2) subs = [];
+      return row(l) + subs.map(function (s) { return row(s, 'sub'); }).join('');
+    }).join('');
+    var mix = yrs.map(function (y) {
+      var t = totals[y] || 1;
+      return '<div style="display:grid;grid-template-columns:44px 1fr;gap:10px;align-items:center"><span class="faint">' + y + '</span><div class="stack" style="height:18px">' +
+        P.lines.filter(function (l) { return val(l, y) > 0; }).map(function (l) {
+          return '<span style="flex:' + val(l, y) + ';background:var(' + plColor(l.key) + ')" data-tip="' + esc(y + ' · ' + l.key + ': ' + usd(val(l, y)) + ' (' + pctRaw(val(l, y) / t) + ')') + '"></span>';
+        }).join('') + '</div></div>';
+    }).join('');
+    var fam = P.families.map(function (f) {
+      return '<tr><td class="name">' + esc(f.key) + ' <span class="faint">' + esc(f.pl) + '</span></td><td class="num">' + int(f.qty[cy] || 0) + '</td><td class="num">' +
+        usd(f.ytd[cy] || 0) + '</td><td class="num">' + usd(f.ytd[cy - 1] || 0) + '</td><td class="num">' + delta(f.ytd[cy] || 0, f.ytd[cy - 1] || 0, 'LY') + '</td></tr>';
+    }).join('');
+    el.innerHTML = head +
+      '<div class="chips" role="group" aria-label="Basis"><button class="chipbtn" data-basis="ytd" aria-pressed="' + (basis === 'ytd') + '">YTD, same weeks</button>' +
+      '<button class="chipbtn" data-basis="full" aria-pressed="' + (basis === 'full') + '">Full year</button></div>' +
+      '<div class="grid2"><div><h3>By year</h3><div class="legend">' + yrs.map(function (y) { return '<span><i style="background:var(' + yearColor(y) + ')"></i>' + y + '</span>'; }).join('') +
+      '</div><div class="chart" id="cPl"></div></div>' +
+      '<div><h3>Mix</h3><div class="legend">' + P.lines.map(function (l) { return '<span><i style="background:var(' + plColor(l.key) + ')"></i>' + esc(l.key) + '</span>'; }).join('') +
+      '</div><div style="display:grid;gap:10px;margin-top:10px">' + mix + '</div></div></div>' +
+      '<div class="tablebox wide"><table><thead><tr><th>Product line</th>' + yrs.map(function (y) { return '<th class="num">' + y + '</th>'; }).join('') +
+      '<th class="num">Δ vs ' + (cy - 1) + '</th><th class="num">Mix ' + cy + '</th></tr></thead><tbody>' + body +
+      '<tr class="tot"><td>Total</td>' + yrs.map(function (y) { return '<td class="num">' + usd(totals[y]) + '</td>'; }).join('') +
+      '<td class="num">' + delta(totals[cy], totals[cy - 1], 'LY') + '</td><td class="num">100%</td></tr></tbody></table></div>' +
+      '<div><h3>Top product families, YTD wk 1–' + P.lastWeek + '</h3><div class="tablebox"><table><thead><tr><th>Family</th><th class="num">Units ' + cy + '</th><th class="num">' + cy +
+      '</th><th class="num">' + (cy - 1) + '</th><th class="num">Δ</th></tr></thead><tbody>' + fam + '</tbody></table></div></div>';
+    CH.cPl = { type: 'columns', cats: P.lines.map(function (l) { return l.key; }), h: 240,
+      series: yrs.map(function (y) { return { name: String(y), color: yearColor(y), values: P.lines.map(function (l) { return val(l, y); }) }; }) };
+  }
+
+  // ---------------------------------------------------------------- 5. partners
+  var P_STATUS = {
+    growing: ['Growing', 'good'], new: ['New', 'info'], returning: ['Returning', 'info'], steady: ['Steady', ''],
+    declining: ['Declining', 'serious'], lapsed: ['Lapsed', 'critical'], pipeline: ['Pipeline only', ''], none: ['No POS', '']
+  };
+  var HEAT = { light: ['#cde2fb', '#9ec5f4', '#6da7ec', '#3987e5', '#256abf', '#184f95', '#0d366b'],
+    dark: ['#0d366b', '#184f95', '#256abf', '#3987e5', '#6da7ec', '#9ec5f4', '#cde2fb'] };
+  function isDark() {
+    var t = document.documentElement.getAttribute('data-theme');
+    return t ? t === 'dark' : window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches;
+  }
+  function renderPartners() {
+    var a = S.a, P = a.partners, el = $('#s5'), cy = P.cy, yrs = P.years;
+    var head = '<div class="sechead"><h2 id="s5h"><span class="k">5</span>Partner coverage</h2><span class="note">Resellers buying through ' + esc(scopeName()) +
+      ' · status = YTD vs same weeks ' + (cy - 1) + '</span></div>';
+    if (!P.list.length) { el.innerHTML = head + '<div class="empty">Load POS to see partner coverage.</div>'; return; }
+    var act = function (y) { return (P.activeByYear.filter(function (x) { return x.year === y; })[0] || {}).n || 0; };
+    var sc = P.statusCount;
+    var tiles = '<div class="tiles">' +
+      '<div class="tile"><div class="label">Active partners ' + cy + '</div><div class="v">' + act(cy) + '</div><div class="d">' +
+        yrs.filter(function (y) { return y !== cy; }).map(function (y) { return y + ': ' + act(y); }).join(' · ') + '</div></div>' +
+      '<div class="tile"><div class="label">New / returning</div><div class="v">' + ((sc.new || 0) + (sc.returning || 0)) + '</div><div class="d">' + (sc.new || 0) + ' new, ' + (sc.returning || 0) + ' back after a gap</div></div>' +
+      '<div class="tile"><div class="label">Growing / declining</div><div class="v">' + (sc.growing || 0) + ' / ' + (sc.declining || 0) + '</div><div class="d">' + (sc.steady || 0) + ' steady</div></div>' +
+      '<div class="tile"><div class="label">Lapsed</div><div class="v">' + (sc.lapsed || 0) + '</div><div class="d">' + usd(P.lapsedValue) + ' bought in ' + (cy - 1) + '</div></div>' +
+      '<div class="tile"><div class="label">Top-5 concentration</div><div class="v">' + pctRaw(P.top5Share) + '</div><div class="d">of ' + cy + ' POS</div></div>' +
+      '</div>';
+    var chips = '<div class="chips" role="group" aria-label="Status"><button class="chipbtn" data-pstatus="" aria-pressed="' + (!S.f.partnerStatus) + '">All ' + P.list.length + '</button>' +
+      Object.keys(P_STATUS).filter(function (k) { return sc[k]; }).map(function (k) {
+        return '<button class="chipbtn" data-pstatus="' + k + '" aria-pressed="' + (S.f.partnerStatus === k) + '">' + P_STATUS[k][0] + ' ' + sc[k] + '</button>';
+      }).join('') + '</div>';
+    var list = P.list.filter(function (p) { return !S.f.partnerStatus || p.status === S.f.partnerStatus; });
+    var shown = S.f.partnerAll ? list : list.slice(0, 25);
+    var hasPipe = a.pipeline.loaded;
+    var rows = shown.map(function (p) {
+      var st = P_STATUS[p.status] || ['', ''];
+      return '<tr><td class="name">' + esc(p.name) + '</td><td><span class="st ' + st[1] + '">' + st[0] + '</span></td>' +
+        yrs.map(function (y) { return '<td class="num">' + (p.full[y] ? usd(p.full[y]) : '—') + '</td>'; }).join('') +
+        '<td class="num">' + delta(p.ytd[cy] || 0, p.ytd[cy - 1] || 0, 'LY') + '</td><td class="num">' + (p.endUserCount || '—') + '</td><td class="num">' + (p.plCount || '—') +
+        '</td><td class="num mono">' + esc(p.last ? p.last.replace('-W', ' wk ') : '—') + '</td>' + (hasPipe ? '<td class="num">' + (p.pipeline ? usd(p.pipeline) : '—') + '</td>' : '') + '</tr>';
+    }).join('');
+    // white-space matrix: top partners × product line for the chosen year
+    var hy = S.f.heatYear && yrs.indexOf(S.f.heatYear) >= 0 ? S.f.heatYear : cy;
+    var plOf = function (p) { return p.plYears[hy] || {}; };
+    var heatList = P.list.filter(function (p) { return !p.pipelineOnly && p.full[hy] > 0; }).sort(function (x, y) { return y.full[hy] - x.full[hy]; }).slice(0, 20);
+    var pls = P.pls;
+    var max = 0;
+    heatList.forEach(function (p) { pls.forEach(function (pl) { max = Math.max(max, plOf(p)[pl] || 0); }); });
+    var ramp = HEAT[isDark() ? 'dark' : 'light'];
+    var heat = heatList.map(function (p) {
+      return '<tr><td class="name">' + esc(p.name) + '</td>' + pls.map(function (pl) {
+        var v = plOf(p)[pl] || 0;
+        if (!v) return '<td class="h zero" data-tip="' + esc(p.name + ' · ' + pl + ': no POS in ' + hy) + '">·</td>';
+        var i = Math.min(ramp.length - 1, Math.floor(Math.sqrt(v / max) * ramp.length));
+        var light = isDark() ? i >= 4 : i < 3;
+        return '<td class="h" style="background:' + ramp[i] + ';color:' + (light ? '#15212c' : '#ffffff') + '" data-tip="' + esc(p.name + ' · ' + pl + ': ' + usd(v)) + '">' + usdK(v) + '</td>';
+      }).join('') + '<td class="num">' + Object.keys(plOf(p)).length + '/' + pls.length + '</td></tr>';
+    }).join('');
+    el.innerHTML = head + tiles + chips +
+      '<div class="tablebox wide"><table><thead><tr><th>Partner</th><th>Status</th>' + yrs.map(function (y) { return '<th class="num">' + y + (y === cy ? ' YTD' : '') + '</th>'; }).join('') +
+      '<th class="num">YTD Δ</th><th class="num">End users ' + cy + '</th><th class="num">Lines ' + cy + '</th><th class="num">Last POS</th>' +
+      (hasPipe ? '<th class="num">Pipeline ' + a.curFq.slice(-2) + '+' + a.nextFq.slice(-2) + '</th>' : '') + '</tr></thead><tbody>' +
+      (rows || '<tr><td colspan="9" class="faint">No partners with this status</td></tr>') + '</tbody></table></div>' +
+      (list.length > 25 ? '<button class="btn more" data-toggle="partnerAll">' + (S.f.partnerAll ? 'Show top 25' : 'Show all ' + list.length) + '</button>' : '') +
+      '<div><div class="sechead"><h3>Product line coverage, top ' + heatList.length + ' partners</h3>' +
+      '<div class="chips" role="group" aria-label="Year">' + yrs.map(function (y) { return '<button class="chipbtn" data-heat="' + y + '" aria-pressed="' + (y === hy) + '">' + y + '</button>'; }).join('') + '</div></div>' +
+      '<p class="faint" style="margin:4px 0 8px">Darker = more POS. A dot is white space: the partner bought no product of that line in ' + hy + '.</p>' +
+      '<div class="tablebox heat"><table><thead><tr><th>Partner</th>' + pls.map(function (pl) { return '<th class="r">' + esc(pl) + '</th>'; }).join('') +
+      '<th class="num">Lines</th></tr></thead><tbody>' + heat + '</tbody></table></div></div>';
+  }
+
+  // ---------------------------------------------------------------- 6. inventory
+  var I_STATUS = {
+    short: ['Backlog > stock', 'critical'], 'stock-gap': ['Not stocked', 'serious'], 'no-sales': ['No sales 26 wks', 'warning'],
+    overstock: ['Overstock', 'warning'], slow: ['Slow 13 wks', 'warning'], low: ['Low cover', 'serious'], 'pipeline-gap': ['Pipeline gap', 'serious'],
+    healthy: ['Healthy', 'good'], reserved: ['Held for backlog', '']
+  };
+  function renderInventory() {
+    var a = S.a, I = a.inventory, el = $('#s6');
+    var head = '<div class="sechead"><h2 id="s6h"><span class="k">6</span>Inventory status and suggestions</h2><span class="note">' +
+      (I.loaded ? 'VAD stock as of ' + fmtDate(E.iso(new Date(I.asOf))) + ' · run rate from the latest 13 POS weeks' : '') + '</span></div>';
+    if (!I.loaded) { el.innerHTML = head + '<div class="empty">Drop the VAD inventory (<span class="mono">*_INV_*.xlsx</span>) and backlog (<span class="mono">*_BACKLOG_*.xlsx</span>) files.</div>'; return; }
+    var c = I.counts;
+    var byVal = function (s) { return I.list.filter(function (p) { return p.status === s; }).reduce(function (x, p) { return x + p.value; }, 0); };
+    var tiles = '<div class="tiles">' +
+      '<div class="tile hero"><div class="label">Stock value</div><div class="v">' + usd(I.totalValue) + '</div><div class="d">' + I.skus + ' SKUs · ' + int(I.units) + ' units</div></div>' +
+      '<div class="tile"><div class="label">Weeks of stock</div><div class="v">' + (I.weeklySell ? Math.round(I.totalValue / I.weeklySell) : '—') + '</div><div class="d">at the 13-week sell-out rate of stocked SKUs (' + usdK(I.weeklySell) + '/wk)</div></div>' +
+      '<div class="tile"><div class="label">Reseller backlog</div><div class="v">' + int(I.backlogUnits) + ' units</div><div class="d">' + I.backlogLines + ' lines on ' + I.backlogOrders + ' orders</div></div>' +
+      '<div class="tile"><div class="label">Backlog > stock</div><div class="v">' + (c.short || 0) + ' SKUs</div><div class="d">need the Zebra order to land</div></div>' +
+      '<div class="tile"><div class="label">Slow or overstock</div><div class="v">' + usd(I.slowValue) + '</div><div class="d">' + pctRaw(I.totalValue ? I.slowValue / I.totalValue : null) + ' of stock value</div></div>' +
+      '</div>';
+    // top actions: biggest-value problems first
+    var actions = [];
+    var top = function (s, n) { return I.list.filter(function (p) { return p.status === s; }).sort(function (x, y) { return y.value - x.value || y.backlog - x.backlog; }).slice(0, n); };
+    top('overstock', 3).concat(top('no-sales', 2), top('slow', 2)).sort(function (x, y) { return y.value - x.value; }).slice(0, 4).forEach(function (p) {
+      actions.push('<b class="mono">' + esc(p.part) + '</b> ' + usd(p.value) + ' (' + p.free + ' free): ' + esc(p.advice[0]));
+    });
+    var shorts = top('short', 50).sort(function (x, y) { return x.free - y.free; });
+    if (shorts.length) actions.push('Backlog exceeds stock on ' + shorts.length + ' SKUs, largest ' + shorts.slice(0, 3).map(function (p) { return '<b class="mono">' + esc(p.part) + '</b> (' + (-p.free) + ')'; }).join(', ') +
+      '. Check the Zebra open orders cover them before the scheduled ship dates.');
+    top('stock-gap', 3).forEach(function (p) { actions.push('<b class="mono">' + esc(p.part) + '</b>: ' + esc(p.advice[0])); });
+    top('low', 3).forEach(function (p) { actions.push('<b class="mono">' + esc(p.part) + '</b>: ' + esc(p.advice[0])); });
+    top('reserved', 50).filter(function (p) { return p.oldestDays > 30; }).slice(0, 2).forEach(function (p) {
+      actions.push('<b class="mono">' + esc(p.part) + '</b>: ' + esc(p.advice[0]));
+    });
+    var chips = '<div class="chips" role="group" aria-label="Status"><button class="chipbtn" data-istatus="" aria-pressed="' + (!S.f.invStatus) + '">All ' + I.list.length + '</button>' +
+      Object.keys(I_STATUS).filter(function (k) { return c[k]; }).map(function (k) {
+        return '<button class="chipbtn" data-istatus="' + k + '" aria-pressed="' + (S.f.invStatus === k) + '">' + I_STATUS[k][0] + ' ' + c[k] + '</button>';
+      }).join('') + '</div>';
+    var list = I.list.filter(function (p) { return !S.f.invStatus || p.status === S.f.invStatus; });
+    var shown = S.f.invAll ? list : list.slice(0, 30);
+    var hasPipe = a.pipeline.loaded;
+    var rows = shown.map(function (p) {
+      var st = I_STATUS[p.status] || ['', ''];
+      return '<tr><td class="name"><div class="mono">' + esc(p.part) + '</div><div class="faint">' + esc([p.family, p.pl].filter(Boolean).join(' · ')) + '</div></td>' +
+        '<td><span class="st ' + st[1] + '">' + st[0] + '</span></td><td class="num">' + int(p.onHand) + '</td><td class="num">' + (p.backlog ? int(p.backlog) : '—') +
+        (p.oldestDays != null ? '<div class="faint">' + p.oldestDays + 'd</div>' : '') + '</td><td class="num' + (p.free < 0 ? ' down' : '') + '">' + int(p.free) +
+        '</td><td class="num">' + int(p.u13) + '</td><td class="num">' + int(p.u26) + '</td><td class="num">' + (p.cover == null ? '—' : p.cover > 99 ? '99+' : p.cover.toFixed(1)) +
+        '</td>' + (hasPipe ? '<td class="num">' + (p.pipeQty ? int(p.pipeQty) : '—') + '</td>' : '') + '<td class="num">' + (p.value ? usd(p.value) : '—') +
+        '</td><td class="adv">' + p.advice.map(esc).join(' ') + '</td></tr>';
+    }).join('');
+    var statusBar = '<div class="stack" style="height:18px" role="img" aria-label="Stock value by status">' + Object.keys(I_STATUS).map(function (k) {
+      var v = byVal(k); if (!v) return '';
+      var col = I_STATUS[k][1] ? 'var(--' + I_STATUS[k][1].replace('info', 's1') + ')' : 'var(--neutral)';
+      return '<span style="flex:' + v + ';background:' + col + '" data-tip="' + esc(I_STATUS[k][0] + ': ' + usd(v) + ' (' + pctRaw(v / I.totalValue) + ')') + '"></span>';
+    }).join('') + '</div>';
+    el.innerHTML = head + tiles +
+      '<div><h3>Stock value by status</h3>' + statusBar + '<div class="legend" style="margin-top:8px">' + Object.keys(I_STATUS).filter(function (k) { return byVal(k); }).map(function (k) {
+        return '<span><span class="st ' + I_STATUS[k][1] + '">' + I_STATUS[k][0] + '</span> ' + usdK(byVal(k)) + '</span>';
+      }).join('') + '</div></div>' +
+      (actions.length ? '<div><h3>Suggested actions</h3><ol class="highlights">' + actions.map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ol></div>' : '') +
+      chips +
+      '<div class="tablebox wide"><table><thead><tr><th>Part</th><th>Status</th><th class="num">On hand</th><th class="num">Backlog</th><th class="num">Free</th>' +
+      '<th class="num">Sold 13w</th><th class="num">Sold 26w</th><th class="num">Wks cover</th>' + (hasPipe ? '<th class="num">Pipeline</th>' : '') +
+      '<th class="num">Value</th><th>Suggestion</th></tr></thead><tbody>' + (rows || '<tr><td colspan="11" class="faint">Nothing with this status</td></tr>') + '</tbody></table></div>' +
+      (list.length > 30 ? '<button class="btn more" data-toggle="invAll">' + (S.f.invAll ? 'Show first 30' : 'Show all ' + list.length) + '</button>' : '');
+  }
+
+  // ---------------------------------------------------------------- charts (inline SVG)
+  var CH = {};
+  // Four gridlines on a clean step (1, 2, 2.5, 5 × 10^n); returns the axis max.
+  function niceMax(v) {
+    if (v <= 0) return 4;
+    var raw = v / 4, p = Math.pow(10, Math.floor(Math.log10(raw))), m = raw / p;
+    return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 2.5 ? 2.5 : m <= 5 ? 5 : 10) * p * 4;
+  }
+  function cssVar(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+  function drawCharts() {
+    Object.keys(CH).forEach(function (id) {
+      var el = document.getElementById(id);
+      if (!el) { delete CH[id]; return; }
+      (CH[id].type === 'lines' ? lines : columns)(el, CH[id]);
+    });
+  }
+  function axis(W, H, m, max) {
+    var s = '';
+    for (var i = 0; i <= 4; i++) {
+      var v = max * i / 4, y = H - m.b - (H - m.t - m.b) * i / 4;
+      s += '<line class="' + (i ? 'gridl' : 'base') + '" x1="' + m.l + '" x2="' + (W - m.r) + '" y1="' + y + '" y2="' + y + '"/>' +
+        '<text x="' + (m.l - 6) + '" y="' + (y + 4) + '" text-anchor="end">' + usdK(v) + '</text>';
+    }
+    return s;
+  }
+  function columns(el, o) {
+    var W = Math.max(280, el.clientWidth), H = o.h || 220, m = { t: 10, r: 6, b: 24, l: 50 };
+    var n = o.series.length, cats = o.cats, all = [];
+    o.series.forEach(function (s) { s.values.forEach(function (v) { if (v != null) all.push(v); }); });
+    var max = niceMax(Math.max.apply(null, all.concat([0])));
+    var band = (W - m.l - m.r) / cats.length, gap = 2;
+    var bw = Math.max(3, Math.min(24, (band * 0.78 - gap * (n - 1)) / n)), gw = bw * n + gap * (n - 1);
+    var ph = H - m.t - m.b, svg = axis(W, H, m, max);
+    var step = Math.ceil(cats.length / Math.max(1, Math.floor((W - m.l) / 46)));
+    cats.forEach(function (c, ci) {
+      var x0 = m.l + band * ci + (band - gw) / 2;
+      o.series.forEach(function (s, si) {
+        var v = s.values[ci];
+        if (v == null) return;
+        var h = Math.max(v > 0 ? 1 : 0, ph * v / max), x = x0 + si * (bw + gap), y = H - m.b - h, r = Math.min(4, bw / 2, h);
+        var tip = c + ' · ' + s.name + ': ' + usd(v);
+        svg += '<rect class="hit" x="' + (x - 1) + '" y="' + m.t + '" width="' + (bw + 2) + '" height="' + ph + '" data-tip="' + esc(tip) + '"/>' +
+          '<path class="mk" fill="var(' + s.color + ')" pointer-events="none" d="M' + x + ',' + (H - m.b) + 'V' + (y + r) + 'Q' + x + ',' + y + ' ' + (x + r) + ',' + y +
+          'H' + (x + bw - r) + 'Q' + (x + bw) + ',' + y + ' ' + (x + bw) + ',' + (y + r) + 'V' + (H - m.b) + 'Z"/>';
+      });
+      if (ci % step === 0) {
+        var lab = c.length > 14 && band < 110 ? c.slice(0, 12) + '…' : c;
+        svg += '<text class="lab" x="' + (m.l + band * ci + band / 2) + '" y="' + (H - 6) + '" text-anchor="middle">' + esc(lab) + '</text>';
+      }
+    });
+    el.innerHTML = '<svg width="' + W + '" height="' + H + '" role="img" aria-label="' + esc(o.series.map(function (s) { return s.name; }).join(', ')) + '">' + svg + '</svg>';
+  }
+  function lines(el, o) {
+    var W = Math.max(280, el.clientWidth), H = o.h || 220, m = { t: 10, r: 54, b: 24, l: 50 }, n = o.n;
+    var all = [];
+    o.series.forEach(function (s) { s.values.forEach(function (v) { if (v != null) all.push(v); }); });
+    var max = niceMax(Math.max.apply(null, all.concat([0])));
+    var X = function (i) { return m.l + (W - m.l - m.r) * i / (n - 1); }, Y = function (v) { return H - m.b - (H - m.t - m.b) * v / max; };
+    var svg = axis(W, H, m, max);
+    [1, 14, 27, 40, 53].forEach(function (w) { svg += '<text x="' + X(w - 1) + '" y="' + (H - 6) + '" text-anchor="middle">wk ' + w + '</text>'; });
+    var ends = [];
+    o.series.forEach(function (s) {
+      var d = '', last = -1;
+      s.values.forEach(function (v, i) { if (v == null) return; d += (d ? 'L' : 'M') + X(i).toFixed(1) + ',' + Y(v).toFixed(1); last = i; });
+      svg += '<path d="' + d + '" fill="none" stroke="var(' + s.color + ')" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>';
+      if (last >= 0) ends.push({ x: X(last), y: Y(s.values[last]), v: s.values[last], s: s });
+    });
+    // end labels, nudged apart
+    ends.sort(function (a, b) { return a.y - b.y; });
+    for (var i = 1; i < ends.length; i++) if (ends[i].y - ends[i - 1].y < 13) ends[i].ly = (ends[i - 1].ly || ends[i - 1].y) + 13;
+    ends.forEach(function (e) {
+      svg += '<circle cx="' + e.x + '" cy="' + e.y + '" r="4" fill="var(' + e.s.color + ')" stroke="var(--surface)" stroke-width="2"/>' +
+        '<text class="lab" x="' + (e.x + 8) + '" y="' + ((e.ly || e.y) + 4) + '">' + usdK(e.v) + '</text>';
+    });
+    svg += '<line class="xh" id="' + el.id + 'X" x1="0" x2="0" y1="' + m.t + '" y2="' + (H - m.b) + '" visibility="hidden"/>' +
+      '<g id="' + el.id + 'D"></g><rect class="hit xhair" data-chart="' + el.id + '" x="' + m.l + '" y="' + m.t + '" width="' + (W - m.l - m.r) + '" height="' + (H - m.t - m.b) + '"/>';
+    el.innerHTML = '<svg width="' + W + '" height="' + H + '" role="img" aria-label="Cumulative POS by fiscal week">' + svg + '</svg>';
+    o._geo = { X: X, Y: Y, m: m, W: W, n: n };
+  }
+  function crosshair(e, rect) {
+    var id = rect.dataset.chart, o = CH[id], g = o && o._geo, tip = $('#tip');
+    if (!g) return;
+    var box = rect.ownerSVGElement.getBoundingClientRect();
+    var i = Math.round((e.clientX - box.left - g.m.l) / (g.W - g.m.l - g.m.r) * (g.n - 1));
+    i = Math.max(0, Math.min(g.n - 1, i));
+    var xl = document.getElementById(id + 'X'), dots = document.getElementById(id + 'D');
+    xl.setAttribute('x1', g.X(i)); xl.setAttribute('x2', g.X(i)); xl.setAttribute('visibility', 'visible');
+    var txt = 'Week ' + (i + 1) + ' cumulative';
+    dots.innerHTML = o.series.map(function (s) {
+      var v = s.values[i];
+      if (v == null) return '';
+      txt += '\n' + s.name + ': ' + usd(v);
+      return '<circle cx="' + g.X(i) + '" cy="' + g.Y(v) + '" r="4" fill="var(' + s.color + ')" stroke="var(--surface)" stroke-width="2"/>';
+    }).join('');
+    tip.textContent = txt; tip.hidden = false;
+    tip.style.left = Math.min(e.clientX + 12, window.innerWidth - tip.offsetWidth - 8) + 'px';
+    tip.style.top = (e.clientY + 14) + 'px';
+  }
+  function hideCrosshairs() {
+    Object.keys(CH).forEach(function (id) {
+      var xl = document.getElementById(id + 'X'), d = document.getElementById(id + 'D');
+      if (xl) xl.setAttribute('visibility', 'hidden');
+      if (d) d.innerHTML = '';
+    });
+  }
+
+  // ---------------------------------------------------------------- events
+  $('#uploadBtn').addEventListener('click', function () { $('#fileInput').click(); });
+  $('#resetBtn').addEventListener('click', function () {
+    if (!confirm('Drop uploaded files and go back to the initial data set? This also resets the order check page.')) return;
+    IDB.del('tables'); S.tables = window.ZEBRA_INITIAL_DATA.tables.slice(); S.fromUpload = false; recompute();
+  });
+  document.addEventListener('change', function (e) {
+    var t = e.target;
+    if (t.id === 'fileInput') { handleFiles(t.files); t.value = ''; return; }
+    if (t.id === 'scope') { S.scope = t.value; LS.set('vst.scope', S.scope); recompute(); return; }
+    if (t.id === 'fForecast') { S.f.forecast = t.checked; saveF(); recompute(); return; }
+    if (t.id === 'fTarget') {
+      var k = S.scope + '|' + S.a.qtd.fq, v = Math.max(0, +t.value || 0);
+      if (v) S.targets[k] = v; else delete S.targets[k];
+      LS.set('vst.targets', S.targets); renderHighlights(); renderQtd(); drawCharts();
+    }
+  });
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest && e.target.closest('button');
+    if (!t) return;
+    var d = t.dataset;
+    if (d.basis) { S.f.plBasis = d.basis; saveF(); renderPl(); drawCharts(); }
+    else if (d.pstatus != null) { S.f.partnerStatus = d.pstatus; saveF(); renderPartners(); }
+    else if (d.istatus != null) { S.f.invStatus = d.istatus; saveF(); renderInventory(); }
+    else if (d.heat) { S.f.heatYear = +d.heat; saveF(); renderPartners(); }
+    else if (d.toggle) { S.f[d.toggle] = !S.f[d.toggle]; saveF(); render(); }
+  });
+  document.addEventListener('mousemove', function (e) {
+    var tip = $('#tip'), x = e.target.closest && e.target.closest('.xhair');
+    if (x) return crosshair(e, x);
+    hideCrosshairs();
+    var t = e.target.closest && e.target.closest('[data-tip]');
+    if (!t) { tip.hidden = true; return; }
+    tip.textContent = t.dataset.tip; tip.hidden = false;
+    tip.style.left = Math.min(e.clientX + 12, window.innerWidth - tip.offsetWidth - 8) + 'px';
+    tip.style.top = (e.clientY + 14) + 'px';
+  });
+  var rT;
+  window.addEventListener('resize', function () { clearTimeout(rT); rT = setTimeout(drawCharts, 120); });
+  if (window.matchMedia) matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () { renderPartners(); });
+  // section highlight in the sticky nav
+  if ('IntersectionObserver' in window) {
+    var io = new IntersectionObserver(function (es) {
+      es.forEach(function (en) {
+        if (!en.isIntersecting) return;
+        document.querySelectorAll('#toc a').forEach(function (a) { a.classList.toggle('on', a.getAttribute('href') === '#' + en.target.id); });
+      });
+    }, { rootMargin: '-30% 0px -60% 0px' });
+    ['s1', 's2', 's3', 's4', 's5', 's6'].forEach(function (id) { io.observe(document.getElementById(id)); });
+  }
+  var dragN = 0;
+  window.addEventListener('dragenter', function (e) { if (e.dataTransfer && Array.prototype.indexOf.call(e.dataTransfer.types, 'Files') >= 0) { dragN++; $('#drop').hidden = false; } });
+  window.addEventListener('dragleave', function () { if (--dragN <= 0) { dragN = 0; $('#drop').hidden = true; } });
+  window.addEventListener('dragover', function (e) { e.preventDefault(); });
+  window.addEventListener('drop', function (e) { e.preventDefault(); dragN = 0; $('#drop').hidden = true; handleFiles(e.dataTransfer.files); });
+
+  // ---------------------------------------------------------------- boot
+  IDB.get('tables').then(function (saved) {
+    if (saved && saved.length) { S.tables = saved; S.fromUpload = true; }
+    else if (window.ZEBRA_INITIAL_DATA) S.tables = window.ZEBRA_INITIAL_DATA.tables.slice();
+    recompute();
+    if (!S.tables.length) toast('Upload POS, pipeline, VAD stock and backlog files to start', 6000);
+  });
+})();
+</script>

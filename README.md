@@ -27,12 +27,25 @@ Each Secure, Validate or Closed-Won pipeline line is matched in this order. Ever
 
 The indicative claim is (standard unit − deal unit) × qty. The standard unit comes from the DSR line value or the VAD inventory price. The deal unit is the SFDC schedule amount ÷ qty.
 
+## VST business review (`app/review.html`)
+
+A one-page quarterly review for a distributor (VSTECS by default; switch to All Hong Kong or another VAD at the top). It reads the Zyme POS exports (the 2024 layout and the 2025+ `_cc` layout; Hong Kong rows only, the biggest POS sheet per workbook) as well as the pipeline, VAD inventory and VAD backlog files above.
+
+1. **Pipeline**: current and next quarter by stage (Won, Secure, Validate, Qualify, Identify), by schedule-date quarter, for the selected primary distributor. Forecast / run-rate opps (`-F`, `-R`) can be switched off.
+2. **QTD**: POS for the current fiscal quarter against the same fiscal weeks last year and the year before, the full prior-year quarter, and an optional quarter target.
+3. **Business comparison**: every loaded fiscal year by quarter, YTD to the same fiscal week, cumulative by week, share of Hong Kong POS.
+4. **Product lines**: YTD or full year by product line and sub-line, mix, top product families.
+5. **Partner coverage**: resellers by year with status (new, growing, declining, lapsed), end users, product-line breadth, pipeline, and a partner × product line white-space map.
+6. **Inventory**: free stock against reseller backlog, 13 / 26-week sell-out, weeks of cover, and a suggestion per part.
+
+POS value is net cost in USD at planned rate. The 2024 export has no net column, so it is SIP after rebate ÷ (1 − sell-out rebate %), which reproduces the 2025 net column exactly. When a fiscal year is loaded twice, the later upload wins. Both pages share the uploaded files.
+
 ## Run it
 
-Open `app/index.html` in a browser, or serve the folder:
+Open `app/index.html` (order check) or `app/review.html` (VST review) in a browser, or serve the folder:
 
 ```sh
-cd app && python3 -m http.server 8000   # http://localhost:8000
+cd app && python3 -m http.server 8000   # http://localhost:8000/review.html
 ```
 
 Uploaded data and manual decisions stay in the browser (IndexedDB and localStorage). Nothing is sent to a server. The page loads SheetJS from cdnjs to read `.xlsx` files.
@@ -42,7 +55,7 @@ Uploaded data and manual decisions stay in the browser (IndexedDB and localStora
 To open the app with a data set already loaded, generate `app/initial-data.js` locally:
 
 ```sh
-python3 -I tools/build_initial_data.py app/initial-data.js path/to/pipeline.xls path/to/DSR.xlsx path/to/*_INV_*.xlsx path/to/*_BACKLOG_*.xlsx
+python3 -I tools/build_initial_data.py app/initial-data.js path/to/pipeline.xls path/to/DSR.xlsx path/to/*_INV_*.xlsx path/to/*_BACKLOG_*.xlsx path/to/*POS*.xlsx
 ```
 
 `app/initial-data.js` contains customer data and is git-ignored. **Do not commit it.** This repository is public.
@@ -51,6 +64,7 @@ python3 -I tools/build_initial_data.py app/initial-data.js path/to/pipeline.xls 
 
 ```sh
 node tests/engine.test.js
+node tests/review.test.js
 ```
 
 The tests use synthetic fixtures only.
