@@ -113,6 +113,10 @@
     rp: { emc: 15, rfid15: 3, rfidFixed: 3, rfidHH: 3, adc: 1, ait: 1 }
   };
 
+  // Some Hong Kong PCs carry "China" as their sub region; they belong to Hong Kong.
+  var REGION_ALIAS = { 'China': 'Hong Kong' };
+  function regionOf(v) { return REGION_ALIAS[v] || v; }
+
   function categoryOf(r) {
     for (var i = 0; i < CATEGORIES.length; i++) if (CATEGORIES[i].test(r)) return CATEGORIES[i].id;
     return 'other';
@@ -153,7 +157,7 @@
         stdDisc: num(g(r, 'Discount')),
         stdNet: num(g(r, 'Standard Net Price (converted)')),
         fulfil: str(g(r, 'Fulfillment Type')),
-        region: str(g(r, 'Owner Sub Region')),
+        regionRaw: str(g(r, 'Owner Sub Region')),
         unit: num(g(r, 'Unit Special Price (converted)')),
         totalDisc: num(g(r, 'Total Discount'))
       };
@@ -162,6 +166,7 @@
       var k = [o.pc, o.part, o.unit, o.minQty, o.maxQty].join('|');
       if (seen[k]) return;
       seen[k] = 1;
+      o.region = regionOf(o.regionRaw);
       o.statusGroup = STATUS_GROUP[o.status] || 'notgranted';
       o.cat = categoryOf(o);
       o.acctKey = o.accountNo || ('name:' + o.account.toUpperCase());
@@ -384,7 +389,7 @@
 
   var api = {
     SIGNATURE: SIGNATURE, CATEGORIES: CATEGORIES, DEFAULT_RULES: DEFAULT_RULES, STATUS_GROUP: STATUS_GROUP,
-    isPcHeader: isPcHeader, tableFromGrid: tableFromGrid, normPc: normPc, buildIndex: buildIndex, categoryOf: categoryOf,
+    isPcHeader: isPcHeader, tableFromGrid: tableFromGrid, normPc: normPc, regionOf: regionOf, buildIndex: buildIndex, categoryOf: categoryOf,
     assess: assess, customerParts: customerParts, otherCustomers: otherCustomers, findAccounts: findAccounts,
     findParts: findParts, parsePartList: parsePartList, date: date, iso: iso
   };

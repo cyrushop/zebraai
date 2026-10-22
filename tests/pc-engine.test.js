@@ -66,7 +66,9 @@ const objs = [
   // EMC for C: raised for March, then an October PC at the same price → October still owed
   row(C, '15/01/2026', 'TC53-X', EMC, 1000, 900),
   row(C, '13/05/2026', 'TC53-X', EMC, 1150, 990),
-  row(C, '09/10/2026', 'TC53-X', EMC, 1322.5, 990)
+  row(C, '09/10/2026', 'TC53-X', EMC, 1322.5, 990),
+  // a Hong Kong PC filed under "China"
+  row(['400', 'Delta Hospital', 'China'], '01/02/2025', 'ZD421-X', PRN, 480, 290)
 ];
 // a verbatim duplicate line (the export repeats some)
 objs.push(Object.assign({}, objs[0]));
@@ -81,7 +83,8 @@ assert.strictEqual(E.tableFromGrid([['report'], H].concat(table.rows), 'g').rows
 const rows = E.normPc(table);
 assert.strictEqual(rows.length, objs.length - 1, 'duplicate line removed');
 const idx = E.buildIndex(rows);
-assert.deepStrictEqual([...new Set(rows.map(x => x.region))].sort(), ['Hong Kong', 'Taiwan']);
+assert.deepStrictEqual([...new Set(rows.map(x => x.region))].sort(), ['Hong Kong', 'Taiwan'], 'China counts as Hong Kong');
+assert.strictEqual(rows.find(x => x.acctKey === '400').regionRaw, 'China');
 const tw = E.buildIndex(rows.filter(x => x.region === 'Taiwan'), rows);
 assert.strictEqual(tw.accounts.length, 1, 'region subset indexes on its own');
 assert.strictEqual(tw.latestList['ZD421-X'].list, 515, 'list price comes from every region');

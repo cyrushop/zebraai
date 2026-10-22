@@ -322,7 +322,7 @@ svg.spark circle { fill: var(--spark); }
   // ------------------------------------------------------------ state
   var S = {
     rows: [], idx: null, meta: null, sample: false,
-    region: LS.get('zpc.region', 'all'),
+    region: LS.get('zpc.region.v2', 'Hong Kong'),
     tab: LS.get('zpc.tab', 'check'),
     acct: LS.get('zpc.acct', ''),
     acctQ: '',
@@ -380,6 +380,8 @@ svg.spark circle { fill: var(--spark); }
     }).catch(function (e) { toast(e.message || String(e), 7000); });
   }
   function setData(rows, meta) {
+    // Rows saved by an earlier version may still say "China".
+    rows.forEach(function (r) { if (r.region) r.region = E.regionOf(r.region); });
     S.rows = rows;
     S.meta = meta;
     applyRegion();
@@ -438,7 +440,7 @@ svg.spark circle { fill: var(--spark); }
   }
 
   // ------------------------------------------------------------ render
-  var REGION_ZH = { 'Hong Kong': '香港 HK', 'Taiwan': '台灣 TW', 'China': '中國 CN' };
+  var REGION_ZH = { 'Hong Kong': '香港 HK', 'Taiwan': '台灣 TW' };
   function renderRegion() {
     var el = $('#region');
     if (!S.idx || !hasRegion()) { el.hidden = true; return; }
@@ -447,7 +449,7 @@ svg.spark circle { fill: var(--spark); }
     el.innerHTML = '<span class="label">地區</span><div class="seg" role="group" aria-label="地區">' +
       [['all', '全部', S.rows.length]].concat(list.map(function (k) { return [k, REGION_ZH[k] || k, c[k]]; })).map(function (x) {
         return '<button data-region="' + esc(x[0]) + '" aria-pressed="' + (S.region === x[0]) + '">' + esc(x[1]) + '<span class="n">' + x[2].toLocaleString() + '</span></button>';
-      }).join('') + '</div><span class="small faint">按 PC Owner Sub Region</span>';
+      }).join('') + '</div><span class="small faint">按 PC Owner Sub Region；填咗 China 的當香港</span>';
   }
   function render() {
     renderRegion();
@@ -865,7 +867,7 @@ svg.spark circle { fill: var(--spark); }
       saveRules(); toast('已刪除加價日'); return renderView();
     }
     if (t.id === 'resetRules') { S.rules = defaultRules(); saveRules(); toast('已還原預設規則'); return renderView(); }
-    if (t.dataset.region) { S.region = t.dataset.region; LS.set('zpc.region', S.region); return applyRegion(); }
+    if (t.dataset.region) { S.region = t.dataset.region; LS.set('zpc.region.v2', S.region); return applyRegion(); }
     if (t.dataset.tab) { S.tab = t.dataset.tab; LS.set('zpc.tab', S.tab); S.limit = 300; renderTabs(); return renderView(); }
     if (t.dataset.acct) return setAcct(t.dataset.acct);
     if (t.hasAttribute('data-clearacct')) { S.acct = ''; S.acctQ = ''; LS.set('zpc.acct', ''); renderView(); var i = document.querySelector('[data-acctq]'); if (i) i.focus(); return; }

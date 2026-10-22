@@ -61,7 +61,7 @@ The tests use synthetic fixtures only.
 
 It reads the SFDC **PC list** export (`*_PC_List-*.xls`, HTML table). Upload it or drop it on the page. The rows stay in the browser (IndexedDB).
 
-The 地區 buttons above the tabs show all regions or one region at a time (Hong Kong, Taiwan, and any other `Owner Sub Region` in the file). The choice applies to the PC history on every tab. The latest list price and standard discount always come from the newest PC in any region, and the uplift rules are the same for Hong Kong and Taiwan. Data loaded before this button existed has no region; upload the PC list again to use it.
+The 地區 buttons above the tabs show Hong Kong (the default), Taiwan or both. PCs whose `Owner Sub Region` is China are Hong Kong PCs filed under the wrong region and count as Hong Kong. The choice applies to the PC history on every tab. The latest list price and standard discount always come from the newest PC in any region, and the uplift rules are the same for Hong Kong and Taiwan. Data loaded before this button existed has no region; upload the PC list again to use it.
 
 | Tab | What it does |
 |---|---|
