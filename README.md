@@ -47,10 +47,22 @@ python3 -I tools/build_initial_data.py app/initial-data.js path/to/pipeline.xls 
 
 `app/initial-data.js` contains customer data and is git-ignored. **Do not commit it.** This repository is public.
 
+## PC justification
+
+`app/pc-justification.html` writes the justification text for a New PC or a Repeat PC. Fill the blanks and press **Copy**.
+
+- **New PC:** customer contact, customer demand (WMS, Asset Management, Staff Card), Zebra product and competitor.
+- **Repeat PC:** previous repeat PC number and customer contact.
+
+For the competitor, pick a brand (Honeywell, TSC, Chainway, Urovo). The page suggests a model for each Zebra product you typed, by product class (for example TC53 → rugged touch mobile computer → Honeywell CT47). TSC's mobile computers are Bluebird models. The suggestions come from public product pages, checked 22 Oct 2026. Where no model was confirmed for a class, the page leaves it blank, so type it in. You can always edit the competitor model.
+
+Margins default to 5% / 12% (new) and 5% / 15% (repeat). The other Yes/No items keep the defaults under **Other items**.
+
 ## Tests
 
 ```sh
 node tests/engine.test.js
+node tests/pc-justification.test.js
 ```
 
 The tests use synthetic fixtures only.

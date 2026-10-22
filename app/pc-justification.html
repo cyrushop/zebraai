@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PC Justification</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: form on the left, live text on the right (stacked on narrow screens). Same tokens as index.html. */
+:root {
+  --bg: #f3f5f7;
+  --surface: #ffffff;
+  --sunk: #e9edf1;
+  --ink: #15212c;
+  --ink-2: #4f5f6e;
+  --ink-3: #7b8896;
+  --line: #d9dfe5;
+  --accent: #1d5cc2;
+  --accent-ink: #ffffff;
+  --accent-soft: #e3ecfa;
+  --warn-bg: #fff3d6;
+  --warn-ink: #7a5300;
+  --good-ink: #136c2e;
+  --f-display: "IBM Plex Sans Condensed", "Arial Narrow", system-ui, sans-serif;
+  --f-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #11171d; --surface: #182029; --sunk: #1f2933; --ink: #e7edf3; --ink-2: #a9b6c3; --ink-3: #7d8a97;
+    --line: #2b3742; --accent: #6ea2f0; --accent-ink: #0d1620; --accent-soft: #1d2d45;
+    --warn-bg: #3a2e12; --warn-ink: #f2c35b; --good-ink: #6fd08c;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #11171d; --surface: #182029; --sunk: #1f2933; --ink: #e7edf3; --ink-2: #a9b6c3; --ink-3: #7d8a97;
+  --line: #2b3742; --accent: #6ea2f0; --accent-ink: #0d1620; --accent-soft: #1d2d45;
+  --warn-bg: #3a2e12; --warn-ink: #f2c35b; --good-ink: #6fd08c;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  background: var(--bg); color: var(--ink); font: 14px/1.45 var(--f-body); margin: 0;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 16px 48px;
+}
+.wrap { max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+.wrap > * { min-width: 0; }
+h1, h2 { font-family: var(--f-display); text-wrap: balance; margin: 0; letter-spacing: .01em; }
+h1 { font-size: 1.6rem; font-weight: 700; }
+h2 { font-size: 1.05rem; font-weight: 600; }
+button, select, input, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.label { font-family: var(--f-display); font-size: .74rem; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-3); }
+.muted { color: var(--ink-2); }
+.faint { color: var(--ink-3); font-size: .82rem; }
+
+.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; }
+.top .sub { color: var(--ink-2); margin-top: 2px; }
+.btn { border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 6px; padding: 7px 12px; font-weight: 500; text-decoration: none; display: inline-block; }
+.btn:hover { border-color: var(--ink-3); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); }
+.tabs button { border: 0; background: none; padding: 9px 14px; font-family: var(--f-display); font-weight: 600; font-size: 1rem; color: var(--ink-2); border-bottom: 3px solid transparent; }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+
+.cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 860px) { .cols { grid-template-columns: minmax(0, 1fr); } }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 14px; min-width: 0; }
+
+.field { display: grid; gap: 4px; }
+.field input, .field select, .field textarea { width: 100%; min-width: 0; border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 7px 10px; }
+.field textarea { resize: vertical; min-height: 60px; }
+.row2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; }
+
+.comp { display: grid; gap: 8px; background: var(--sunk); border-radius: 8px; padding: 12px; }
+#picks { display: grid; gap: 10px; }
+.pick { display: grid; grid-template-columns: minmax(0, 9rem) minmax(0, 1fr); gap: 4px 10px; align-items: center; }
+.pick .z { font-weight: 600; overflow-wrap: anywhere; }
+.pick .z small { display: block; font-weight: 400; color: var(--ink-3); font-size: .78rem; }
+.pick select { width: 100%; min-width: 0; border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 6px 8px; }
+.pick .note { grid-column: 2; font-size: .8rem; color: var(--ink-3); }
+.pick .none { grid-column: 2; font-size: .82rem; color: var(--warn-ink); }
+
+details { border-top: 1px solid var(--line); padding-top: 10px; }
+summary { cursor: pointer; font-weight: 500; }
+.toggles { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 6px 16px; margin-top: 10px; }
+.toggles label { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+.toggles select { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 4px 6px; }
+
+.out { position: sticky; top: 16px; }
+.out pre { margin: 0; background: var(--sunk); border-radius: 8px; padding: 14px; font: 13px/1.6 var(--f-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.outhead { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.notice { background: var(--warn-bg); color: var(--warn-ink); border-radius: 8px; padding: 9px 12px; font-size: .86rem; }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(18px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg); padding: 9px 14px; border-radius: 8px; z-index: 50; max-width: calc(100% - 32px); }
+
+@media (max-width: 640px) { h1 { font-size: 1.3rem; } .out { position: static; } .pick { grid-template-columns: minmax(0, 1fr); } .pick .note, .pick .none { grid-column: 1; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>PC Justification</h1>
+      <div class="sub">Fill the blanks, copy the text into the PC request.</div>
+    </div>
+    <a class="btn" href="index.html">Pipeline Order Check</a>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" id="tabNew" aria-selected="true" data-mode="new">New PC</button>
+    <button role="tab" id="tabRepeat" aria-selected="false" data-mode="repeat">Repeat PC</button>
+  </nav>
+
+  <div class="cols">
+    <form class="card" id="form" autocomplete="off" onsubmit="return false">
+      <label class="field" data-only="repeat">
+        <span class="label">Previous Repeat PC#</span>
+        <input id="previousPc" inputmode="numeric" placeholder="80971801">
+      </label>
+
+      <label class="field">
+        <span class="label">Customer Contact Information</span>
+        <input id="contact" placeholder="Name, Title / Dept, Phone, Email">
+      </label>
+
+      <label class="field" data-only="new">
+        <span class="label">Customer Demand</span>
+        <select id="demand"></select>
+      </label>
+
+      <label class="field" data-only="new">
+        <span class="label">Zebra Product &amp; Solution</span>
+        <input id="zebraProduct" placeholder="TC53  (several: TC53, ZD421)">
+      </label>
+
+      <div class="comp" data-only="new">
+        <label class="field">
+          <span class="label">Competitor brand</span>
+          <select id="brand"></select>
+        </label>
+        <div id="picks"></div>
+        <label class="field">
+          <span class="label">Competitor model (edit if needed)</span>
+          <input id="compModel" placeholder="Pick above or type">
+        </label>
+        <div class="faint">Suggested by product class from public product pages, checked 22 Oct 2026. Check the model fits the deal before you submit.</div>
+      </div>
+
+      <div class="row2">
+        <label class="field">
+          <span class="label">Distributor Margin %</span>
+          <input id="distMargin" inputmode="decimal">
+        </label>
+        <label class="field">
+          <span class="label">Reseller Margin %</span>
+          <input id="resellerMargin" inputmode="decimal">
+        </label>
+      </div>
+
+      <details>
+        <summary>Other items (defaults)</summary>
+        <div class="toggles" id="toggles"></div>
+        <div class="row2" data-only="new" style="margin-top:10px">
+          <label class="field">
+            <span class="label">Other Comments &amp; Update</span>
+            <input id="otherComments" placeholder="Nil">
+          </label>
+          <label class="field">
+            <span class="label">Attachment</span>
+            <input id="attachment" placeholder="Nil">
+          </label>
+        </div>
+      </details>
+
+      <div><button type="button" class="btn" id="clearBtn">Clear</button></div>
+    </form>
+
+    <section class="card out" aria-label="Justification text">
+      <div class="outhead">
+        <h2 id="outTitle">New PC justification</h2>
+        <button type="button" class="btn primary" id="copyBtn">Copy</button>
+      </div>
+      <div class="notice" id="missing" hidden></div>
+      <pre id="text"></pre>
+    </section>
+  </div>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="pc-justification.js"></script>
+<script>
+(function () {
+  'use strict';
+  var P = window.PCJ;
+  var $ = function (id) { return document.getElementById(id); };
+  var TOGGLES = [
+    ['pcRebate', 'PC+Rebate'], ['sideway', 'Sideway Selling'], ['freeUnits', 'Has Free units Request'],
+    ['emc', 'EMC Market Share Acceleration'], ['invoice', 'End-user Invoice Providing'],
+    ['bundle', 'Bundle Service'], ['annual', 'Annual Agreement']
+  ];
+  var MARGINS = { new: { distMargin: '5', resellerMargin: '12' }, repeat: { distMargin: '5', resellerMargin: '15' } };
+  var mode = 'new';
+  var picks = [];          // chosen option index per Zebra product, -1 = none
+  var modelEdited = false; // the user typed in the competitor model box
+
+  function opt(sel, value, text) { var o = document.createElement('option'); o.value = value; o.textContent = text; sel.appendChild(o); }
+  opt($('demand'), '', 'Select…');
+  P.DEMANDS.forEach(function (d) { opt($('demand'), d, d); });
+  P.BRANDS.forEach(function (b) { opt($('brand'), b, b); });
+  TOGGLES.forEach(function (t) {
+    var l = document.createElement('label');
+    l.innerHTML = '<span></span><select><option value="1">Yes</option><option value="0">No</option></select>';
+    l.firstChild.textContent = t[1];
+    l.lastChild.id = t[0];
+    l.lastChild.value = P.DEFAULTS[t[0]] ? '1' : '0';
+    $('toggles').appendChild(l);
+  });
+
+  function setMode(m) {
+    var prev = mode;
+    mode = m;
+    ['tabNew', 'tabRepeat'].forEach(function (id) { $(id).setAttribute('aria-selected', String($(id).dataset.mode === m)); });
+    document.querySelectorAll('[data-only]').forEach(function (el) { el.hidden = el.dataset.only !== m; });
+    $('outTitle').textContent = (m === 'new' ? 'New' : 'Repeat') + ' PC justification';
+    // Swap margin defaults only where the user left the previous default.
+    ['distMargin', 'resellerMargin'].forEach(function (k) {
+      if (!$(k).value || $(k).value === MARGINS[prev][k]) $(k).value = MARGINS[m][k];
+    });
+    update();
+  }
+
+  function renderPicks() {
+    var rows = P.suggest($('zebraProduct').value, $('brand').value);
+    picks = rows.map(function (r, i) { return picks[i] != null && picks[i] < r.options.length ? picks[i] : (r.options.length ? 0 : -1); });
+    var box = $('picks');
+    box.innerHTML = '';
+    rows.forEach(function (r, i) {
+      var d = document.createElement('div');
+      d.className = 'pick';
+      var z = document.createElement('div');
+      z.className = 'z';
+      z.textContent = r.zebra;
+      var small = document.createElement('small');
+      small.textContent = r.category ? r.category.label : 'Model not recognised';
+      z.appendChild(small);
+      d.appendChild(z);
+      if (r.options.length) {
+        var s = document.createElement('select');
+        s.setAttribute('aria-label', 'Competitor model for ' + r.zebra);
+        r.options.forEach(function (o, j) { opt(s, j, o.model); });
+        opt(s, -1, 'None');
+        s.value = picks[i];
+        s.onchange = function () { picks[i] = +s.value; modelEdited = false; fillModel(rows); update(); };
+        d.appendChild(s);
+        var n = document.createElement('div');
+        n.className = 'note';
+        n.textContent = picks[i] >= 0 ? r.options[picks[i]].note : '';
+        d.appendChild(n);
+      } else {
+        var w = document.createElement('div');
+        w.className = 'none';
+        w.textContent = r.category ? 'No confirmed ' + $('brand').value + ' match for this class. Type the model below.'
+                                   : 'Type the competitor model below.';
+        d.appendChild(w);
+      }
+      box.appendChild(d);
+    });
+    return rows;
+  }
+
+  function fillModel(rows) {
+    if (modelEdited) return;
+    var models = [];
+    rows.forEach(function (r, i) {
+      var m = picks[i] >= 0 && r.options[picks[i]] ? r.options[picks[i]].model : '';
+      if (m && models.indexOf(m) < 0) models.push(m);
+    });
+    $('compModel').value = models.join(', ');
+  }
+
+  function fields() {
+    var f = {
+      contact: $('contact').value, previousPc: $('previousPc').value, demand: $('demand').value,
+      zebraProduct: $('zebraProduct').value, competitorBrand: $('compModel').value.trim() ? $('brand').value : '',
+      competitorModel: $('compModel').value, distMargin: $('distMargin').value, resellerMargin: $('resellerMargin').value,
+      otherComments: $('otherComments').value, attachment: $('attachment').value
+    };
+    TOGGLES.forEach(function (t) { f[t[0]] = $(t[0]).value === '1'; });
+    return f;
+  }
+
+  function update() {
+    var f = fields();
+    $('text').textContent = mode === 'new' ? P.buildNew(f) : P.buildRepeat(f);
+    var miss = [];
+    if (mode === 'repeat' && !f.previousPc.trim()) miss.push('Previous Repeat PC#');
+    if (!f.contact.trim()) miss.push('Customer Contact');
+    if (mode === 'new') {
+      if (!f.demand) miss.push('Customer Demand');
+      if (!f.zebraProduct.trim()) miss.push('Zebra Product');
+      if (!f.competitorModel.trim()) miss.push('Competitor model');
+    }
+    $('missing').hidden = !miss.length;
+    $('missing').textContent = 'Still blank: ' + miss.join(', ');
+  }
+
+  function refreshCompetitor() { modelEdited = false; fillModel(renderPicks()); update(); }
+
+  function toast(msg) {
+    var t = $('toast');
+    t.textContent = msg;
+    t.hidden = false;
+    clearTimeout(toast.timer);
+    toast.timer = setTimeout(function () { t.hidden = true; }, 1800);
+  }
+
+  function copy() {
+    var s = $('text').textContent;
+    var fallback = function () {
+      var ta = document.createElement('textarea');
+      ta.value = s;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      var ok = false;
+      try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+      document.body.removeChild(ta);
+      toast(ok ? 'Copied' : 'Copy blocked. Select the text and copy it.');
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(s).then(function () { toast('Copied'); }, fallback);
+    else fallback();
+  }
+
+  $('tabNew').onclick = function () { setMode('new'); };
+  $('tabRepeat').onclick = function () { setMode('repeat'); };
+  $('zebraProduct').oninput = refreshCompetitor;
+  $('brand').onchange = function () { picks = []; refreshCompetitor(); };
+  $('compModel').oninput = function () { modelEdited = true; update(); };
+  $('form').addEventListener('input', update);
+  $('form').addEventListener('change', update);
+  $('copyBtn').onclick = copy;
+  $('clearBtn').onclick = function () {
+    ['previousPc', 'contact', 'zebraProduct', 'compModel', 'otherComments', 'attachment'].forEach(function (k) { $(k).value = ''; });
+    $('demand').value = '';
+    $('brand').value = P.BRANDS[0];
+    TOGGLES.forEach(function (t) { $(t[0]).value = P.DEFAULTS[t[0]] ? '1' : '0'; });
+    $('distMargin').value = MARGINS[mode].distMargin;
+    $('resellerMargin').value = MARGINS[mode].resellerMargin;
+    picks = [];
+    refreshCompetitor();
+  };
+
+  $('distMargin').value = MARGINS.new.distMargin;
+  $('resellerMargin').value = MARGINS.new.resellerMargin;
+  setMode('new');
+  refreshCompetitor();
+})();
+</script>
