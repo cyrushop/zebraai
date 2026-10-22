@@ -176,20 +176,31 @@
     return (b.decided ? +b.decided : 0) - (a.decided ? +a.decided : 0) || (b.pc > a.pc ? 1 : b.pc < a.pc ? -1 : 0);
   }
 
-  function buildIndex(rows) {
+  // Latest list price and standard discount per part, newest PC first.
+  // Standard discount differs by fulfillment type, so keep the latest per type too.
+  function latestPrices(rows) {
+    var out = {};
+    rows.slice().sort(byDateDesc).forEach(function (r) {
+      if (r.list == null) return;
+      var lv = { list: r.list, stdDisc: r.stdDisc, date: r.created, pc: r.pc, region: r.region };
+      if (!out[r.part]) out[r.part] = lv;
+      if (!out[r.part + '|' + r.fulfil]) out[r.part + '|' + r.fulfil] = lv;
+    });
+    return out;
+  }
+
+  /* rows: the PCs to look up (e.g. one region).
+   * priceRows: where list prices and standard discounts come from; defaults
+   * to rows. Pass every region so a region view still uses the newest price.
+   */
+  function buildIndex(rows, priceRows) {
     rows = rows.slice().sort(byDateDesc);
-    var byPart = {}, byAcct = {}, latestList = {}, accounts = {}, info = {};
+    var byPart = {}, byAcct = {}, accounts = {}, info = {};
+    var latestList = latestPrices(priceRows || rows);
     var minD = null, maxD = null;
     rows.forEach(function (r) {
       (byPart[r.part] = byPart[r.part] || []).push(r);
       (byAcct[r.acctKey] = byAcct[r.acctKey] || []).push(r);
-      // rows are newest first, so the first list price seen is the latest
-      // Standard discount differs by fulfillment type, so keep the latest per type too.
-      if (r.list != null) {
-        var lv = { list: r.list, stdDisc: r.stdDisc, date: r.created, pc: r.pc };
-        if (!latestList[r.part]) latestList[r.part] = lv;
-        if (!latestList[r.part + '|' + r.fulfil]) latestList[r.part + '|' + r.fulfil] = lv;
-      }
       if (!info[r.part]) info[r.part] = { part: r.part, line: r.line, subLine: r.subLine, family: r.family, bu: r.bu, cat: r.cat };
       var a = accounts[r.acctKey];
       if (!a) a = accounts[r.acctKey] = { key: r.acctKey, no: r.accountNo, name: r.account, names: {}, pcs: {}, parts: {}, last: r.created };

@@ -82,7 +82,10 @@ const rows = E.normPc(table);
 assert.strictEqual(rows.length, objs.length - 1, 'duplicate line removed');
 const idx = E.buildIndex(rows);
 assert.deepStrictEqual([...new Set(rows.map(x => x.region))].sort(), ['Hong Kong', 'Taiwan']);
-assert.strictEqual(E.buildIndex(rows.filter(x => x.region === 'Taiwan')).accounts.length, 1, 'region subset indexes on its own');
+const tw = E.buildIndex(rows.filter(x => x.region === 'Taiwan'), rows);
+assert.strictEqual(tw.accounts.length, 1, 'region subset indexes on its own');
+assert.strictEqual(tw.latestList['ZD421-X'].list, 515, 'list price comes from every region');
+assert.strictEqual(E.buildIndex(rows.filter(x => x.region === 'Taiwan')).latestList['ZD421-X'], undefined);
 const R = E.DEFAULT_RULES;
 const get = (acct, p, rules) => E.assess(idx, (idx.byAcct[acct] || []).filter(r => r.part === p), rules || R, p);
 

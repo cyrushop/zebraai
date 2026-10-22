@@ -388,7 +388,8 @@ svg.spark circle { fill: var(--spark); }
   function applyRegion() {
     if (S.region !== 'all' && (!hasRegion() || !regionCounts()[S.region])) S.region = 'all';
     var rows = S.region === 'all' ? S.rows : S.rows.filter(function (r) { return r.region === S.region; });
-    S.idx = E.buildIndex(rows);
+    // List price and standard discount always come from every region.
+    S.idx = E.buildIndex(rows, S.rows);
     if (S.acct && !S.idx.byAcct[S.acct]) S.acct = '';
     S.limit = 300;
     render();
@@ -729,7 +730,7 @@ svg.spark circle { fill: var(--spark); }
           '：' + usd(res.last.unit) + ' → <b>' + usd(res.suggested) + '</b>' + (res.cumulative != null ? '，比 ' + fmtDs(res.cumulativeBase.created) + ' 的 ' + usd(res.cumulativeBase.unit) + ' 累計 ' + pctS(res.cumulative) : '') + '</div>' : '<div>呢個分類冇規則，亦冇牌價變動資料。</div>') +
         (res.newStdNet != null ? '<div class="small">新標準淨價 ' + usd(res.newStdNet) + '（牌價 ' + usd(res.latest.list) + ' × (1 − ' + res.latest.stdDisc + '%)）' +
           (res.aboveStd ? '：<b class="up">建議特價已經 ≥ 標準淨價，用標準價就得，唔使做 PC。</b>' : '：建議特價比標準淨價低 ' + pctPlain(1 - res.suggested / res.newStdNet) + '。') + '</div>' : '') +
-        (res.latest ? '<div class="small muted">最新牌價 ' + usd(res.latest.list) + '（PC ' + esc(res.latest.pc) + '，' + fmtDs(res.latest.date) + (listStale(res) ? '，喺加價生效日之前，可能已經過時' : '') + '）' +
+        (res.latest ? '<div class="small muted">最新牌價 ' + usd(res.latest.list) + '（PC ' + esc(res.latest.pc) + '，' + fmtDs(res.latest.date) + (res.latest.region ? '，' + esc(REGION_ZH[res.latest.region] || res.latest.region) : '') + (listStale(res) ? '，喺加價生效日之前，可能已經過時' : '') + '）' +
           (res.newDisc != null ? '，建議特價折扣 ' + pctPlain(res.newDisc) : '') + '</div>' : '') + '</div>';
     } else h += '<div class="reco"><span class="st new">' + STATE.new.label + '</span><div class="small">呢個客戶未有已批的 PC，可以參考下面其他客戶的價錢。</div>' +
       (res.latest && res.latest.stdDisc != null ? '<div class="small">最新牌價 ' + usd(res.latest.list) + '，Std disc ' + res.latest.stdDisc + '%，標準淨價 ' + usd(res.latest.list * (1 - res.latest.stdDisc / 100)) + '</div>' : '') + '</div>';
