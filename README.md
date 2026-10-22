@@ -57,13 +57,13 @@ Scope: record type *Zebra Opportunity* (every row is checked if the report has n
 |---|---|
 | 1 | Commit Category does not match the stage: Identify / Qualify blank, Validate = Upside, Secure = Commit, Closed - Won = Shipped/booked |
 | 2 | Identify / Qualify last modified on or after 2026-05-01 and more than 90 days before the cutoff |
-| 3 | The stage is not Closed and the POS update deadline has passed: the Wednesday after the ship week (Monday to Sunday), when that week's POS report arrives. Ships this week, and last week's before Wednesday, are not flagged |
+| 3 | The stage is not Closed and the POS update deadline has passed: the Wednesday after the ship week (Monday to Sunday), when that week's POS report arrives. If that Wednesday is a Hong Kong public holiday, the deadline moves to the next working day. Ships this week, and last week's before Wednesday, are not flagged |
 | 4 | Validate / Secure, opportunity total ≥ US$50,000, Forecast Notes blank |
 | 5 | Fulfillment Type blank |
-| 6 | Closed - Won with First Ship Date after the cutoff |
+| 6 | Closed - Won with First Ship Date next Monday or later (a later POS week) |
 | 7 | First Ship Date on or after 2026-08-01, and CRSD is blank, or in a different quarter from First Ship Date, or not before today while Commit = Shipped/booked |
 
-A rule is skipped, with a notice, when the report lacks its columns. The page also has a quarter × stage pivot and a list of Secure opportunities where *Reseller has ordered via Distribution* = 0.
+The Hong Kong public holidays for 2026 and 2027 are built in (`HK_HOLIDAYS` in `ppl/ppl-check.js`, from the government gazette); add the next year's dates when they are published. A rule is skipped, with a notice, when the report lacks its columns. The page also has a quarter × stage pivot and a list of Secure opportunities where *Reseller has ordered via Distribution* = 0.
 
 Clicking an opportunity number copies it to the clipboard and opens SFDC in a new tab. If the report has an *Opportunity ID* column (the 15- or 18-character ID starting with 006), the link opens the record directly (`/lightning/r/Opportunity/{id}/view`). Otherwise it opens Lightning global search for the number. That search URL uses an undocumented Salesforce format, so if SFDC opens without the search, paste the copied number into the search box.
 

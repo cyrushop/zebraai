@@ -132,7 +132,7 @@
       }
       var r = S.res;
       m.innerHTML = '<span><b>' + esc(S.file || '報表') + '</b></span>' +
-        '<span>今天 ' + r.today + ' · 截止日（下週三）<b>' + r.cutoff + '</b></span>' +
+        '<span>今天 ' + r.today + ' · 本 POS 週 <b>' + r.weekStart.slice(5) + ' 至 ' + r.weekEnd.slice(5) + '</b> · 標準2 截止日 ' + r.cutoff + '</span>' +
         '<span>報表 ' + r.totalRows.toLocaleString() + ' 行 · 參與檢查 ' + r.checkedOpps.toLocaleString() + ' 個機會</span>' +
         '<span class="ppl-flag">⚠ 有問題 ' + r.violations.length + ' 個</span>';
       var notes = r.skipped.map(function (s) { return '<div class="ppl-note">已略過 ' + esc(s) + '</div>'; })
@@ -268,7 +268,7 @@
     function helpHtml() {
       var d = P.DEFAULTS;
       return '<div class="ppl-help"><h3>檢查範圍</h3><p>Opportunity Record Type = ' + esc(d.recordType) + '（報表沒有這欄就全部檢查）；階段為 Identify、Qualify、Validate、Secure、Closed - Won；First Ship Date ≥ ' +
-        d.minFirstShip + '。同一個機會的多行產品線合併計算：金額加總，其他欄取第一個非空值。截止日 = 下週三（今天是週三就是今天）。</p>' +
+        d.minFirstShip + '。同一個機會的多行產品線合併計算：金額加總，其他欄取第一個非空值。POS 週 = 週一至週日；標準2 的截止日 = 下週三（今天是週三就是今天）。</p>' +
         '<h3>7 條標準</h3><ol>' + P.RULES.map(function (x) { return '<li><b>標準' + x.id + ' · ' + esc(x.short) + '</b>：' + esc(x.desc) + '</li>'; }).join('') + '</ol>' +
         '<h3>透視分析</h3><p>行 = First Ship Fiscal Quarter New（發貨財季），列 = Sales Stage。可按 Owner、Is Service Product 篩選，指標可選金額或行數，預設排除 Closed - Lost / Closed - Other。</p>' +
         '<h3>Secure 未下單</h3><p>Sales Stage = Secure 且 Reseller has ordered via Distribution = 0，按季度分組。</p>' +
