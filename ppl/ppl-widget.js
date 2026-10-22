@@ -67,7 +67,7 @@
     opts = opts || {};
     var store = ls((opts.storageKey || 'ppl') + '.data'), prefs = ls((opts.storageKey || 'ppl') + '.prefs');
     var S = {
-      rows: null, file: '', loadedAt: '', res: null, err: '',
+      rows: null, file: '', loadedAt: '', res: null, err: '', notice: '',
       tab: 'check',
       f: Object.assign({ rules: [], owner: '', q: '', pOwner: '', svc: '', metric: 'amount', exclude: 'lostother', sOwner: '',
         domain: P.DEFAULTS.sfdcDomain }, prefs.get({}))
@@ -79,7 +79,8 @@
     el.innerHTML =
       '<div class="ppl-head"><div><div class="ppl-eyebrow">SFDC Pipeline · 合規</div><h2>PPL 合規檢查</h2>' +
       '<p class="ppl-sub">' + esc(opts.sub || '上載最新的 SFDC Pipeline 報表（.xls / .xlsx / .csv），自動找出不符合 7 條標準的機會。') + '點機會編號會開 SFDC 並複製編號。</p></div>' +
-      '<div class="ppl-actions"><input type="file" accept=".xls,.xlsx,.csv,.htm,.html" hidden><button type="button" class="ppl-btn ppl-primary" data-act="pick">上載 Pipeline 報表</button></div></div>' +
+      (opts.upload === false ? '</div>' :
+        '<div class="ppl-actions"><input type="file" accept=".xls,.xlsx,.csv,.htm,.html" hidden><button type="button" class="ppl-btn ppl-primary" data-act="pick">上載 Pipeline 報表</button></div></div>') +
       '<div class="ppl-drop" hidden>把 Pipeline 報表放這裡</div>' +
       '<div class="ppl-meta"></div><div class="ppl-notes"></div>' +
       '<div class="ppl-tabs" role="tablist"></div><div class="ppl-filters"></div><div class="ppl-view"></div>' +
@@ -98,7 +99,7 @@
       try {
         var rows = P.slim(P.prepare(grid));
         P.check(rows);   // 先試一次，缺必要欄就報錯
-        S.rows = rows; S.file = fileName || ''; S.loadedAt = new Date().toISOString(); S.err = '';
+        S.rows = rows; S.file = fileName || ''; S.loadedAt = new Date().toISOString(); S.err = ''; S.notice = '';
         if (!store.set({ rows: rows, file: S.file, loadedAt: S.loadedAt }) && !silent) toast('已載入；瀏覽器空間不足，下次開啟要重新上載。');
       } catch (e) {
         S.err = (fileName ? fileName + '：' : '') + e.message;
@@ -125,7 +126,8 @@
       var m = $('.ppl-meta'), n = $('.ppl-notes');
       if (!S.res) {
         m.innerHTML = '<span class="ppl-faint">' + (S.err ? '' : '未載入報表。') + '</span>';
-        n.innerHTML = S.err ? '<div class="ppl-note ppl-bad">讀取失敗：' + esc(S.err) + '</div>' : '';
+        n.innerHTML = (S.err ? '<div class="ppl-note ppl-bad">讀取失敗：' + esc(S.err) + '</div>' : '') +
+          (S.notice ? '<div class="ppl-note">' + esc(S.notice) + '</div>' : '');
         return;
       }
       var r = S.res;
@@ -214,7 +216,7 @@
     function renderView() {
       var v = $('.ppl-view');
       if (S.tab === 'help') { v.innerHTML = helpHtml(); return; }
-      if (!S.rows) { v.innerHTML = '<div class="ppl-empty">上載 SFDC Pipeline 報表後，這裡會列出有問題的機會。</div>'; return; }
+      if (!S.rows) { v.innerHTML = '<div class="ppl-empty">' + esc(opts.emptyText || '上載 SFDC Pipeline 報表後，這裡會列出有問題的機會。') + '</div>'; return; }
       if (S.tab === 'check') v.innerHTML = checkHtml();
       else if (S.tab === 'pivot') v.innerHTML = pivotHtml();
       else v.innerHTML = secureHtml();
@@ -328,7 +330,7 @@
       }
     });
     el.addEventListener('change', function (e) {
-      if (e.target === input) { if (input.files[0]) handleFile(input.files[0]); input.value = ''; return; }
+      if (input && e.target === input) { if (input.files[0]) handleFile(input.files[0]); input.value = ''; return; }
       var k = e.target.dataset.f;
       if (!k || k === 'q') return;
       S.f[k] = k === 'domain' ? (e.target.value.trim().replace(/\/+$/, '') || P.DEFAULTS.sfdcDomain) : e.target.value;
@@ -341,6 +343,7 @@
       qT = setTimeout(function () { S.f.q = e.target.value; savePrefs(); renderTabs(); renderView(); }, 200);
     });
     var drop = $('.ppl-drop');
+    if (opts.upload !== false) {
     el.addEventListener('dragover', function (e) { e.preventDefault(); e.stopPropagation(); drop.hidden = false; });
     // 拖放不往上傳，免得宿主 App 把 Pipeline 當成自己的檔案
     el.addEventListener('dragenter', function (e) { e.stopPropagation(); });
@@ -349,6 +352,7 @@
       e.preventDefault(); e.stopPropagation(); drop.hidden = true;
       if (e.dataTransfer && e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
     });
+    }
 
     // ---------------------------------------------------------- boot
     var saved = store.get(null);
@@ -356,6 +360,11 @@
     render();
     return {
       load: function (grid, name) { return load(grid, name, true); },
+      fileName: function () { return S.rows ? S.file : ''; },
+      // 清空並顯示原因（例如宿主的報表沒有檢查用的欄）
+      clear: function (notice) {
+        S.rows = null; S.file = ''; S.err = ''; S.notice = notice || ''; store.set(null); render();
+      },
       // 宿主讀到多個工作表時，用第一個有 Opportunity Number + Sales Stage 的
       loadAny: function (grids, name) {
         for (var i = 0; i < grids.length; i++) {

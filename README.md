@@ -49,7 +49,7 @@ python3 -I tools/build_initial_data.py app/initial-data.js path/to/pipeline.xls 
 
 ## PPL compliance checker (`ppl/`)
 
-A Traditional Chinese port of the PPL 合規檢查器. It reads the latest SFDC pipeline report and lists the opportunities that break any of seven rules. `ppl/index.html` runs it on its own. `tools/embed_ppl.py` puts the same code into the single-file HK Pipeline Weekly Review and POS Revenue Desk pages.
+A Traditional Chinese port of the PPL 合規檢查器. It reads the latest SFDC pipeline report and lists the opportunities that break any of seven rules. `ppl/index.html` runs it on its own. `tools/embed_ppl.py` puts the same code into the single-file HK Pipeline Weekly Review and POS Revenue Desk pages. In the Weekly Review it has no upload of its own: it checks the pipeline loaded in the page's first upload slot, so both always show the same file. The POS Revenue Desk has no pipeline upload, so there the checker keeps its own.
 
 Scope: record type *Zebra Opportunity* (every row is checked if the report has no record-type column), stages Identify, Qualify, Validate, Secure and Closed - Won, and First Ship Date on or after 2026-01-01. Lines are merged per Opportunity Number: amounts are summed and every other field takes the first non-empty value. The cutoff is next Wednesday, or today when today is a Wednesday.
 
