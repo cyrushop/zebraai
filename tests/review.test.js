@@ -172,4 +172,58 @@ assert.strictEqual(I.WLMT0.status, 'overstock', '70 sold in 13 weeks, 300 free')
 assert.strictEqual(I.OLD1.status, 'no-sales');
 assert.strictEqual(a.inventory.totalValue, 9900);
 
+// --- fiscal calendar: year starts on the Sunday nearest 1 Jan, 13-week quarters
+assert.strictEqual(R.fqOf(new Date(Date.UTC(2026, 9, 3))), '2026 Q3');
+assert.strictEqual(R.fqOf(new Date(Date.UTC(2026, 9, 4))), '2026 Q4');
+assert.strictEqual(R.fqOf(new Date(Date.UTC(2027, 0, 2))), '2026 Q4');
+assert.strictEqual(R.fqOf(new Date(Date.UTC(2027, 0, 3))), '2027 Q1');
+assert.strictEqual(R.fqOf(new Date(Date.UTC(2025, 11, 30))), '2025 Q4', 'week 53 of a 53-week year');
+assert.strictEqual(R.fiscal(new Date(Date.UTC(2026, 9, 16))).week, 41);
+
+// --- with a DSR: sell-in, pipeline already ordered, backlog on a Zebra open order
+const DSR_H = ['Account Name', 'Account Number', 'Account Country', 'End User Name', 'APAC Order Type', 'Line Item Status',
+  'Purchase Order Number', 'Order Number', 'Line Booked Date', 'ERP Invoice Date', 'Scheduled Ship Date', 'Part Number', 'Product Line',
+  'Price Concession Number', 'Opportunity Number', 'Quantity', 'Amount USD SUM'];
+const dsr = (po, part, qty, amt, status, booked, inv, ssd, extra) => Object.assign({
+  'Account Name': VAD, 'Account Number': '61055936', 'Account Country': 'Hong Kong', 'APAC Order Type': 'Standard Line-ZSG',
+  'Line Item Status': status, 'Purchase Order Number': po, 'Order Number': '9' + po.replace(/\D/g, ''), 'Line Booked Date': booked,
+  'ERP Invoice Date': inv, 'Scheduled Ship Date': ssd, 'Part Number': part, 'Product Line': 'Mobile Computing', 'Quantity': qty, 'Amount USD SUM': amt
+}, extra);
+const withDsr = tables.concat([table('dsr', DSR_H, [
+  dsr('PO-1', 'TC22', 20, 9000, 'Shipped', '2026-09-20T00:00:00', '2026-10-10T00:00:00', '2026-10-09T00:00:00', { 'Opportunity Number': 'Z-1' }),
+  dsr('PO-2', 'ZD421', 5, 1000, 'Shipped', '2026-09-01T00:00:00', '2026-10-02T00:00:00', '2026-10-01T00:00:00'),
+  dsr('ZEB-1', 'TC22', 5, 2500, 'Open Order', '2026-09-02T00:00:00', null, '2026-11-01T00:00:00'),
+  dsr('PO-4', 'MC34', 2, 3000, 'Open Order', '2026-10-01T00:00:00', null, '2027-02-01T00:00:00'),
+  dsr('PO-5', 'TC22', 1, 777, 'Shipped', '2026-10-01T00:00:00', '2026-10-12T00:00:00', null, { 'Account Name': OTHER, 'Account Number': '2' })
+])]);
+const targets = { '2026 Q4': { vstecs: { sellIn: 20000, sellOutNet: 26000, sellOutGross: 27000, stretch: 26780, startInv: 5000, startDoi: 30, endInv: 6000, endDoi: 40 } } };
+const b = R.review(withDsr, { today: new Date(Date.UTC(2026, 9, 24)), scope: 'vstecs', targets });
+
+assert.strictEqual(b.sellIn.shipped, 9000, 'invoiced 2 Oct is fiscal Q3; other distributor excluded');
+assert.strictEqual(b.sellIn.open, 2500);
+assert.strictEqual(b.sellIn.openLater, 3000);
+assert.strictEqual(b.sellIn.inHand, 11500);
+assert.strictEqual(b.pipeline.stages.filter(s => s.stage === 'Secure')[0].curOrdered, 10000, 'Z-1 Q4 line found in the DSR by opp number');
+
+const BI = {};
+b.inventory.list.forEach(p => { BI[p.part] = p; });
+assert.strictEqual(BI.TC22.incoming, 5, 'reseller backlog ZEB-1 is on a Zebra open order');
+assert.strictEqual(BI.TC22.free, 3);
+assert.notStrictEqual(BI.TC22.status, 'short');
+
+assert.strictEqual(b.plan.has, true);
+assert.strictEqual(b.plan.weeksTotal, 13);
+assert.strictEqual(b.plan.out.net, 6200);
+assert.strictEqual(b.plan.inn.gap, 20000 - 11500);
+assert.strictEqual(b.plan.out.needNet, (26000 - 6200) / 11);
+assert.strictEqual(R.review(withDsr, { today: new Date(Date.UTC(2026, 9, 24)), scope: 'all', targets }).plan.has, false);
+
+// --- bridge: 2025 → 2026 YTD by partner adds up
+const br = b.bridges.filter(x => x.base === 2025)[0];
+assert.strictEqual(br.baseTotal, 7000);
+assert.strictEqual(br.curTotal, 9300);
+const cat = br.partners.cat;
+assert.deepStrictEqual([cat.lost, cat.down, cat.up, cat.gained], [-3000, -300, 3500, 2100]);
+assert.strictEqual(br.baseTotal + cat.lost + cat.down + cat.up + cat.gained, br.curTotal);
+
 console.log('review tests passed');

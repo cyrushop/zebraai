@@ -26,6 +26,8 @@
   --o1: #104281; --o2: #1c5cab; --o3: #2a78d6; --o4: #5598e7; --o5: #86b6ef;
   /* status (reserved): good / warning / serious / critical */
   --good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b; --neutral: #b9c1c9;
+  /* diverging poles for the bridge: up / down */
+  --pos: #2a78d6; --neg: #e34948; --total: #7b8896;
   --warn-bg: #fff3d6; --warn-ink: #7a5300;
   --bad-ink: #b42d2d; --good-ink: #136c2e;
   --shadow: 0 8px 30px rgba(21, 33, 44, .16);
@@ -39,7 +41,7 @@
     --line: #2b3742; --grid: #24303a; --accent: #6ea2f0; --accent-ink: #0d1620; --accent-soft: #1d2d45;
     --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300;
     --o1: #86b6ef; --o2: #5598e7; --o3: #3987e5; --o4: #256abf; --o5: #184f95;
-    --neutral: #4a5662;
+    --neutral: #4a5662; --pos: #3987e5; --neg: #e66767; --total: #7d8a97;
     --warn-bg: #3a2e12; --warn-ink: #f2c35b; --bad-ink: #f08080; --good-ink: #6fd08c;
     --shadow: 0 8px 30px rgba(0, 0, 0, .5);
     color-scheme: dark;
@@ -50,7 +52,7 @@
   --line: #2b3742; --grid: #24303a; --accent: #6ea2f0; --accent-ink: #0d1620; --accent-soft: #1d2d45;
   --s1: #3987e5; --s2: #d95926; --s3: #199e70; --s4: #c98500; --s5: #d55181; --s6: #008300;
   --o1: #86b6ef; --o2: #5598e7; --o3: #3987e5; --o4: #256abf; --o5: #184f95;
-  --neutral: #4a5662;
+  --neutral: #4a5662; --pos: #3987e5; --neg: #e66767; --total: #7d8a97;
   --warn-bg: #3a2e12; --warn-ink: #f2c35b; --bad-ink: #f08080; --good-ink: #6fd08c;
   --shadow: 0 8px 30px rgba(0, 0, 0, .5);
   color-scheme: dark;
@@ -147,6 +149,8 @@ tbody tr:hover td { background: var(--sunk); }
 tr.sub td:first-child { padding-left: 26px; color: var(--ink-2); }
 tr.tot td { font-weight: 600; border-top: 2px solid var(--line); }
 td.name { max-width: 300px; overflow-wrap: anywhere; }
+td.part { min-width: 190px; }
+td.part .mono { white-space: nowrap; }
 td.adv { min-width: 260px; max-width: 460px; font-size: .86rem; color: var(--ink-2); }
 .wide table { min-width: 860px; }
 .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; transform: translateY(1px); }
@@ -166,6 +170,27 @@ td.adv { min-width: 260px; max-width: 460px; font-size: .86rem; color: var(--ink
 .heat td.h { text-align: right; font-variant-numeric: tabular-nums; font-size: .82rem; white-space: nowrap; min-width: 78px; }
 .heat td.h.zero { color: var(--ink-3); }
 .heat th.r { text-align: right; }
+
+/* plan scorecard: bullet bars (actual, projection, plan marker) */
+.planbox { border: 1px solid var(--line); border-radius: 8px; padding: 14px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.planbox .big { font-family: var(--f-display); font-size: 1.7rem; font-weight: 600; line-height: 1.1; }
+.planbox .of { color: var(--ink-2); }
+.planbox p { margin: 0; font-size: .88rem; color: var(--ink-2); }
+.bullet { position: relative; height: 22px; background: var(--sunk); border-radius: 4px; margin: 14px 0 18px; }
+.bullet .seg { position: absolute; top: 4px; bottom: 4px; }
+.bullet .seg:first-child { border-radius: 3px 0 0 3px; }
+.bullet .mark { position: absolute; top: -5px; bottom: -5px; width: 2px; background: var(--ink); }
+.bullet .mark span { position: absolute; top: -17px; left: 50%; transform: translateX(-50%); font-size: .72rem; color: var(--ink-2); white-space: nowrap; }
+.bullet .mark.time { background: var(--ink-3); width: 1px; }
+.bullet .mark.time span { top: auto; bottom: -17px; color: var(--ink-3); }
+.bullet .mark.alt span { top: auto; bottom: -17px; }
+.kv { display: grid; grid-template-columns: 1fr auto; gap: 3px 12px; font-size: .88rem; }
+.kv dt { color: var(--ink-2); }
+.kv dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.kv .tot { font-weight: 600; border-top: 1px solid var(--line); padding-top: 3px; }
+.planedit { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px 14px; margin-top: 10px; }
+.planedit label { display: grid; gap: 2px; font-size: .82rem; color: var(--ink-2); }
+.planedit input { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 5px 8px; font-variant-numeric: tabular-nums; }
 
 .empty { padding: 26px 16px; text-align: center; color: var(--ink-2); border: 1px dashed var(--line); border-radius: 8px; }
 .notice { background: var(--warn-bg); color: var(--warn-ink); border-radius: 8px; padding: 9px 12px; font-size: .9rem; }
@@ -216,6 +241,7 @@ details.how ul { margin: 8px 0 0; padding-left: 20px; color: var(--ink-2); font-
   </section>
 
   <nav class="toc" id="toc" aria-label="Sections">
+    <a href="#s0"><span class="n">★</span>Plan</a>
     <a href="#s1"><span class="n">1</span>Pipeline</a>
     <a href="#s2"><span class="n">2</span>QTD</a>
     <a href="#s3"><span class="n">3</span>2024–2026</a>
@@ -224,6 +250,7 @@ details.how ul { margin: 8px 0 0; padding-left: 20px; color: var(--ink-2); font-
     <a href="#s6"><span class="n">6</span>Inventory</a>
   </nav>
 
+  <section class="card" id="s0" aria-labelledby="s0h"></section>
   <section class="card" id="s1" aria-labelledby="s1h"></section>
   <section class="card" id="s2" aria-labelledby="s2h"></section>
   <section class="card" id="s3" aria-labelledby="s3h"></section>
@@ -235,10 +262,12 @@ details.how ul { margin: 8px 0 0; padding-left: 20px; color: var(--ink-2); font-
     <summary>How the numbers are worked out</summary>
     <ul>
       <li>POS value is net cost in USD at planned rate. The 2024 export has no net column, so it is SIP after rebate ÷ (1 − sell-out rebate %); this reproduces the 2025 net column exactly.</li>
-      <li>Quarters and weeks are Zebra fiscal ones from the POS export. "Same weeks" compares fiscal weeks up to the latest week loaded for this year.</li>
+      <li>Quarters and weeks are Zebra fiscal ones (year from the Sunday nearest 1 Jan, 13-week quarters; 2026 Q4 = 4 Oct 2026 – 2 Jan 2027), inferred from the POS week and invoice-date pairs. "Same weeks" compares fiscal weeks up to the latest week loaded for this year.</li>
       <li>Pipeline: Closed-Won, Secure, Validate, Qualify and Identify lines, by the quarter of the schedule date (first-ship quarter when there is none), for the selected primary distributor.</li>
       <li>Partner status compares this year to date with the same weeks last year: growing ≥ +10%, declining ≤ −10%. New means no POS in earlier loaded years; lapsed means none this year.</li>
-      <li>Stock: free = on hand − committed − reseller backlog. Run rate is sell-out units over the latest 13 POS weeks; weeks of cover = free ÷ weekly run rate. Stocking gaps use run-rate (no PC) units only.</li>
+      <li>Sell-in comes from the DSR: lines shipped to the distributor with an invoice date in the fiscal quarter, plus open orders scheduled to ship by quarter end (past-due and undated included). "To order" is Won, Secure and Validate pipeline the order check could not find in the DSR or in VAD stock.</li>
+      <li>Plan: sell-out is compared on POS net (Disti Net) and gross. Projection = QTD + trailing 13-week weekly POS × weeks left. Projected ending inventory = plan starting inventory + sell-in in hand − projected gross sell-out. DOI = inventory ÷ (gross sell-out per day).</li>
+      <li>Stock: free = on hand − committed − reseller backlog that is not on a Zebra open order in the DSR. Run rate is sell-out units over the latest 13 POS weeks; weeks of cover = free ÷ weekly run rate. Stocking gaps use run-rate (no PC) units only.</li>
       <li>Files stay in this browser (IndexedDB), shared with the order check page. Nothing is uploaded.</li>
     </ul>
   </details>
@@ -265,6 +294,7 @@ details.how ul { margin: 8px 0 0; padding-left: 20px; color: var(--ink-2); font-
     return a >= 1e6 ? s + (a / 1e6).toFixed(2) + 'M' : a >= 1e3 ? s + (a / 1e3).toFixed(a >= 1e5 ? 0 : 1) + 'k' : s + Math.round(a);
   };
   var int = function (n) { return Math.round(n).toLocaleString('en-US'); };
+  var dash = function (n) { return n && Math.abs(n) >= 0.5 ? usd(n) : '—'; };
   var pctRaw = function (x) { return x == null || !isFinite(x) ? '—' : Math.round(x * 100) + '%'; };
   var chg = function (a, b) { return b ? a / b - 1 : null; };
   function delta(a, b, label) {
@@ -324,8 +354,20 @@ details.how ul { margin: 8px 0 0; padding-left: 20px; color: var(--ink-2); font-
     scope: LS.get('vst.scope', 'vstecs'),
     f: Object.assign({ forecast: true, plBasis: 'ytd', partnerStatus: '', invStatus: '', partnerAll: false, invAll: false, heatYear: 0 },
       LS.get('vst.filters', {})),
-    targets: LS.get('vst.targets', {})
+    plan: LS.get('vst.plan', {}),
+    bridgeBase: LS.get('vst.bridgeBase', 0), bridgeDim: LS.get('vst.bridgeDim', 'partners')
   };
+  // Quarter plan: seed values (initial-data.js) overridden by what was typed in this browser.
+  function targets() {
+    var seed = (window.ZEBRA_INITIAL_DATA && window.ZEBRA_INITIAL_DATA.targets) || {}, out = {};
+    [seed, S.plan].forEach(function (src) {
+      Object.keys(src).forEach(function (fq) {
+        out[fq] = out[fq] || {};
+        Object.keys(src[fq]).forEach(function (sc) { out[fq][sc] = Object.assign({}, out[fq][sc] || {}, src[fq][sc]); });
+      });
+    });
+    return out;
+  }
   function saveF() { LS.set('vst.filters', S.f); }
 
   // ------------------------------------------------------------ file reading
@@ -398,7 +440,7 @@ details.how ul { margin: 8px 0 0; padding-left: 20px; color: var(--ink-2); font-
 
   // ------------------------------------------------------------ compute + render
   function recompute() {
-    S.a = R.review(S.tables, { scope: S.scope, excludeForecast: !S.f.forecast });
+    S.a = R.review(S.tables, { scope: S.scope, excludeForecast: !S.f.forecast, targets: targets() });
     $('#resetBtn').hidden = !(S.fromUpload && window.ZEBRA_INITIAL_DATA);
     render();
   }
@@ -416,7 +458,7 @@ details.how ul { margin: 8px 0 0; padding-left: 20px; color: var(--ink-2); font-
     $('#subtitle').textContent = scopeName() + ' · Hong Kong · ' + a.curFq + ' review, POS to fiscal week ' + (a.asOf.posWeek || '—') +
       (a.asOf.posDate ? ' (' + fmtDate(a.asOf.posDate) + ')' : '');
     document.title = $('#title').textContent;
-    renderFresh(); renderHighlights();
+    renderFresh(); renderHighlights(); renderPlan();
     renderPipeline(); renderQtd(); renderYears(); renderPl(); renderPartners(); renderInventory();
     drawCharts();
   }
@@ -443,6 +485,8 @@ details.how ul { margin: 8px 0 0; padding-left: 20px; color: var(--ink-2); font-
         a.asOf.pos.map(strip).join(', ') || 'Upload Zyme POS exports', !yrs.length) +
       cell('Pipeline', a.pipeline.loaded ? int(a.counts.pipeline) + ' lines' : 'Not loaded',
         a.asOf.pipeline.map(strip).join(', ') || 'Upload the SFDC pipeline report (pipeline-*.xls)', !a.pipeline.loaded) +
+      cell('DSR (sell-in)', a.counts.dsr ? 'Booked to ' + fmtDate(a.asOf.dsr) : 'Not loaded',
+        a.asOf.dsrFiles.map(strip).join(', ') || 'Upload HKTW_DSR_*.xlsx', !a.counts.dsr) +
       cell('VAD stock', a.asOf.inventory ? 'As of ' + fmtDate(a.asOf.inventory) : 'Not loaded',
         a.asOf.inventoryFiles.map(strip).join(', ') || 'Upload *_INV_*.xlsx', !a.asOf.inventory) +
       cell('Reseller backlog', a.asOf.backlog ? 'As of ' + fmtDate(a.asOf.backlog) : 'Not loaded',
@@ -463,6 +507,14 @@ details.how ul { margin: 8px 0 0; padding-left: 20px; color: var(--ink-2); font-
       li.push('Pipeline <b>' + a.curFq + ': ' + usdK(p.total.cur) + '</b> (Won ' + usdK(st('Closed - Won').cur) + ', Secure ' + usdK(st('Secure').cur) +
         ') · <b>' + a.nextFq + ': ' + usdK(p.total.next) + '</b> (Secure ' + usdK(st('Secure').next) + ').');
     } else li.push('<span class="faint">Pipeline not loaded: drop the SFDC pipeline export to fill section 1.</span>');
+    var P = a.plan;
+    if (P.has) {
+      li.push('Plan ' + a.curFq + ': sell-out <b>' + usdK(P.out.net) + '</b> of ' + usdK(P.t.sellOutNet) + ' after ' + P.weeksIn + ' of ' + P.weeksTotal + ' weeks; at the 13-week run rate (' +
+        usdK(P.out.runNet) + '/wk) the quarter lands at <b>' + usdK(P.out.projNet) + '</b> (' + deltaTxt(P.out.projNet, P.t.sellOutNet) + ' vs plan). It needs <b>' + usdK(P.out.needNet) + '/wk</b> from here.');
+      if (P.inn) li.push('Sell-in: <b>' + usdK(P.inn.inHand) + '</b> shipped or on Zebra order vs the ' + usdK(P.t.sellIn) + ' commit, a <b>' + usdK(Math.max(0, P.inn.gap)) +
+        '</b> gap; Won + Secure pipeline not yet ordered would take it to ' + usdK(P.inn.withSecure) + '. Projected ending DOI ' +
+        (P.stock.projDoi != null ? Math.round(P.stock.projDoi) : '—') + ' days vs plan ' + (P.t.endDoi || '—') + '.');
+    }
     if (a.counts.pos) {
       li.push('QTD ' + q.fq + ' (wk ' + q.fromWeek + '–' + q.toWeek + '): <b>' + usdK(q.net) + '</b>, ' + deltaTxt(q.net, q.ly) +
         ' vs the same weeks of ' + (a.cy - 1) + ' (' + usdK(q.ly) + '). ' + (a.cy - 1) + ' ' + 'Q' + a.cq + ' closed at ' + usdK(q.lyFull) +
@@ -471,6 +523,13 @@ details.how ul { margin: 8px 0 0; padding-left: 20px; color: var(--ink-2); font-
         li.push('YTD wk 1–' + a.years.lastWeek + ': <b>' + usdK(cyRow.ytd) + '</b>, ' + deltaTxt(cyRow.ytd, lyRow && lyRow.ytd) + ' vs ' + (a.cy - 1) +
           (l2 ? ' and ' + deltaTxt(cyRow.ytd, l2.ytd) + ' vs ' + (a.cy - 2) : '') + '. ' + shortScope() + ' is ' +
           pctRaw(cyRow.hk ? cyRow.net / cyRow.hk : null) + ' of HK POS this year' + (lyRow && lyRow.hk ? ' (' + pctRaw(lyRow.net / lyRow.hk) + ' in ' + (a.cy - 1) + ')' : '') + '.');
+      }
+      var br = a.bridges[0];
+      if (br) {
+        var bp = br.partners.cat, be = br.endUsers.cat;
+        li.push('Why ' + deltaTxt(br.curTotal, br.baseTotal) + ' vs ' + br.base + ' YTD: partners that stopped buying cost ' + usdK(-bp.lost) + ' and shrinking ones ' + usdK(-bp.down) +
+          ' (' + esc(br.partners.losers.slice(0, 3).map(function (o) { return o.name; }).join(', ')) + '); growing and new partners added ' + usdK(bp.up + bp.gained) +
+          '. End users churned heavily: ' + be.nLost + ' from ' + br.base + ' bought nothing (' + usdK(-be.lost) + '), ' + be.nGained + ' new ones added ' + usdK(be.gained) + '.');
       }
       var pls = a.productLines.lines.map(function (l) { return { k: l.key, d: (l.ytd[a.cy] || 0) - (l.ytd[a.cy - 1] || 0), a: l.ytd[a.cy] || 0, b: l.ytd[a.cy - 1] || 0 }; })
         .sort(function (x, y) { return y.d - x.d; });
@@ -491,6 +550,85 @@ details.how ul { margin: 8px 0 0; padding-left: 20px; color: var(--ink-2); font-
     }
     $('#highlights').innerHTML = li.map(function (x) { return '<li>' + x + '</li>'; }).join('');
     $('#sumNote').textContent = scopeName();
+  }
+
+  // ---------------------------------------------------------------- ★ quarter plan
+  var PLAN_FIELDS = [['sellIn', 'Sell-in commit (gross)'], ['sellOutNet', 'Sell-out plan (disti net)'], ['sellOutGross', 'Sell-out plan (gross)'],
+    ['stretch', 'Sell-out target (uplift)'], ['startInv', 'Starting inventory'], ['startDoi', 'Starting DOI (days)'],
+    ['endInv', 'Ending inventory plan'], ['endDoi', 'Ending DOI plan (days)']];
+  function bullet(max, segs, marks) {
+    var pc = function (v) { return Math.max(0, Math.min(100, v / max * 100)); }, x = 0;
+    return '<div class="bullet" role="img" aria-label="' + esc(segs.map(function (s) { return s.label + ' ' + usd(s.v); }).join(', ')) + '">' +
+      segs.map(function (s) {
+        var w = pc(x + s.v) - pc(x), h = '<span class="seg" style="left:' + pc(x) + '%;width:' + w + '%;background:' + s.color + (s.alpha ? ';opacity:' + s.alpha : '') +
+          '" data-tip="' + esc(s.label + ': ' + usd(s.v)) + '"></span>';
+        x += s.v; return h;
+      }).join('') +
+      marks.map(function (m) {
+        return '<span class="mark ' + (m.cls || '') + '" style="left:calc(' + pc(m.v) + '% - 1px)" data-tip="' + esc(m.tip || m.label) + '"><span>' + esc(m.label) + '</span></span>';
+      }).join('') + '</div>';
+  }
+  function renderPlan() {
+    var a = S.a, P = a.plan, el = $('#s0'), q = a.qtd, si = a.sellIn;
+    var head = '<div class="sechead"><h2 id="s0h"><span class="k">★</span>' + a.curFq + ' plan scorecard</h2><span class="note">' + esc(scopeName()) +
+      ' · fiscal ' + a.curFq + ': ' + fmtDate(E.iso(new Date(q.qStart))) + ' – ' + fmtDate(E.iso(new Date(q.qEnd - 864e5))) + ' · POS to week ' + q.toWeek + '</span></div>';
+    var t = P.has ? P.t : {};
+    var edit = '<details class="how"' + (P.has ? '' : ' open') + '><summary>' + (P.has ? 'Edit' : 'Enter') + ' the ' + a.curFq + ' plan for ' + esc(scopeName()) + ' (USD)</summary>' +
+      '<div class="planedit">' + PLAN_FIELDS.map(function (f) {
+        return '<label>' + f[1] + '<input type="number" min="0" step="1000" data-plan="' + f[0] + '" value="' + (t[f[0]] != null ? t[f[0]] : '') + '"></label>';
+      }).join('') + '</div><div class="ctrl" style="margin-top:10px"><button class="btn" id="planSave">Save plan</button>' +
+      '<button class="btn" id="planClear">Clear my changes</button><span class="faint">Saved in this browser only.</span></div></details>';
+    if (!P.has) {
+      el.innerHTML = head + '<div class="empty">No ' + a.curFq + ' plan for ' + esc(scopeName()) + ' yet. Enter it below to track sell-in, sell-out and DOI against it.</div>' + edit;
+      return;
+    }
+    var o = P.out, frac = P.weeksIn / P.weeksTotal;
+    var timeMark = { v: 0, cls: 'time', label: 'wk ' + P.weeksIn + '/' + P.weeksTotal, tip: P.weeksIn + ' of ' + P.weeksTotal + ' weeks of POS in' };
+    // sell-out
+    var outMax = Math.max(t.stretch || 0, t.sellOutNet, o.projNet) * 1.08;
+    var outBox = '<div class="planbox"><div class="label">Sell-out (POS, disti net)</div>' +
+      '<div><span class="big">' + usd(o.net) + '</span> <span class="of">of ' + usd(t.sellOutNet) + ' · ' + pctRaw(o.net / t.sellOutNet) + '</span></div>' +
+      bullet(outMax, [{ v: o.net, color: 'var(--s1)', label: 'QTD' }, { v: Math.max(0, o.projNet - o.net), color: 'var(--s1)', alpha: .3, label: 'Projected rest of quarter' }],
+        [Object.assign({}, timeMark, { v: t.sellOutNet * frac }), { v: t.sellOutNet, label: 'Plan', tip: 'Plan ' + usd(t.sellOutNet) }]
+          .concat(t.stretch ? [{ v: t.stretch, cls: 'alt', label: '+3%', tip: 'Target (uplift) ' + usd(t.stretch) }] : [])) +
+      '<dl class="kv"><dt>Projected at the 13-week run rate (' + usdK(o.runNet) + '/wk)</dt><dd>' + usd(o.projNet) + '</dd>' +
+      '<dt>vs plan</dt><dd class="' + (o.projNet >= t.sellOutNet ? 'up' : 'down') + '">' + (o.projNet >= t.sellOutNet ? '+' : '') + usd(o.projNet - t.sellOutNet) + '</dd>' +
+      '<dt>Needed per week, ' + P.weeksLeft + ' weeks left</dt><dd>' + usd(o.needNet) + (t.stretch ? ' <span class="faint">(target ' + usdK(o.needStretch) + ')</span>' : '') + '</dd>' +
+      (t.sellOutGross ? '<dt>Gross QTD vs gross plan</dt><dd>' + usdK(o.gross) + ' / ' + usdK(t.sellOutGross) + '</dd>' : '') +
+      (q.lyFull ? '<dt>' + (a.cy - 1) + ' Q' + a.cq + ' actual</dt><dd>' + usd(q.lyFull) + '</dd>' : '') + '</dl></div>';
+    // sell-in
+    var inBox;
+    if (P.inn) {
+      var up = si.upside, n = P.inn;
+      var inMax = Math.max(t.sellIn, n.withValidate) * 1.05;
+      inBox = '<div class="planbox"><div class="label">Sell-in (DSR, gross)</div>' +
+        '<div><span class="big">' + usd(n.inHand) + '</span> <span class="of">of ' + usd(t.sellIn) + ' commit · ' + pctRaw(n.inHand / t.sellIn) + '</span></div>' +
+        bullet(inMax, [{ v: n.shipped, color: 'var(--o1)', label: 'Shipped' }, { v: n.open, color: 'var(--o2)', label: 'Zebra open orders' },
+          { v: up.won + up.secure, color: 'var(--o4)', label: 'Won + Secure, not yet ordered' }, { v: up.validate, color: 'var(--o5)', label: 'Validate, not yet ordered' }],
+          [{ v: t.sellIn, label: 'Commit', tip: 'Commit ' + usd(t.sellIn) }]) +
+        '<div class="legend"><span><i style="background:var(--o1)"></i>Shipped</span><span><i style="background:var(--o2)"></i>Open orders</span>' +
+        '<span><i style="background:var(--o4)"></i>Won + Secure to order</span><span><i style="background:var(--o5)"></i>Validate to order</span></div>' +
+        '<dl class="kv"><dt>Shipped in quarter</dt><dd>' + usd(n.shipped) + '</dd><dt>Zebra open orders due this quarter</dt><dd>' + usd(n.open) + '</dd>' +
+        '<dt class="tot">In hand</dt><dd class="tot">' + usd(n.inHand) + '</dd>' +
+        '<dt>Gap to commit</dt><dd class="' + (n.gap > 0 ? 'down' : 'up') + '">' + usd(Math.max(0, n.gap)) + '</dd>' +
+        '<dt>+ Won / Secure pipeline to order</dt><dd>' + usd(n.withSecure) + '</dd><dt>+ Validate to order</dt><dd>' + usd(n.withValidate) + '</dd>' +
+        (si.lyShipped != null ? '<dt>' + (a.cy - 1) + ' Q' + a.cq + ' shipped</dt><dd>' + usd(si.lyShipped) + '</dd>' : '') + '</dl>' +
+        '<p>DSR booked to ' + fmtDate(E.iso(si.asOf)) + '. Orders and shipments after that are not counted yet.</p></div>';
+    } else {
+      inBox = '<div class="planbox"><div class="label">Sell-in</div><div class="empty">Load the DSR (<span class="mono">HKTW_DSR_*.xlsx</span>) to track sell-in against the ' + usd(t.sellIn) + ' commit.</div></div>';
+    }
+    // inventory
+    var st = P.stock;
+    var stockBox = '<div class="planbox"><div class="label">Inventory and DOI</div>' +
+      '<div><span class="big">' + (st.projDoi != null ? Math.round(st.projDoi) + ' days' : '—') + '</span> <span class="of">projected DOI at week ' + (q.fromWeek + P.weeksTotal - 1) +
+      ' · plan ' + (t.endDoi || '—') + '</span></div>' +
+      '<div class="tablebox"><table><thead><tr><th></th><th class="num">Inventory</th><th class="num">DOI</th></tr></thead><tbody>' +
+      '<tr><td>Plan start (wk ' + (q.fromWeek - 1) + ')</td><td class="num">' + usd(t.startInv) + '</td><td class="num">' + (t.startDoi || '—') + '</td></tr>' +
+      (st.now != null ? '<tr><td>VAD stock file, ' + fmtDate(E.iso(new Date(st.nowAsOf))) + '</td><td class="num">' + usd(st.now) + '</td><td class="num">' + (st.doiNow != null ? Math.round(st.doiNow) : '—') + '</td></tr>' : '') +
+      '<tr><td>Projected end</td><td class="num">' + usd(st.projEnd) + '</td><td class="num">' + (st.projDoi != null ? Math.round(st.projDoi) : '—') + '</td></tr>' +
+      '<tr class="tot"><td>Plan end (wk ' + (q.fromWeek + P.weeksTotal - 1) + ')</td><td class="num">' + usd(t.endInv) + '</td><td class="num">' + (t.endDoi || '—') + '</td></tr></tbody></table></div>' +
+      '<p>Projected end = plan start + sell-in in hand − projected gross sell-out (' + usdK(o.projGross) + '). DOI uses gross sell-out per day; the stock-file DOI uses the trailing 13 weeks.</p></div>';
+    el.innerHTML = head + '<div class="grid3">' + outBox + inBox + stockBox + '</div>' + edit;
   }
 
   // ---------------------------------------------------------------- 1. pipeline
@@ -516,13 +654,25 @@ details.how ul { margin: 8px 0 0; padding-left: 20px; color: var(--ink-2); font-
     var tq = p.total;
     var rows = p.stages.map(function (s) {
       return '<tr><td style="white-space:nowrap"><span class="sw" style="background:var(' + STAGE_VAR[s.stage] + ')"></span>' + esc(s.stage) + '</td><td class="num">' + usd(s.cur) +
-        '</td><td class="num">' + usd(s.next) + '</td><td class="num">' + usd(s.cur + s.next) + '</td><td class="num">' + s.opps + '</td></tr>';
+        '</td><td class="num">' + dash(s.curOrdered) + '</td><td class="num">' + dash(s.curStock) + '</td><td class="num">' + dash(s.curToOrder) +
+        '</td><td class="num">' + usd(s.next) + '</td><td class="num">' + s.opps + '</td></tr>';
     }).join('');
+    var tot = function (k) { return p.stages.reduce(function (x, s) { return x + s[k]; }, 0); };
     var opps = p.opps.slice(0, S.f.pipeAll ? 500 : 15).map(function (o) {
       return '<tr><td class="name"><div>' + esc(o.name || o.oppNo) + '</div><div class="faint mono">' + esc(o.oppNo) + (o.forecast ? ' · forecast/run-rate' : '') + '</div></td>' +
         '<td>' + esc(o.stage.replace('Closed - ', '')) + '</td><td class="name">' + esc(o.endUser) + '</td><td class="name">' + esc(o.partner) + '</td>' +
-        '<td class="num">' + (o.cur ? usd(o.cur) : '—') + '</td><td class="num">' + (o.next ? usd(o.next) : '—') + '</td></tr>';
+        '<td class="num">' + (o.cur ? usd(o.cur) : '—') + '</td><td class="num">' + (o.next ? usd(o.next) : '—') + '</td>' +
+        (a.counts.dsr ? '<td class="num">' + (o.ordered ? pctRaw(o.ordered / (o.cur + o.next)) : '—') + (o.fromStock / (o.cur + o.next) >= .005 ? '<div class="faint">stock ' + pctRaw(o.fromStock / (o.cur + o.next)) + '</div>' : '') + '</td>' : '') + '</tr>';
     }).join('');
+    var byPartner = {};
+    p.lines.forEach(function (l) {
+      var k = l.partner || '(no partner)', o = byPartner[k] || (byPartner[k] = { cur: 0, next: 0 });
+      if (l.q === a.curFq) o.cur += l.amount; else o.next += l.amount;
+    });
+    var partnerPipe = '<div class="tablebox"><table><thead><tr><th>Channel partner</th><th class="num">' + a.curFq + '</th><th class="num">' + a.nextFq + '</th></tr></thead><tbody>' +
+      Object.keys(byPartner).sort(function (x, y) { return (byPartner[y].cur + byPartner[y].next) - (byPartner[x].cur + byPartner[x].next); }).slice(0, 10).map(function (k) {
+        return '<tr><td class="name">' + esc(k) + '</td><td class="num">' + dash(byPartner[k].cur) + '</td><td class="num">' + dash(byPartner[k].next) + '</td></tr>';
+      }).join('') + '</tbody></table></div>';
     var pl = p.productLines.map(function (x) {
       return '<tr><td>' + esc(x.pl) + '</td><td class="num">' + usd(x.cur) + '</td><td class="num">' + usd(x.next) + '</td></tr>';
     }).join('');
@@ -532,11 +682,15 @@ details.how ul { margin: 8px 0 0; padding-left: 20px; color: var(--ink-2); font-
       '<div class="d">Forecast / run-rate opps (-F, -R): ' + usd(p.forecast.cur + p.forecast.next) + '</div></div></div>' +
       '<div class="legend">' + Object.keys(STAGE_VAR).map(function (s) { return '<span><i style="background:var(' + STAGE_VAR[s] + ')"></i>' + esc(s) + '</span>'; }).join('') + '</div>' +
       '<div class="ctrl"><label><input type="checkbox" id="fForecast"' + (S.f.forecast ? ' checked' : '') + '> Include forecast / run-rate opps (-F, -R)</label></div>' +
-      '<div class="grid2"><div class="tablebox"><table><thead><tr><th>Stage</th><th class="num">' + a.curFq + '</th><th class="num">' + a.nextFq + '</th><th class="num">Total</th><th class="num">Opps</th></tr></thead><tbody>' +
-      rows + '<tr class="tot"><td>Total</td><td class="num">' + usd(tq.cur) + '</td><td class="num">' + usd(tq.next) + '</td><td class="num">' + usd(tq.cur + tq.next) + '</td><td class="num">' + p.opps.length + '</td></tr></tbody></table></div>' +
-      '<div class="tablebox"><table><thead><tr><th>Product line</th><th class="num">' + a.curFq + '</th><th class="num">' + a.nextFq + '</th></tr></thead><tbody>' + (pl || '<tr><td colspan="3" class="faint">None</td></tr>') + '</tbody></table></div></div>' +
-      '<h3>Top opportunities</h3><div class="tablebox wide"><table><thead><tr><th>Opportunity</th><th>Stage</th><th>End user</th><th>Partner</th><th class="num">' + a.curFq + '</th><th class="num">' + a.nextFq + '</th></tr></thead><tbody>' +
-      (opps || '<tr><td colspan="6" class="faint">No lines in these quarters</td></tr>') + '</tbody></table></div>' +
+      '<div class="tablebox wide"><table><thead><tr><th>Stage</th><th class="num">' + a.curFq + '</th><th class="num">· in DSR</th><th class="num">· VAD stock</th>' +
+      '<th class="num">· to order</th><th class="num">' + a.nextFq + '</th><th class="num">Opps</th></tr></thead><tbody>' +
+      rows + '<tr class="tot"><td>Total</td><td class="num">' + usd(tq.cur) + '</td><td class="num">' + dash(tot('curOrdered')) + '</td><td class="num">' + dash(tot('curStock')) +
+      '</td><td class="num">' + dash(tot('curToOrder')) + '</td><td class="num">' + usd(tq.next) + '</td><td class="num">' + p.opps.length + '</td></tr></tbody></table></div>' +
+      '<p class="faint" style="margin:0">' + (a.counts.dsr ? 'Split by the order check: in DSR = already ordered from Zebra; VAD stock = can ship from distributor stock; to order = neither yet (Qualify and Identify are always "to order").' :
+        'Load the DSR to split the current quarter into already ordered, VAD stock and still to order.') + '</p>' +
+      '<div class="grid2"><div class="tablebox"><table><thead><tr><th>Product line</th><th class="num">' + a.curFq + '</th><th class="num">' + a.nextFq + '</th></tr></thead><tbody>' + (pl || '<tr><td colspan="3" class="faint">None</td></tr>') + '</tbody></table></div>' + partnerPipe + '</div>' +
+      '<h3>Top opportunities</h3><div class="tablebox wide"><table><thead><tr><th>Opportunity</th><th>Stage</th><th>End user</th><th>Partner</th><th class="num">' + a.curFq + '</th><th class="num">' + a.nextFq + '</th>' + (a.counts.dsr ? '<th class="num">In DSR</th>' : '') + '</tr></thead><tbody>' +
+      (opps || '<tr><td colspan="7" class="faint">No lines in these quarters</td></tr>') + '</tbody></table></div>' +
       (p.opps.length > 15 ? '<button class="btn more" data-toggle="pipeAll">' + (S.f.pipeAll ? 'Show top 15' : 'Show all ' + p.opps.length) + '</button>' : '');
   }
 
@@ -546,7 +700,7 @@ details.how ul { margin: 8px 0 0; padding-left: 20px; color: var(--ink-2); font-
     var head = '<div class="sechead"><h2 id="s2h"><span class="k">2</span>Quarter to date: ' + q.fq + '</h2><span class="note">POS net USD · fiscal weeks ' +
       q.fromWeek + '–' + q.toWeek + ' · ' + q.weeksIn + ' of ' + q.weeksTotal + ' weeks</span></div>';
     if (!a.counts.pos) { el.innerHTML = head + '<div class="empty">Load POS to see quarter to date.</div>'; return; }
-    var target = +S.targets[S.scope + '|' + q.fq] || 0;
+    var target = a.plan.has ? a.plan.t.sellOutNet : 0;
     var pipeCur = a.pipeline.loaded ? a.pipeline.total.cur : null;
     var tiles = '<div class="tiles">' +
       '<div class="tile hero"><div class="label">QTD POS</div><div class="v">' + usd(q.net) + '</div><div class="d">' + int(q.qty) + ' units · ' +
@@ -555,12 +709,10 @@ details.how ul { margin: 8px 0 0; padding-left: 20px; color: var(--ink-2); font-
       '<div class="tile"><div class="label">Same weeks ' + (a.cy - 2) + '</div><div class="v">' + usd(q.ly2) + '</div><div class="d">' + delta(q.net, q.ly2) + ' this year</div></div>' +
       '<div class="tile"><div class="label">' + ly + ' Q' + a.cq + ' full quarter</div><div class="v">' + usd(q.lyFull) + '</div><div class="d">QTD is ' +
         pctRaw(q.lyFull ? q.net / q.lyFull : null) + ' of it; ' + usd(Math.max(0, q.lyFull - q.net)) + ' to match</div></div>' +
-      '<div class="tile"><div class="label">Quarter target</div><div class="v">' + (target ? pctRaw(q.net / target) : '—') + '</div><div class="d">' +
+      '<div class="tile"><div class="label">Sell-out plan</div><div class="v">' + (target ? pctRaw(q.net / target) : '—') + '</div><div class="d">' +
         (target ? usd(q.net) + ' of ' + usd(target) + '; gap ' + usd(Math.max(0, target - q.net)) +
-          (pipeCur != null ? '. Pipeline ' + a.curFq + ' ' + usd(pipeCur) : '') : 'Enter a target below') + '</div></div>' +
+          (pipeCur != null ? '. Pipeline ' + a.curFq + ' ' + usd(pipeCur) : '') : 'Enter the plan in the scorecard') + '</div></div>' +
       '</div>';
-    var ctrl = '<div class="ctrl"><label>Q target (USD) <input type="number" min="0" step="1000" id="fTarget" value="' + (target || '') + '" placeholder="e.g. 500000"></label>' +
-      '<span class="faint">Saved in this browser for ' + esc(shortScope()) + ' ' + q.fq + '.</span></div>';
     var cmpTable = function (title, rows, keyLabel, extra) {
       return '<div><h3>' + title + '</h3><div class="tablebox"><table><thead><tr><th>' + keyLabel + '</th>' + (extra ? '<th class="num">Units</th>' : '') +
         '<th class="num">QTD</th><th class="num">Same wks ' + ly + '</th><th class="num">Δ</th></tr></thead><tbody>' +
@@ -569,7 +721,7 @@ details.how ul { margin: 8px 0 0; padding-left: 20px; color: var(--ink-2); font-
             '</td><td class="num">' + usd(x.prev) + '</td><td class="num">' + delta(x.cur, x.prev, 'LY') + '</td></tr>';
         }).join('') : '<tr><td colspan="5" class="faint">No POS this quarter yet</td></tr>') + '</tbody></table></div></div>';
     };
-    el.innerHTML = head + tiles + ctrl +
+    el.innerHTML = head + tiles +
       '<div><h3>Weekly POS, ' + q.fq + ' vs ' + ly + ' Q' + a.cq + '</h3><div class="legend"><span><i style="background:var(--s1)"></i>' + a.cy + '</span><span><i style="background:var(--s2)"></i>' + ly + '</span></div>' +
       '<div class="chart" id="cWeeks"></div></div>' +
       '<div class="grid2">' + cmpTable('By product line', q.byPl, 'Product line') + cmpTable('Top partners', q.partners, 'Partner') + '</div>' +
@@ -612,11 +764,48 @@ details.how ul { margin: 8px 0 0; padding-left: 20px; color: var(--ink-2); font-
       '<div class="grid2"><div><h3>By quarter</h3>' + legend + '<div class="chart" id="cQuarters"></div></div>' +
       '<div><h3>Cumulative by fiscal week</h3>' + legend + '<div class="chart" id="cCum"></div></div></div>' +
       '<div><h3>Hong Kong POS by distributor</h3><div class="tablebox"><table><thead><tr><th>Distributor</th>' +
-      yrs.map(function (y) { return '<th class="num">' + y.year + (y.partial ? ' YTD' : '') + ' · share</th>'; }).join('') + '</tr></thead><tbody>' + dist + '</tbody></table></div></div>';
+      yrs.map(function (y) { return '<th class="num">' + y.year + (y.partial ? ' YTD' : '') + ' · share</th>'; }).join('') + '</tr></thead><tbody>' + dist + '</tbody></table></div></div>' +
+      bridgeHtml();
     CH.cQuarters = { type: 'columns', cats: ['Q1', 'Q2', 'Q3', 'Q4'], h: 230,
       series: yrs.map(function (y) { return { name: String(y.year), color: yearColor(y.year), values: y.quarters.map(function (v, i) { return y.partial && i + 1 > a.cq ? null : v; }) }; }) };
     CH.cCum = { type: 'lines', n: 53, h: 230,
       series: yrs.map(function (y) { return { name: String(y.year), color: yearColor(y.year), values: y.cum }; }) };
+  }
+
+  // What changed YTD between a base year and this year, by partner / end user / product line / family.
+  var BRIDGE_DIMS = { partners: ['Partners', 'partners'], endUsers: ['End users', 'end users'], productLines: ['Product lines', 'product lines'], families: ['Product families', 'families'] };
+  function bridgeHtml() {
+    var a = S.a, bs = a.bridges;
+    if (!bs.length) return '';
+    var b = bs.filter(function (x) { return x.base === S.bridgeBase; })[0] || bs[0];
+    var dimKey = BRIDGE_DIMS[S.bridgeDim] ? S.bridgeDim : 'partners', d = b[dimKey], c = d.cat, unit = BRIDGE_DIMS[dimKey][1];
+    var diff = b.curTotal - b.baseTotal;
+    CH.cBridge = { type: 'waterfall', h: 250, steps: [
+      { label: b.base + ' YTD', v: b.baseTotal, total: true },
+      { label: 'Lost ' + unit + ' (' + c.nLost + ')', v: c.lost }, { label: 'Declining (' + c.nDown + ')', v: c.down },
+      { label: 'Growing (' + c.nUp + ')', v: c.up }, { label: 'New ' + unit + ' (' + c.nGained + ')', v: c.gained },
+      { label: b.cy + ' YTD', v: b.curTotal, total: true }] };
+    var tbl = function (title, list) {
+      return '<div><h3>' + title + '</h3><div class="tablebox"><table><thead><tr><th>' + BRIDGE_DIMS[dimKey][0].replace(/s$/, '') + '</th><th class="num">' + b.base +
+        '</th><th class="num">' + b.cy + '</th><th class="num">Change</th></tr></thead><tbody>' + (list.length ? list.map(function (o) {
+          return '<tr><td class="name">' + esc(o.name) + (o.kind === 'lost' ? ' <span class="faint">· lost</span>' : o.kind === 'gained' ? ' <span class="faint">· new</span>' : '') +
+            '</td><td class="num">' + dash(o.base) + '</td><td class="num">' + dash(o.cur) + '</td><td class="num ' + (o.delta < 0 ? 'down' : 'up') + '">' +
+            (o.delta > 0 ? '+' : '') + usd(o.delta) + '</td></tr>';
+        }).join('') : '<tr><td colspan="4" class="faint">None</td></tr>') + '</tbody></table></div></div>';
+    };
+    var top = d.losers[0], gain = d.gainers[0];
+    return '<div><div class="sechead"><h3>What changed: YTD ' + b.base + ' → ' + b.cy + ' (weeks 1–' + b.lastWeek + ')</h3>' +
+      '<div class="chips" role="group" aria-label="Compare with">' + bs.map(function (x) { return '<button class="chipbtn" data-bbase="' + x.base + '" aria-pressed="' + (x.base === b.base) + '">vs ' + x.base + '</button>'; }).join('') +
+      '<span class="faint" style="margin:0 4px">by</span>' + Object.keys(BRIDGE_DIMS).map(function (k) {
+        return '<button class="chipbtn" data-bdim="' + k + '" aria-pressed="' + (k === dimKey) + '">' + BRIDGE_DIMS[k][0] + '</button>';
+      }).join('') + '</div></div>' +
+      '<p class="muted" style="margin:6px 0 10px">' + esc(shortScope()) + ' YTD moved ' + (diff >= 0 ? '+' : '') + usd(diff) + ' (' + deltaTxt(b.curTotal, b.baseTotal) + '). ' +
+      'Lost ' + unit + ' took ' + usd(-c.lost) + ' and declining ones ' + usd(-c.down) + '; growing ones added ' + usd(c.up) + ' and new ones ' + usd(c.gained) + '.' +
+      (top ? ' Biggest drop: ' + esc(top.name) + ' (' + usd(top.delta) + ').' : '') + (gain ? ' Biggest gain: ' + esc(gain.name) + ' (+' + usd(gain.delta) + ').' : '') + '</p>' +
+      '<div class="legend"><span><i style="background:var(--total)"></i>YTD total</span><span><i style="background:var(--neg)"></i>Decrease</span><span><i style="background:var(--pos)"></i>Increase</span></div>' +
+      '<div class="chart" id="cBridge"></div>' +
+      '<p class="faint" style="margin:4px 0 0">Lost = bought in ' + b.base + ' weeks 1–' + b.lastWeek + ', nothing in the same weeks of ' + b.cy + '. New = the reverse.</p>' +
+      '<div class="grid2" style="margin-top:16px">' + tbl('Biggest decreases', d.losers) + tbl('Biggest increases', d.gainers) + '</div></div>';
   }
 
   // ---------------------------------------------------------------- 4. product lines
@@ -745,7 +934,7 @@ details.how ul { margin: 8px 0 0; padding-left: 20px; color: var(--ink-2); font-
   var I_STATUS = {
     short: ['Backlog > stock', 'critical'], 'stock-gap': ['Not stocked', 'serious'], 'no-sales': ['No sales 26 wks', 'warning'],
     overstock: ['Overstock', 'warning'], slow: ['Slow 13 wks', 'warning'], low: ['Low cover', 'serious'], 'pipeline-gap': ['Pipeline gap', 'serious'],
-    healthy: ['Healthy', 'good'], reserved: ['Held for backlog', '']
+    healthy: ['Healthy', 'good'], incoming: ['On Zebra order', 'info'], reserved: ['Held for backlog', '']
   };
   function renderInventory() {
     var a = S.a, I = a.inventory, el = $('#s6');
@@ -756,9 +945,13 @@ details.how ul { margin: 8px 0 0; padding-left: 20px; color: var(--ink-2); font-
     var byVal = function (s) { return I.list.filter(function (p) { return p.status === s; }).reduce(function (x, p) { return x + p.value; }, 0); };
     var tiles = '<div class="tiles">' +
       '<div class="tile hero"><div class="label">Stock value</div><div class="v">' + usd(I.totalValue) + '</div><div class="d">' + I.skus + ' SKUs · ' + int(I.units) + ' units</div></div>' +
-      '<div class="tile"><div class="label">Weeks of stock</div><div class="v">' + (I.weeklySell ? Math.round(I.totalValue / I.weeklySell) : '—') + '</div><div class="d">at the 13-week sell-out rate of stocked SKUs (' + usdK(I.weeklySell) + '/wk)</div></div>' +
-      '<div class="tile"><div class="label">Reseller backlog</div><div class="v">' + int(I.backlogUnits) + ' units</div><div class="d">' + I.backlogLines + ' lines on ' + I.backlogOrders + ' orders</div></div>' +
-      '<div class="tile"><div class="label">Backlog > stock</div><div class="v">' + (c.short || 0) + ' SKUs</div><div class="d">need the Zebra order to land</div></div>' +
+      '<div class="tile"><div class="label">DOI</div><div class="v">' + (a.qtd.avg13Gross ? Math.round(I.totalValue / (a.qtd.avg13Gross / 7)) + ' days' : '—') +
+        '</div><div class="d">stock ÷ 13-week gross sell-out per day (' + usdK(a.qtd.avg13Gross / 7) + '/day)' +
+        (I.weeklySell ? '; the stocked SKUs alone sell ' + usdK(I.weeklySell) + '/wk' : '') + '</div></div>' +
+      '<div class="tile"><div class="label">Reseller backlog</div><div class="v">' + int(I.backlogUnits) + ' units</div><div class="d">' + I.backlogLines + ' lines on ' + I.backlogOrders + ' orders' +
+        (I.hasDsr ? '; ' + int(I.incomingUnits) + ' on Zebra open orders' : '') + '</div></div>' +
+      '<div class="tile"><div class="label">Backlog > stock</div><div class="v">' + (c.short || 0) + ' SKUs</div><div class="d">' +
+        (I.hasDsr ? 'not covered by stock or a Zebra open order (DSR ' + fmtDate(E.iso(I.dsrAsOf)) + ')' : 'need the Zebra order to land') + '</div></div>' +
       '<div class="tile"><div class="label">Slow or overstock</div><div class="v">' + usd(I.slowValue) + '</div><div class="d">' + pctRaw(I.totalValue ? I.slowValue / I.totalValue : null) + ' of stock value</div></div>' +
       '</div>';
     // top actions: biggest-value problems first
@@ -769,7 +962,7 @@ details.how ul { margin: 8px 0 0; padding-left: 20px; color: var(--ink-2); font-
     });
     var shorts = top('short', 50).sort(function (x, y) { return x.free - y.free; });
     if (shorts.length) actions.push('Backlog exceeds stock on ' + shorts.length + ' SKUs, largest ' + shorts.slice(0, 3).map(function (p) { return '<b class="mono">' + esc(p.part) + '</b> (' + (-p.free) + ')'; }).join(', ') +
-      '. Check the Zebra open orders cover them before the scheduled ship dates.');
+      (I.hasDsr ? '. Not on a Zebra open order in the DSR: check VST has placed them (some were taken after the DSR date).' : '. Check the Zebra open orders cover them before the scheduled ship dates.'));
     top('stock-gap', 3).forEach(function (p) { actions.push('<b class="mono">' + esc(p.part) + '</b>: ' + esc(p.advice[0])); });
     top('low', 3).forEach(function (p) { actions.push('<b class="mono">' + esc(p.part) + '</b>: ' + esc(p.advice[0])); });
     top('reserved', 50).filter(function (p) { return p.oldestDays > 30; }).slice(0, 2).forEach(function (p) {
@@ -784,9 +977,10 @@ details.how ul { margin: 8px 0 0; padding-left: 20px; color: var(--ink-2); font-
     var hasPipe = a.pipeline.loaded;
     var rows = shown.map(function (p) {
       var st = I_STATUS[p.status] || ['', ''];
-      return '<tr><td class="name"><div class="mono">' + esc(p.part) + '</div><div class="faint">' + esc([p.family, p.pl].filter(Boolean).join(' · ')) + '</div></td>' +
+      return '<tr><td class="part"><div class="mono">' + esc(p.part) + '</div><div class="faint">' + esc([p.family, p.pl].filter(Boolean).join(' · ')) + '</div></td>' +
         '<td><span class="st ' + st[1] + '">' + st[0] + '</span></td><td class="num">' + int(p.onHand) + '</td><td class="num">' + (p.backlog ? int(p.backlog) : '—') +
-        (p.oldestDays != null ? '<div class="faint">' + p.oldestDays + 'd</div>' : '') + '</td><td class="num' + (p.free < 0 ? ' down' : '') + '">' + int(p.free) +
+        (p.oldestDays != null ? '<div class="faint">' + p.oldestDays + 'd</div>' : '') + '</td>' + (I.hasDsr ? '<td class="num">' + (p.incoming ? int(p.incoming) : '—') + '</td>' : '') +
+        '<td class="num' + (p.free < 0 ? ' down' : '') + '">' + int(p.free) +
         '</td><td class="num">' + int(p.u13) + '</td><td class="num">' + int(p.u26) + '</td><td class="num">' + (p.cover == null ? '—' : p.cover > 99 ? '99+' : p.cover.toFixed(1)) +
         '</td>' + (hasPipe ? '<td class="num">' + (p.pipeQty ? int(p.pipeQty) : '—') + '</td>' : '') + '<td class="num">' + (p.value ? usd(p.value) : '—') +
         '</td><td class="adv">' + p.advice.map(esc).join(' ') + '</td></tr>';
@@ -802,7 +996,7 @@ details.how ul { margin: 8px 0 0; padding-left: 20px; color: var(--ink-2); font-
       }).join('') + '</div></div>' +
       (actions.length ? '<div><h3>Suggested actions</h3><ol class="highlights">' + actions.map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ol></div>' : '') +
       chips +
-      '<div class="tablebox wide"><table><thead><tr><th>Part</th><th>Status</th><th class="num">On hand</th><th class="num">Backlog</th><th class="num">Free</th>' +
+      '<div class="tablebox wide"><table><thead><tr><th>Part</th><th>Status</th><th class="num">On hand</th><th class="num">Backlog</th>' + (I.hasDsr ? '<th class="num">On Zebra order</th>' : '') + '<th class="num">Free</th>' +
       '<th class="num">Sold 13w</th><th class="num">Sold 26w</th><th class="num">Wks cover</th>' + (hasPipe ? '<th class="num">Pipeline</th>' : '') +
       '<th class="num">Value</th><th>Suggestion</th></tr></thead><tbody>' + (rows || '<tr><td colspan="11" class="faint">Nothing with this status</td></tr>') + '</tbody></table></div>' +
       (list.length > 30 ? '<button class="btn more" data-toggle="invAll">' + (S.f.invAll ? 'Show first 30' : 'Show all ' + list.length) + '</button>' : '');
@@ -821,7 +1015,7 @@ details.how ul { margin: 8px 0 0; padding-left: 20px; color: var(--ink-2); font-
     Object.keys(CH).forEach(function (id) {
       var el = document.getElementById(id);
       if (!el) { delete CH[id]; return; }
-      (CH[id].type === 'lines' ? lines : columns)(el, CH[id]);
+      ({ lines: lines, waterfall: waterfall }[CH[id].type] || columns)(el, CH[id]);
     });
   }
   function axis(W, H, m, max) {
@@ -887,6 +1081,34 @@ details.how ul { margin: 8px 0 0; padding-left: 20px; color: var(--ink-2); font-
     el.innerHTML = '<svg width="' + W + '" height="' + H + '" role="img" aria-label="Cumulative POS by fiscal week">' + svg + '</svg>';
     o._geo = { X: X, Y: Y, m: m, W: W, n: n };
   }
+  function waterfall(el, o) {
+    var W = Math.max(280, el.clientWidth), H = o.h || 240, m = { t: 22, r: 6, b: 34, l: 54 };
+    var run = 0, bars = o.steps.map(function (s) {
+      var from = s.total ? 0 : run, to = s.total ? s.v : run + s.v;
+      run = to;
+      return { s: s, lo: Math.min(from, to), hi: Math.max(from, to) };
+    });
+    var max = niceMax(Math.max.apply(null, bars.map(function (b) { return b.hi; })));
+    var ph = H - m.t - m.b, Y = function (v) { return H - m.b - ph * v / max; };
+    var band = (W - m.l - m.r) / bars.length, bw = Math.min(56, band * .6), svg = axis(W, H, m, max);
+    bars.forEach(function (b, i) {
+      var x = m.l + band * i + (band - bw) / 2, y = Y(b.hi), h = Math.max(1, Y(b.lo) - Y(b.hi));
+      var col = b.s.total ? '--total' : b.s.v < 0 ? '--neg' : '--pos';
+      var val = (b.s.total ? '' : b.s.v > 0 ? '+' : '') + usdK(b.s.v);
+      svg += '<rect class="hit" x="' + (x - 2) + '" y="' + m.t + '" width="' + (bw + 4) + '" height="' + ph + '" data-tip="' + esc(b.s.label + ': ' + usd(b.s.v)) + '"/>' +
+        '<rect class="mk" pointer-events="none" x="' + x + '" y="' + y + '" width="' + bw + '" height="' + h + '" rx="3" fill="var(' + col + ')"/>' +
+        '<text class="lab" x="' + (x + bw / 2) + '" y="' + (y - 6) + '" text-anchor="middle">' + esc(val) + '</text>';
+      var words = b.s.label.split(' '), l1 = [], l2 = [];
+      words.forEach(function (w) { ((l1.join(' ') + ' ' + w).length <= Math.max(8, band / 6.5) && !l2.length ? l1 : l2).push(w); });
+      svg += '<text x="' + (x + bw / 2) + '" y="' + (H - m.b + 14) + '" text-anchor="middle">' + esc(l1.join(' ')) + '</text>' +
+        (l2.length ? '<text x="' + (x + bw / 2) + '" y="' + (H - m.b + 27) + '" text-anchor="middle">' + esc(l2.join(' ')) + '</text>' : '');
+      if (i < bars.length - 1) {
+        var ny = Y(b.s.total ? b.s.v : (b.s.v < 0 ? b.lo : b.hi));
+        svg += '<line class="gridl" x1="' + (x + bw) + '" x2="' + (x + band) + '" y1="' + ny + '" y2="' + ny + '" stroke-dasharray="0"/>';
+      }
+    });
+    el.innerHTML = '<svg width="' + W + '" height="' + H + '" role="img" aria-label="Bridge">' + svg + '</svg>';
+  }
   function crosshair(e, rect) {
     var id = rect.dataset.chart, o = CH[id], g = o && o._geo, tip = $('#tip');
     if (!g) return;
@@ -925,11 +1147,6 @@ details.how ul { margin: 8px 0 0; padding-left: 20px; color: var(--ink-2); font-
     if (t.id === 'fileInput') { handleFiles(t.files); t.value = ''; return; }
     if (t.id === 'scope') { S.scope = t.value; LS.set('vst.scope', S.scope); recompute(); return; }
     if (t.id === 'fForecast') { S.f.forecast = t.checked; saveF(); recompute(); return; }
-    if (t.id === 'fTarget') {
-      var k = S.scope + '|' + S.a.qtd.fq, v = Math.max(0, +t.value || 0);
-      if (v) S.targets[k] = v; else delete S.targets[k];
-      LS.set('vst.targets', S.targets); renderHighlights(); renderQtd(); drawCharts();
-    }
   });
   document.addEventListener('click', function (e) {
     var t = e.target.closest && e.target.closest('button');
@@ -939,6 +1156,17 @@ details.how ul { margin: 8px 0 0; padding-left: 20px; color: var(--ink-2); font-
     else if (d.pstatus != null) { S.f.partnerStatus = d.pstatus; saveF(); renderPartners(); }
     else if (d.istatus != null) { S.f.invStatus = d.istatus; saveF(); renderInventory(); }
     else if (d.heat) { S.f.heatYear = +d.heat; saveF(); renderPartners(); }
+    else if (d.bbase) { S.bridgeBase = +d.bbase; LS.set('vst.bridgeBase', S.bridgeBase); renderYears(); drawCharts(); }
+    else if (d.bdim) { S.bridgeDim = d.bdim; LS.set('vst.bridgeDim', S.bridgeDim); renderYears(); drawCharts(); }
+    else if (t.id === 'planSave') {
+      var fq = S.a.curFq, v = {};
+      document.querySelectorAll('[data-plan]').forEach(function (inp) { if (inp.value !== '') v[inp.dataset.plan] = +inp.value; });
+      S.plan[fq] = S.plan[fq] || {}; S.plan[fq][S.scope] = v;
+      LS.set('vst.plan', S.plan); recompute(); toast('Plan saved for ' + scopeName() + ' ' + fq);
+    } else if (t.id === 'planClear') {
+      if (S.plan[S.a.curFq]) delete S.plan[S.a.curFq][S.scope];
+      LS.set('vst.plan', S.plan); recompute(); toast('Back to the loaded plan');
+    }
     else if (d.toggle) { S.f[d.toggle] = !S.f[d.toggle]; saveF(); render(); }
   });
   document.addEventListener('mousemove', function (e) {

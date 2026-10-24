@@ -33,6 +33,7 @@
     'Submitting Account Number', 'Submitting Account Name', 'Submitting Country', 'Client Account Number',
     'Client Translated Name', 'POS Client Name - Submitted', 'End User Translated Name', 'NVL End User',
     'POS Quantity - Submitted', 'POS Extended Cost (Net) (USD @ Planned Rate)', 'SIP After rabe Amount',
+    'POS Extended Cost Gross (Gbl Currency - USD) @ Plan Rate',
     'Custom Product-Line', 'Custom Sub Product Line', 'Business Division_cc', 'PC type', 'Route To Market',
     'Zebra Part Number', 'Product Family', 'Product Line', 'Sell out rebate%', 'Country'
   ];
@@ -126,6 +127,7 @@
         family: str(o['Product Family']),
         qty: num(pick(o, POS_QTY)),
         net: num(net), derived: derived,
+        gross: num(pick(o, ['POS Extended Cost Gross (Gbl Currency - USD) @ Plan Rate'])) || num(net),
         pl: str(pick(o, ['Custom Product-Line', 'Product Line-6'])) || str(o['Product Line']) || 'Other',
         spl: str(pick(o, ['Custom Sub Product Line', 'Product Line-6-1'])) || 'Other',
         division: str(pick(o, ['Business Division_cc', 'BU'])),
@@ -162,7 +164,29 @@
   }
 
   // ------------------------------------------------------------ quarters
-  function fqOf(d) { return d.getUTCFullYear() + ' Q' + (Math.floor(d.getUTCMonth() / 3) + 1); }
+  /* Zebra fiscal calendar, inferred from the POS week / invoice date pairs: the
+   * year starts on the Sunday nearest 1 January, quarters are 13 weeks and Q4
+   * takes week 53 in a 53-week year. 2026 Q4 = 4 Oct 2026 – 2 Jan 2027. */
+  var DAY = 864e5;
+  function fyStart(y) {
+    var d = Date.UTC(y, 0, 1), wd = new Date(d).getUTCDay();
+    return d + (wd <= 3 ? -wd : 7 - wd) * DAY;
+  }
+  function fiscal(d) {
+    // +12h: export dates without a zone parse as local midnight, which is the
+    // previous UTC day east of Greenwich.
+    var t = d.getTime() + 12 * 36e5, y = new Date(t).getUTCFullYear() + 1;
+    while (t < fyStart(y)) y--;
+    var week = Math.floor((t - fyStart(y)) / (7 * DAY)) + 1;
+    return { year: y, week: week, q: Math.min(4, Math.ceil(week / 13)) };
+  }
+  function fqOf(d) { var f = fiscal(d); return f.year + ' Q' + f.q; }
+  // [start, end) of a fiscal quarter, as UTC timestamps
+  function qRange(fq) {
+    var m = fq.match(/(\d{4}) Q(\d)/), y = +m[1], q = +m[2], start = fyStart(y) + (q - 1) * 91 * DAY;
+    return { start: start, end: q === 4 ? fyStart(y + 1) : start + 91 * DAY };
+  }
+  function inQ(d, r) { if (!d) return false; var t = d.getTime() + 12 * 36e5; return t >= r.start && t < r.end; }
   function addQ(fq, n) {
     var m = fq.match(/(\d{4}) Q(\d)/), i = (+m[1]) * 4 + (+m[2] - 1) + n;
     return Math.floor(i / 4) + ' Q' + (i % 4 + 1);
@@ -170,7 +194,8 @@
   function qStartWeek(q) { return (q - 1) * 13 + 1; }
 
   // --------------------------------------------------------------- review
-  /* opts: { today: Date, scope: distributor key ('vstecs', 'all', …), excludeForecast: drop -F / -R opps } */
+  /* opts: { today: Date, scope: distributor key ('vstecs', 'all', …), excludeForecast: drop -F / -R opps,
+   *         targets: { '2026 Q4': { vstecs: { sellIn, sellOutNet, sellOutGross, stretch, startInv, startDoi, endInv, endDoi } } } } */
   function review(tables, opts) {
     opts = opts || {};
     var today = opts.today || new Date(), scope = opts.scope || 'vstecs';
@@ -189,20 +214,35 @@
     var years = Object.keys(groupBy(all, function (r) { return r.year; })).map(Number).sort();
     if (years.indexOf(cy) < 0 && years.length) { cy = years[years.length - 1]; }
 
-    var ctx = { rows: rows, all: all, cy: cy, cq: cq, lastWeek: lastWeek, years: years, scope: scope };
+    // Order check matching: which pipeline lines are already in the DSR, and which
+    // VST backlog lines Zebra still has to ship.
+    var match = E.analyse(ds, { today: today });
+    var lineMatch = {};
+    match.lines.forEach(function (r) { lineMatch[r.line.idx] = r; });
+
+    var ctx = { rows: rows, all: all, cy: cy, cq: cq, lastWeek: lastWeek, years: years, scope: scope,
+      ds: ds, match: match, lineMatch: lineMatch, inScope: inScope, curFq: curFq, nextFq: nextFq, today: today };
+    var pipeline = pipelineView(ds, curFq, nextFq, inScope, opts.excludeForecast, lineMatch);
+    var qtd = qtdView(ctx);
+    var inventory = inventoryView(ctx, ds, curFq, nextFq, inScope);
+    var sellIn = sellInView(ctx, pipeline);
     return {
       today: today, scope: scope, curFq: curFq, nextFq: nextFq, cy: cy, cq: cq,
       asOf: { posWeek: lastWeek, posDate: lastDate, pos: pos.sources, inventory: E.iso(maxDate(ds.inventory, 'asOf')),
         backlog: E.iso(maxDate(ds.backlog, 'asOf')) || E.iso(maxDate(ds.backlog, 'orderDate')),
+        dsr: E.iso(maxDate(ds.dsr, 'booked')), dsrFiles: ds.sources.dsr || [],
         pipeline: ds.sources.pipeline || [], inventoryFiles: ds.sources.inventory || [], backlogFiles: ds.sources.backlog || [] },
       scopes: scopeList(all, ds),
-      pipeline: pipelineView(ds, curFq, nextFq, inScope, opts.excludeForecast),
-      qtd: qtdView(ctx),
+      pipeline: pipeline,
+      qtd: qtd,
+      sellIn: sellIn,
+      plan: planView(ctx, (opts.targets || {})[curFq], qtd, sellIn, inventory),
       years: yearsView(ctx),
+      bridges: years.filter(function (y) { return y < cy; }).map(function (y) { return bridgeView(ctx, y); }),
       productLines: plView(ctx),
       partners: partnerView(ctx, ds, curFq, nextFq, inScope),
-      inventory: inventoryView(ctx, ds, curFq, nextFq, inScope),
-      counts: { pos: all.length, pipeline: ds.pipeline.length, inventory: ds.inventory.length, backlog: ds.backlog.length }
+      inventory: inventory,
+      counts: { pos: all.length, pipeline: ds.pipeline.length, inventory: ds.inventory.length, backlog: ds.backlog.length, dsr: ds.dsr.length }
     };
   }
 
@@ -227,17 +267,26 @@
   var OPEN_STAGES = ['Closed - Won', 'Secure', 'Validate', 'Qualify', 'Identify'];
   var FORECAST_NAME = /-(F|R)\d*\s*$/i;
 
-  function pipelineView(ds, curFq, nextFq, inScope, excludeForecast) {
+  function pipelineView(ds, curFq, nextFq, inScope, excludeForecast, lineMatch) {
     var lines = ds.pipeline.map(function (l) {
+      // Split the amount by what the order check found: already in the DSR (ordered from
+      // Zebra), coverable from VAD stock, or still to be ordered.
+      var m = lineMatch[l.idx], need = l.qty || 1, q = m ? m.q : null;
+      var inDsr = q ? Math.min(need, q.opp + q.eu + q.stock + q.inc) : 0, fromStock = q ? Math.min(need - inDsr, q.inv) : 0;
       return Object.assign({}, l, { q: l.shipDate ? fqOf(l.shipDate) : l.fq.replace(/\s+/g, ' '),
-        forecast: FORECAST_NAME.test(l.oppName) });
+        forecast: FORECAST_NAME.test(l.oppName), status: m ? m.status : '',
+        ordered: l.amount * inDsr / need, fromStock: l.amount * fromStock / need,
+        toOrder: l.amount * Math.max(0, need - inDsr - fromStock) / need });
     }).filter(function (l) {
       return OPEN_STAGES.indexOf(l.stage) >= 0 && inScope(distKey(l.distributor)) && (l.q === curFq || l.q === nextFq) &&
         !(excludeForecast && l.forecast);
     });
     var stages = OPEN_STAGES.map(function (s) {
       var ls = lines.filter(function (l) { return l.stage === s; });
-      return { stage: s, cur: sum(ls.filter(isQ(curFq)), amt), next: sum(ls.filter(isQ(nextFq)), amt),
+      var c = ls.filter(isQ(curFq));
+      return { stage: s, cur: sum(c, amt), next: sum(ls.filter(isQ(nextFq)), amt),
+        curOrdered: sum(c, function (l) { return l.ordered; }), curStock: sum(c, function (l) { return l.fromStock; }),
+        curToOrder: sum(c, function (l) { return l.toOrder; }),
         opps: Object.keys(groupBy(ls, function (l) { return l.oppNo; })).length };
     });
     function isQ(q) { return function (l) { return l.q === q; }; }
@@ -248,6 +297,7 @@
       return { oppNo: k, name: l0.oppName, stage: l0.stage, endUser: l0.endUser, partner: l0.partner,
         distributor: l0.distributor, owner: l0.owner, forecast: l0.forecast,
         cur: sum(ls.filter(isQ(curFq)), amt), next: sum(ls.filter(isQ(nextFq)), amt),
+        ordered: sum(ls, function (l) { return l.ordered; }), fromStock: sum(ls, function (l) { return l.fromStock; }),
         lines: ls.length, products: ls.map(function (l) { return l.product; }) };
     }).sort(function (a, b) { return (b.cur + b.next) - (a.cur + a.next); });
     var byPl = groupBy(lines, function (l) { return l.productLine || 'Other'; });
@@ -278,15 +328,20 @@
     var ly2 = c.rows.filter(inQ(c.cy - 2, end));
     var hkCur = sum(c.all.filter(inQ(c.cy)), net);
     var weeks = [];
-    var lastQWeek = Math.max(start + 12, lyFull.reduce(function (m, r) { return Math.max(m, r.week); }, 0));
+    var qr = qRange(c.cy + ' Q' + c.cq), qWeeks = Math.round((qr.end - qr.start) / (7 * DAY));
+    var lastQWeek = Math.max(start + qWeeks - 1, lyFull.reduce(function (m, r) { return Math.max(m, r.week); }, 0));
+    // Weekly run rate over the latest 13 POS weeks in scope (steadier than the first weeks of a quarter).
+    var latest = c.rows.reduce(function (m, r) { return Math.max(m, r.wk); }, 0);
+    var last13 = c.rows.filter(function (r) { return latest - r.wk < 13; });
     for (var w = start; w <= lastQWeek; w++) {
       weeks.push({ week: w, cur: w <= end ? sum(cur.filter(wk(w)), net) : null, ly: sum(lyFull.filter(wk(w)), net) });
     }
     function wk(w) { return function (r) { return r.week === w; }; }
     return {
-      fq: c.cy + ' Q' + c.cq, weeksIn: Math.max(0, end - start + 1), weeksTotal: lastQWeek - start + 1,
-      fromWeek: start, toWeek: end,
-      net: sum(cur, net), qty: sum(cur, qty), ly: sum(ly, net), ly2: sum(ly2, net), lyFull: sum(lyFull, net),
+      fq: c.cy + ' Q' + c.cq, weeksIn: Math.max(0, end - start + 1), weeksTotal: qWeeks,
+      fromWeek: start, toWeek: end, qStart: qr.start, qEnd: qr.end,
+      net: sum(cur, net), gross: sum(cur, function (r) { return r.gross; }), qty: sum(cur, qty),
+      avg13Net: sum(last13, net) / 13, avg13Gross: sum(last13, function (r) { return r.gross; }) / 13, ly: sum(ly, net), ly2: sum(ly2, net), lyFull: sum(lyFull, net),
       hkShare: hkCur ? sum(cur, net) / hkCur : null,
       weeks: weeks,
       byPl: compare(cur, ly, function (r) { return r.pl; }, PL_ORDER),
@@ -427,19 +482,36 @@
   }
 
   // 6. Inventory: stock vs reseller backlog, sell-out run rate and pipeline demand
-  var DAY = 864e5;
   function inventoryView(c, ds, curFq, nextFq, inScope) {
     var parts = {};
     function P(part) {
       return parts[part] || (parts[part] = { part: part, onHand: 0, committed: 0, value: 0, backlog: 0, backlogLines: 0,
-        oldest: null, u13: 0, u26: 0, u13run: 0, n13weeks: {}, pipeQty: 0, pipeOpps: {}, family: '', pl: '' });
+        oldest: null, u13: 0, u26: 0, u13run: 0, n13weeks: {}, pipeQty: 0, pipeOpps: {}, family: '', pl: '',
+        hold: 0, incoming: 0, incomingSsd: null, notInDsr: 0, afterDsr: 0 });
     }
     var inv = ds.inventory.filter(function (r) { return inScope(distKey(r.dist)); });
     var bl = ds.backlog.filter(function (r) { return inScope(distKey(r.dist)); });
     inv.forEach(function (r) { var p = P(r.part); p.onHand += r.onHand; p.committed += r.committed; p.value += r.onHand * r.unit; });
+    // Backlog that Zebra still has to ship to the VAD (open in the DSR) will be filled
+    // from that order; the rest has to come out of stock on hand.
+    var zeb = {};
+    c.match.backlog.forEach(function (r) { zeb[r.b.idx + '|' + r.b.resellerOrder + '|' + r.b.part] = r; });
+    var hasDsr = ds.dsr.length > 0, dsrAsOf = maxDate(ds.dsr, 'booked');
     bl.forEach(function (b) {
-      var p = P(b.part); p.backlog += b.qty; p.backlogLines++;
+      var p = P(b.part), z = zeb[b.idx + '|' + b.resellerOrder + '|' + b.part];
+      p.backlog += b.qty; p.backlogLines++;
       if (b.orderDate && (!p.oldest || b.orderDate < p.oldest)) p.oldest = b.orderDate;
+      if (hasDsr && z && z.zebra === 'zebra-open') {
+        p.incoming += b.qty;
+        z.dsrLines.forEach(function (d) { if (d.status === 'Open Order' && d.ssd && (!p.incomingSsd || d.ssd < p.incomingSsd)) p.incomingSsd = d.ssd; });
+      } else {
+        p.hold += b.qty;
+        if (hasDsr && (!z || z.zebra === 'not-in-dsr')) {
+          // Reseller orders taken after the DSR was pulled cannot be in it yet.
+          if (b.orderDate && dsrAsOf && b.orderDate.getTime() >= dsrAsOf.getTime() - DAY) p.afterDsr += b.qty;
+          else p.notInDsr += b.qty;
+        }
+      }
     });
     // Sell-out run rate: the latest 13 and 26 fiscal weeks of POS in scope.
     var latest = c.rows.reduce(function (m, r) { return Math.max(m, r.wk); }, 0);
@@ -467,7 +539,8 @@
     var list = Object.keys(parts).map(function (k) {
       var p = parts[k];
       p.unit = p.onHand ? p.value / p.onHand : 0;
-      p.free = p.onHand - p.committed - p.backlog;
+      p.free = p.onHand - p.committed - p.hold;
+      p.hasDsr = hasDsr;
       p.weekly = p.u13 / 13;
       p.cover = p.weekly > 0 ? Math.max(0, p.free) / p.weekly : null;
       p.oldestDays = p.oldest ? Math.round((asOf - p.oldest) / DAY) : null;
@@ -487,6 +560,7 @@
       list: list, totalValue: totalValue, skus: stocked.length,
       units: sum(stocked, function (p) { return p.onHand; }),
       backlogUnits: sum(bl, function (b) { return b.qty; }), backlogLines: bl.length,
+      incomingUnits: sum(list, function (p) { return p.incoming; }), hasDsr: hasDsr, dsrAsOf: maxDate(ds.dsr, 'booked'),
       backlogOrders: Object.keys(groupBy(bl, function (b) { return b.resellerOrder; })).length,
       counts: Object.keys(by).reduce(function (o, k) { o[k] = by[k].length; return o; }, {}),
       slowValue: val('no-sales') + val('slow') + val('overstock'),
@@ -494,19 +568,27 @@
     };
   }
 
-  var STATUS_RANK = { short: 0, 'stock-gap': 1, 'no-sales': 2, overstock: 3, slow: 4, low: 5, 'pipeline-gap': 6, healthy: 7, reserved: 8 };
+  var STATUS_RANK = { short: 0, 'stock-gap': 1, 'no-sales': 2, overstock: 3, slow: 4, low: 5, 'pipeline-gap': 6, healthy: 7,
+    incoming: 8, reserved: 9 };
   function classify(p) {
-    var r = [];
+    var r = [], ssd = p.incomingSsd ? ' (Zebra SSD ' + E.iso(p.incomingSsd) + ')' : '';
     if (p.free < 0) {
       p.status = 'short';
-      r.push('Reseller backlog is ' + (-p.free) + ' more than stock. Confirm the Zebra order and ETA cover it; expedite or offer an alternative.');
+      r.push(p.hasDsr
+        ? 'Reseller backlog not on a Zebra open order is ' + (-p.free) + ' more than stock' +
+          (p.notInDsr ? '; ' + p.notInDsr + ' not in the DSR at all. Check VST has ordered them.' :
+            p.afterDsr ? '; ' + p.afterDsr + ' ordered by the reseller after the DSR date. Recheck with the next DSR.' : '. Ship what is here; order the rest.')
+        : 'Reseller backlog is ' + (-p.free) + ' more than stock. Confirm the Zebra order and ETA cover it; expedite or offer an alternative.');
+    } else if (p.free === 0 && p.hold > 0) {
+      p.status = 'reserved';
+      r.push('All stock is held for reseller backlog' + (p.oldestDays > 30 ? '; oldest order ' + p.oldestDays + ' days. Ship it.' : '.'));
+    } else if (p.incoming > 0 && p.free === 0) {
+      p.status = 'incoming';
+      r.push('Reseller backlog of ' + p.incoming + ' is on Zebra open orders' + ssd + '.');
     } else if (!p.onHand && p.u13run >= 10 && p.weeksSold >= 3) {
       p.status = 'stock-gap';
       r.push('Sold ' + p.u13run + ' run-rate units in ' + p.weeksSold + ' of the last 13 weeks, none in stock. Consider stocking ~' +
         Math.ceil(p.u13run / 13 * 6) + ' (6 weeks).');
-    } else if (p.free === 0 && p.backlog > 0) {
-      p.status = 'reserved';
-      r.push('All stock is held for reseller backlog' + (p.oldestDays > 30 ? '; oldest order ' + p.oldestDays + ' days. Ship it.' : '.'));
     } else if (p.free > 0 && p.u26 === 0) {
       p.status = 'no-sales';
       r.push('No sell-out in 26 weeks. Push to partners (bundle or promo), match to pipeline, or ask Zebra about stock rotation.');
@@ -523,6 +605,7 @@
       p.status = 'healthy';
       r.push(Math.round(p.cover) + ' weeks of cover.');
     }
+    if (p.incoming > 0 && p.status !== 'incoming') r.push(p.incoming + ' more of the reseller backlog is on Zebra open orders' + ssd + '.');
     if (p.pipeQty > 0) {
       var free = Math.max(0, p.free);
       if (p.pipeQty > free) {
@@ -533,15 +616,127 @@
         r.push('Free stock covers pipeline (' + p.pipeQty + '). Steer the open opps to VAD stock.');
       }
     }
-    if (p.backlog > 0 && p.free >= 0 && p.oldestDays > 45 && p.status !== 'reserved') {
+    if (p.hold > 0 && p.free >= 0 && p.oldestDays > 45 && p.status !== 'reserved') {
       r.push('Oldest reseller order is ' + p.oldestDays + ' days old.');
     }
     p.advice = r;
   }
 
+  // 7. Sell-in: Zebra shipments to the VAD this quarter (DSR), its open orders, and pipeline still to order
+  var SELLIN_STAGES = ['Closed - Won', 'Secure', 'Validate'];
+  function sellInView(c, pipeline) {
+    var r = qRange(c.curFq), noon = 12 * 36e5;
+    var lines = c.ds.dsr.filter(function (d) { return c.inScope(distKey(d.account)); });
+    var shipped = lines.filter(function (d) { return d.status === 'Shipped' && inQ(d.invDate || d.ssd, r); });
+    var open = lines.filter(function (d) { return d.status !== 'Shipped'; });
+    // Past-due and undated open lines count for this quarter.
+    var openQ = open.filter(function (d) { return !d.ssd || d.ssd.getTime() + noon < r.end; });
+    var openLater = open.filter(function (d) { return d.ssd && d.ssd.getTime() + noon >= r.end; });
+    var amt = function (d) { return d.amount; };
+    var lyR = qRange((c.cy - 1) + ' Q' + c.cq);
+    var lyShipped = lines.filter(function (d) { return d.status === 'Shipped' && inQ(d.invDate || d.ssd, lyR); });
+    var cur = pipeline.lines.filter(function (l) { return l.q === c.curFq && SELLIN_STAGES.indexOf(l.stage) >= 0; });
+    var toOrder = function (s) { return sum(cur.filter(function (l) { return l.stage === s; }), function (l) { return l.toOrder; }); };
+    var orders = groupBy(openQ, function (d) { return d.orderNo; });
+    var bySsd = {};
+    openQ.forEach(function (d) {
+      var k = d.ssd ? E.iso(d.ssd).slice(0, 7) : 'no date';
+      bySsd[k] = (bySsd[k] || 0) + d.amount;
+    });
+    var dsrAsOf = maxDate(c.ds.dsr, 'booked');
+    return {
+      loaded: c.ds.dsr.length > 0, asOf: dsrAsOf, fq: c.curFq, qStart: r.start, qEnd: r.end,
+      shipped: sum(shipped, amt), open: sum(openQ, amt), openLater: sum(openLater, amt),
+      inHand: sum(shipped, amt) + sum(openQ, amt), lyShipped: lyShipped.length ? sum(lyShipped, amt) : null,
+      pastDue: sum(openQ.filter(function (d) { return d.ssd && dsrAsOf && d.ssd < dsrAsOf; }), amt),
+      upside: { won: toOrder('Closed - Won'), secure: toOrder('Secure'), validate: toOrder('Validate') },
+      bySsd: Object.keys(bySsd).sort().map(function (k) { return { month: k, amount: bySsd[k] }; }),
+      byPl: compareAmt(shipped, openQ),
+      orders: Object.keys(orders).map(function (k) {
+        var ls = orders[k], d0 = ls[0];
+        return { orderNo: k, po: d0.po, booked: d0.booked, ssd: ls.reduce(function (m, d) { return d.ssd && (!m || d.ssd < m) ? d.ssd : m; }, null),
+          endUser: d0.endUser, reseller: d0.reseller, pc: d0.pc, amount: sum(ls, amt), lines: ls.length };
+      }).sort(function (a, b) { return b.amount - a.amount; })
+    };
+  }
+  function compareAmt(shipped, open) {
+    var m = {};
+    shipped.forEach(function (d) { var k = d.productLine || 'Other'; (m[k] = m[k] || { key: k, shipped: 0, open: 0 }).shipped += d.amount; });
+    open.forEach(function (d) { var k = d.productLine || 'Other'; (m[k] = m[k] || { key: k, shipped: 0, open: 0 }).open += d.amount; });
+    return Object.keys(m).map(function (k) { return m[k]; }).sort(function (a, b) { return (b.shipped + b.open) - (a.shipped + a.open); });
+  }
+
+  // 8. Quarter plan scorecard: sell-out and sell-in against the agreed plan, inventory and DOI.
+  // DOI = inventory ÷ (quarter gross sell-out ÷ days in the quarter), the definition the plan's figures satisfy.
+  function planView(c, targets, qtd, sellIn, inv) {
+    var t = targets && targets[c.scope];
+    if (!t) return { fq: c.curFq, has: false };
+    var days = qtd.weeksTotal * 7, left = Math.max(0, qtd.weeksTotal - qtd.weeksIn);
+    var projNet = qtd.net + qtd.avg13Net * left, projGross = qtd.gross + qtd.avg13Gross * left;
+    var sellInFc = sellIn.loaded ? sellIn.inHand : null;
+    var projEnd = t.startInv != null && sellInFc != null ? t.startInv + sellInFc - projGross : null;
+    var dailyGross = qtd.avg13Gross / 7;
+    return {
+      fq: c.curFq, has: true, t: t, weeksIn: qtd.weeksIn, weeksTotal: qtd.weeksTotal, weeksLeft: left,
+      out: {
+        net: qtd.net, gross: qtd.gross, projNet: projNet, projGross: projGross, runNet: qtd.avg13Net,
+        needNet: left ? Math.max(0, t.sellOutNet - qtd.net) / left : null,
+        needStretch: left && t.stretch ? Math.max(0, t.stretch - qtd.net) / left : null
+      },
+      inn: sellIn.loaded ? {
+        inHand: sellIn.inHand, shipped: sellIn.shipped, open: sellIn.open, gap: t.sellIn - sellIn.inHand,
+        withSecure: sellIn.inHand + sellIn.upside.won + sellIn.upside.secure,
+        withValidate: sellIn.inHand + sellIn.upside.won + sellIn.upside.secure + sellIn.upside.validate
+      } : null,
+      stock: {
+        now: inv.loaded ? inv.totalValue : null, nowAsOf: inv.asOf,
+        doiNow: inv.loaded && dailyGross ? inv.totalValue / dailyGross : null,
+        projEnd: projEnd, projDoi: projEnd != null && projGross ? projEnd / (projGross / days) : null,
+        planEndDoi: t.endInv && t.sellOutGross ? t.endInv / (t.sellOutGross / days) : null
+      }
+    };
+  }
+
+  // 9. Bridge: what moved YTD (same fiscal weeks) between a base year and this year.
+  function bridgeView(c, base) {
+    var ytd = function (r) { return r.week <= c.lastWeek; };
+    var cur = c.rows.filter(function (r) { return r.year === c.cy && ytd(r); });
+    var old = c.rows.filter(function (r) { return r.year === base && ytd(r); });
+    function dim(keyFn, nameFn) {
+      var m = {};
+      var add = function (r, k2) {
+        var k = keyFn(r), o = m[k] || (m[k] = { key: k, name: nameFn(r), base: 0, cur: 0 });
+        o[k2] += r.net;
+        if (k2 === 'cur') o.name = nameFn(r);
+      };
+      old.forEach(function (r) { add(r, 'base'); });
+      cur.forEach(function (r) { add(r, 'cur'); });
+      var list = Object.keys(m).map(function (k) { var o = m[k]; o.delta = o.cur - o.base; return o; });
+      var cat = { lost: 0, down: 0, up: 0, gained: 0, nLost: 0, nDown: 0, nUp: 0, nGained: 0 };
+      list.forEach(function (o) {
+        var k = o.base > 0 && o.cur <= 0 ? 'lost' : o.base <= 0 && o.cur > 0 ? 'gained' : o.delta < 0 ? 'down' : 'up';
+        o.kind = k;
+        cat[k] += o.delta;
+        cat['n' + k.charAt(0).toUpperCase() + k.slice(1)]++;
+      });
+      return {
+        cat: cat, n: list.length,
+        losers: list.filter(function (o) { return o.delta < 0; }).sort(function (a, b) { return a.delta - b.delta; }).slice(0, 10),
+        gainers: list.filter(function (o) { return o.delta > 0; }).sort(function (a, b) { return b.delta - a.delta; }).slice(0, 10)
+      };
+    }
+    return {
+      base: base, cy: c.cy, lastWeek: c.lastWeek, baseTotal: sum(old, net), curTotal: sum(cur, net),
+      partners: dim(function (r) { return r.resellerKey; }, function (r) { return r.reseller; }),
+      endUsers: dim(function (r) { return r.endUser || '~'; }, function (r) { return r.endUser || 'Run-rate / unnamed'; }),
+      productLines: dim(function (r) { return r.pl; }, function (r) { return r.pl; }),
+      families: dim(function (r) { return r.family || r.part; }, function (r) { return r.family || r.part; })
+    };
+  }
+
   var api = {
     isPos: isPos, tableFromGrid: tableFromGrid, pickTable: pickTable, normPos: normPos, buildPos: buildPos,
-    posSlot: posSlot, review: review, fqOf: fqOf, addQ: addQ, PL_ORDER: PL_ORDER, POS_KEEP: POS_KEEP
+    posSlot: posSlot, review: review, fqOf: fqOf, addQ: addQ, fiscal: fiscal, qRange: qRange, PL_ORDER: PL_ORDER, POS_KEEP: POS_KEEP
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.ZReview = api;
