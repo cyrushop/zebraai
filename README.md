@@ -121,3 +121,25 @@ Default events and rates (all editable on the 加價規則 tab):
 ```sh
 node tests/pc-engine.test.js
 ```
+
+### Offline single file
+
+```sh
+python3 -I tools/build_pc_check.py PC-Price-Check.html
+```
+
+`PC-Price-Check.html` has the scripts inlined and loads nothing from the internet: no Google Fonts (system fonts instead) and no SheetJS, since the SFDC PC list is an HTML table the browser reads by itself. To read real `.xlsx` files too, add `--xlsx path/to/xlsx.full.min.js`. The file holds no customer data; the PC list is uploaded in the browser and stays there. Open it from disk, or host it as below.
+
+### Host on Google Cloud (private)
+
+Cloud Storage can serve the file only to signed-in Google accounts that you grant access, with no public bucket and no load balancer:
+
+```sh
+gcloud storage buckets create gs://BUCKET --location=asia-east2 --uniform-bucket-level-access --public-access-prevention
+gcloud storage cp PC-Price-Check.html gs://BUCKET/pc-price-check.html --content-type=text/html
+gcloud storage buckets add-iam-policy-binding gs://BUCKET --member=user:NAME@DOMAIN --role=roles/storage.objectViewer
+```
+
+Open `https://storage.cloud.google.com/BUCKET/pc-price-check.html` while signed in with that account. Use `--member=domain:DOMAIN` for a whole Workspace domain. To publish an update, run the `cp` again.
+
+For a site on its own URL that only your organization can open, serve the file from Cloud Run and turn on Identity-Aware Proxy instead.
