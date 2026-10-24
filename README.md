@@ -143,3 +143,11 @@ gcloud storage buckets add-iam-policy-binding gs://BUCKET --member=user:NAME@DOM
 Open `https://storage.cloud.google.com/BUCKET/pc-price-check.html` while signed in with that account. Use `--member=domain:DOMAIN` for a whole Workspace domain. To publish an update, run the `cp` again.
 
 For a site on its own URL that only your organization can open, serve the file from Cloud Run and turn on Identity-Aware Proxy instead.
+
+### Deploy to Cloud Run
+
+```sh
+GCP_PROJECT=my-project tools/deploy_cloud_run.sh
+```
+
+It builds the offline page, packs it with `deploy/cloudrun/` (nginx on port 8080) and runs `gcloud run deploy --source` in `asia-east2`, open to anyone with the URL. That is safe because the page holds no data: the PC list stays in each browser. Set `GCP_SA_KEY_B64` to a base64-encoded service account key to sign in without `gcloud auth login`. The key is written outside the uploaded folder and deleted afterwards.
