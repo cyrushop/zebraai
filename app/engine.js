@@ -184,6 +184,7 @@
         ssd: date(o['Scheduled Ship Date']),
         invDate: date(o['ERP Invoice Date']),
         part: p,
+        pto: pto,
         productLine: str(o['Product Line']),
         pc: id(o['Price Concession Number']),
         oppNo: str(o['Opportunity Number']),
@@ -529,15 +530,125 @@
       return r;
     });
 
+    var flags = flagCases(ds, active, res, ignored.opps);
+
     return {
       lines: lines,
       byIdx: res,
+      flags: flags,
       stock: stock,
       backlog: backlogRows,
       zebraOpen: zebraOpenView(ds, res, pipeOpps, dsrInBacklog, dsrLeft),
       ignored: { lines: ignored.lines, opps: Object.keys(ignored.opps).length },
       asOf: asOfDates(ds)
     };
+  }
+
+  /* Tagging checks: Zebra orders whose Opportunity / PC tag looks wrong.
+   *   over-ordered   – more ordered on an opp + part than the opp asks for
+   *   wrong-opp      – a line with no (or short) order while the same end user
+   *                    + part is ordered on another opp that is later, closed,
+   *                    over-ordered or does not list the part
+   *   closed-opp     – order tagged to an opp that is only Closed-Lost/Other
+   *   part-not-on-opp – order tagged to an opp that does not list the part
+   * Each flag is attached to the affected pipeline lines (r.flags).
+   */
+  function flagCases(ds, active, res, ignoredOpps) {
+    var dsr = ds.dsr, flags = [];
+    var dsrAsOf = dsr.reduce(function (m, d) { return d.booked && (!m || d.booked > m) ? d.booked : m; }, null);
+    var recent = dsrAsOf ? new Date(dsrAsOf.getTime() - 120 * DAY) : null;
+    var isRecent = function (d) { return d.status === 'Open Order' || !recent || (d.booked && d.booked >= recent); };
+
+    // every opp in the export, any stage
+    var opp = {};
+    ds.pipeline.forEach(function (l) {
+      var o = opp[l.oppNo] || (opp[l.oppNo] = { oppNo: l.oppNo, name: l.oppName, endUser: l.endUser, stages: {}, fq: l.fq, parts: {}, lines: [] });
+      o.stages[l.stage] = 1;
+      if (l.fq && (!o.fq || l.fq < o.fq)) o.fq = l.fq;
+      o.parts[l.product] = (o.parts[l.product] || 0) + l.qty;
+      o.lines.push(l);
+    });
+    var activeOpp = {};
+    active.forEach(function (l) { activeOpp[l.oppNo] = 1; });
+    var closedOnly = function (o) { return Object.keys(o.stages).every(function (st) { return /^Closed - (Lost|Other)/.test(st); }); };
+    var tagged = {};   // opp|part -> dsr lines
+    dsr.forEach(function (d) {
+      if (d.oppNo) (tagged[d.oppNo + '|' + d.part] = tagged[d.oppNo + '|' + d.part] || []).push(d);
+    });
+    var attach = function (f, lines) {
+      f.lines = lines;
+      lines.forEach(function (l) { var r = res[l.idx]; if (r) (r.flags = r.flags || []).push(f); });
+      flags.push(f);
+    };
+    var sumQ = function (ds_) { return ds_.reduce(function (s, d) { return s + d.qty; }, 0); };
+
+    // 1. over-ordered
+    var excess = {};
+    Object.keys(tagged).forEach(function (k) {
+      var o0 = k.split('|'), o = opp[o0[0]], part = o0[1];
+      if (!o || !activeOpp[o.oppNo] || !o.parts[part]) return;
+      var q = sumQ(tagged[k]);
+      if (q > o.parts[part]) {
+        excess[k] = q - o.parts[part];
+        attach({ type: 'over-ordered', oppNo: o.oppNo, oppName: o.name, endUser: o.endUser, part: part, fq: o.fq,
+          ordered: q, oppQty: o.parts[part], excess: excess[k], dsr: tagged[k] },
+          o.lines.filter(function (l) { return l.product === part; }));
+      }
+    });
+
+    // 2. wrong opp: short line, same end user + part ordered on another opp
+    active.forEach(function (l) {
+      var r = res[l.idx];
+      if (!r || r.covered >= r.need) return;
+      var since = l.created ? new Date(l.created.getTime() - 30 * DAY) : null;
+      var byOther = {};
+      dsr.forEach(function (d) {
+        if (d.part !== l.product || !d.oppNo || d.oppNo === l.oppNo) return;
+        if (since && d.booked && d.booked < since) return;
+        var o = opp[d.oppNo];
+        var eu = d.endUser || (o && o.endUser);
+        if (!sameEndUser(eu, l.endUser)) return;
+        (byOther[d.oppNo] = byOther[d.oppNo] || []).push(d);
+      });
+      Object.keys(byOther).forEach(function (on) {
+        var o = opp[on], why = [];
+        if (!o) why.push('opp not in this pipeline export');
+        else {
+          if (ignoredOpps[on]) why.push('opp is a -F / -R opp');
+          else if (closedOnly(o)) why.push('opp is ' + Object.keys(o.stages).join(' / '));
+          if (o.fq && l.fq && o.fq > l.fq) why.push('opp ships later (' + o.fq + ')');
+          if (!o.parts[l.product]) why.push('opp does not list this part');
+          if (excess[on + '|' + l.product]) why.push(excess[on + '|' + l.product] + ' more ordered than that opp needs');
+        }
+        if (!why.length) return;
+        attach({ type: 'wrong-opp', oppNo: l.oppNo, oppName: l.oppName, endUser: l.endUser, part: l.product, fq: l.fq,
+          short: r.need - r.covered, otherOpp: on, otherName: o ? o.name : '', otherFq: o ? o.fq : '', why: why,
+          ordered: sumQ(byOther[on]), dsr: byOther[on] }, [l]);
+      });
+    });
+
+    // 3. order on a closed opp  4. order on an opp that does not list the part
+    var seen = {};
+    dsr.forEach(function (d) {
+      if (!d.oppNo || !isRecent(d)) return;
+      var o = opp[d.oppNo];
+      if (!o || ignoredOpps[d.oppNo]) return;
+      var k, f;
+      if (closedOnly(o)) {
+        k = 'c|' + d.oppNo + '|' + d.part;
+        if (seen[k]) { seen[k].dsr.push(d); seen[k].ordered += d.qty; return; }
+        f = seen[k] = { type: 'closed-opp', oppNo: d.oppNo, oppName: o.name, endUser: o.endUser, part: d.part, fq: o.fq,
+          stage: Object.keys(o.stages).join(' / '), ordered: d.qty, dsr: [d] };
+        attach(f, []);
+      } else if (activeOpp[d.oppNo] && !o.parts[d.part] && d.amount > 0 && (!d.pto || d.pto === d.part)) {
+        k = 'p|' + d.oppNo + '|' + d.part;
+        if (seen[k]) { seen[k].dsr.push(d); seen[k].ordered += d.qty; return; }
+        f = seen[k] = { type: 'part-not-on-opp', oppNo: d.oppNo, oppName: o.name, endUser: o.endUser, part: d.part, fq: o.fq,
+          oppParts: Object.keys(o.parts), ordered: d.qty, dsr: [d] };
+        attach(f, o.lines.filter(function (l) { return res[l.idx] && res[l.idx].status === 'substituted'; }));
+      }
+    });
+    return flags;
   }
 
   function statusOf(r) {

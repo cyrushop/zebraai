@@ -43,6 +43,8 @@ const tables = [
     pipe('Z-9', 'Theta-HK-Runrate-R', 'DS2208', 2, 100, 'Theta'),
     pipe('Z-10', 'Iota-HK-TC22-F2', 'DS2208', 2, 100, 'Iota'),
     pipe('Z-11', 'Kappa-HK-ZT610R', 'ET401', 1, 100, 'Kappa'),
+    pipe('Z-12', 'Lambda Q4', 'MC94', 5, 5000, 'Lambda Airways'),
+    pipe('Z-13', 'Lambda Q1', 'MC94', 3, 3000, 'Lambda Airways', { 'First Ship Fiscal Quarter New': '2027 Q1', 'Schedule Date': '15/02/2027' }),
     pipe('Z-7', 'Substituted', 'TC58-OLD', 2, 2000, 'Eta Ltd')
   ]),
   table('dsr', DSR_H, [
@@ -53,6 +55,7 @@ const tables = [
     dsr('PO-3', 'CRD-MC34', 4, 480, 'Open Order'),
     dsr('PO-7', 'TC58-NEW', 2, 2000, 'Shipped', { 'Opportunity Number': 'Z-7', 'Price Concession Number': 81000007 }),
     dsr('PO-X', 'TC22', 1, 600, 'Shipped', { 'Account Country': 'Taiwan' }),
+    dsr('PO-13', 'MC94', 8, 8000, 'Open Order', { 'Opportunity Number': 'Z-13', 'Price Concession Number': 81000013, 'End User Name': 'Lambda Airways' }),
     dsr('PO-9', 'ET401', 5, 2500, 'Shipped', { 'ERP Invoice Date': '2026-10-20T00:00:00' })
   ]),
   table('inventory', INV_H, [{ 'Distributor Name': 'VSTECS HK', 'Distributor Account Number': '61055936',
@@ -98,4 +101,10 @@ assert.strictEqual(by('Substituted')[0].status, 'substituted');
 assert.ok(E.sameEndUser('A. S. Watson Retail (HK) Limited', 'A.S. Watson'));
 assert.ok(!E.sameEndUser('DHL HK', 'UPS HK'));
 
+const over = a.flags.find(f => f.type === 'over-ordered' && f.oppNo === 'Z-13');
+assert.ok(over && over.excess === 5, 'Z-13 ordered 8 against 3');
+const wrong = a.flags.find(f => f.type === 'wrong-opp' && f.oppNo === 'Z-12');
+assert.ok(wrong && wrong.otherOpp === 'Z-13', 'Q4 opp with no order is pointed at the Q1 opp holding the order');
+assert.ok(wrong.why.some(w => /later/.test(w)) && wrong.why.some(w => /more ordered/.test(w)));
+assert.strictEqual(by('Lambda Q4')[0].flags.length, 1);
 console.log('engine tests passed:', a.lines.length, 'lines');

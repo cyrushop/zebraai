@@ -262,6 +262,19 @@ tfoot td { font-weight: 600; border-bottom: 0; }
     opp: 'Zebra order on this opp/PC', eu: 'Zebra order, same end user', stock: 'VAD stock order (no PC)',
     inv: 'VAD on-hand stock', inc: 'Preload: Zebra order (no PC), not in VAD stock report yet'
   };
+  var FLAG = {
+    'wrong-opp': { label: 'PC may be on the wrong opp', action: 'Check which opp the PC belongs to. Move the PC, or close the duplicate opp.' },
+    'over-ordered': { label: 'Ordered more than the opp', action: 'Raise the opp quantity, or move the extra units to the opp they belong to.' },
+    'part-not-on-opp': { label: 'Ordered part not on the opp', action: 'Add the part to the opp in SFDC, or correct the PC.' },
+    'closed-opp': { label: 'Order on a closed opp', action: 'Reopen the opp, or re-tag the order to the live opp.' }
+  };
+  function flagText(f) {
+    var q = function (n) { return (Math.round(n * 100) / 100).toLocaleString('en-US'); };
+    if (f.type === 'wrong-opp') return q(f.short) + ' still uncovered here, while ' + q(f.ordered) + ' of this part for the same end user is ordered on ' + f.otherName + ' (' + f.otherOpp + '): ' + f.why.join('; ') + '.';
+    if (f.type === 'over-ordered') return q(f.ordered) + ' ordered on this opp, but the opp only has ' + q(f.oppQty) + '. ' + q(f.excess) + ' extra.';
+    if (f.type === 'part-not-on-opp') return q(f.ordered) + ' ordered on this opp, which lists ' + f.oppParts.join(', ') + '.';
+    return q(f.ordered) + ' ordered on an opp that is ' + f.stage + '.';
+  }
   var PIECE_GROUP = { opp: 'ordered', eu: 'claimorder', stock: 'claimorder', inv: 'claimstock', inc: 'claimstock' };
 
   // ------------------------------------------------------------ storage
@@ -495,6 +508,7 @@ tfoot td { font-weight: 600; border-bottom: 0; }
       '<div class="kpi"><div class="label">Pipeline in scope</div><div class="v">' + usdK(tot.amt) + '</div></div>' +
       '<div class="kpi"><div class="label">Found on Zebra orders</div><div class="v">' + Math.round(orderedPct * 100) + '%</div></div>' +
       '<div class="kpi"><div class="label">Indicative claim · ' + claimN + ' lines</div><div class="v">' + usdK(claim) + '</div></div>' +
+      '<div class="kpi"><div class="label">Tagging flags</div><div class="v"><button class="btn small" data-tab="flags" style="font:inherit;font-size:1.3rem;padding:0 10px">' + flagRows().length + '</button></div></div>' +
       '</div></div><div class="bar" role="img" aria-label="Pipeline value by order status">';
     GROUPS.forEach(function (g) {
       var w = tot.amt ? by[g.id].amt / tot.amt * 100 : 0;
@@ -515,6 +529,7 @@ tfoot td { font-weight: 600; border-bottom: 0; }
 
   var TABS = [
     { id: 'pipeline', label: 'Pipeline check' },
+    { id: 'flags', label: 'Tagging flags' },
     { id: 'claim', label: 'Backend claim' },
     { id: 'zebra', label: 'Zebra backlog' },
     { id: 'vst', label: 'VST backlog' },
@@ -525,6 +540,7 @@ tfoot td { font-weight: 600; border-bottom: 0; }
     var counts = {
       pipeline: scopedLines().length,
       claim: claimRows().length,
+      flags: flagRows().length,
       zebra: S.a.zebraOpen.length,
       vst: S.a.backlog.length,
       stock: Object.keys(S.a.stock).filter(function (k) { return S.a.stock[k].onHand > 0; }).length
@@ -561,7 +577,7 @@ tfoot td { font-weight: 600; border-bottom: 0; }
     var f = S.f, h = '';
     if (S.tab === 'help') { $('#filters').innerHTML = ''; return; }
     h += '<input type="search" id="fq" placeholder="Search opp, end user, partner, part, PO…" value="' + esc(f.q) + '">';
-    if (S.tab === 'pipeline' || S.tab === 'claim') {
+    if (S.tab === 'pipeline' || S.tab === 'claim' || S.tab === 'flags') {
       h += sel('ffq', fqOptions(), f.fqScope) + sel('fdist', distOptions(), f.dist);
       h += '<div class="chips" role="group" aria-label="Sales stage">' + ['Closed - Won', 'Secure', 'Validate'].map(function (s) {
         return '<button class="chipbtn" data-stage="' + s + '" aria-pressed="' + (f.stages.indexOf(s) >= 0) + '">' + s.replace('Closed - ', '') + '</button>';
@@ -571,6 +587,7 @@ tfoot td { font-weight: 600; border-bottom: 0; }
       h += sel('fgroup', [['', 'All statuses']].concat(GROUPS.map(function (g) { return [g.id, g.label]; })).concat([['ignored', 'Ignored lines']]), f.group);
       h += sel('fsort', [['opp', 'Sort: opportunity'], ['ship', 'Sort: ship date'], ['amount', 'Sort: value']], f.sort);
     }
+    if (S.tab === 'flags') h += sel('fflag', [['', 'All flag types']].concat(Object.keys(FLAG).map(function (k) { return [k, FLAG[k].label]; })), f.flag || '');
     if (S.tab === 'claim') h += sel('fconf', [['', 'All sources'], ['firm', 'Order-backed only'], ['stock', 'Stock / preload only']], f.claimConf);
     if (S.tab === 'zebra') h += sel('ftie', [['', 'All open lines'], ['opp-in-pipeline', 'Opp in pipeline'], ['opp-not-in-pipeline', 'Opp not in this pipeline'], ['no-pc', 'No PC (stock / preload)'], ['no-pc-free', 'No PC and not matched']], f.tie);
     if (S.tab === 'vst') h += sel('fzebra', [['', 'All backlog lines'], ['zebra-open', 'Zebra still open'], ['zebra-shipped', 'Zebra shipped'], ['not-in-dsr', 'Not in DSR']], f.zebra);
@@ -582,7 +599,7 @@ tfoot td { font-weight: 600; border-bottom: 0; }
 
   function renderView() {
     var v = $('#view');
-    var fn = { pipeline: viewPipeline, claim: viewClaim, zebra: viewZebra, vst: viewVst, stock: viewStock, help: viewHelp }[S.tab] || viewPipeline;
+    var fn = { flags: viewFlags, pipeline: viewPipeline, claim: viewClaim, zebra: viewZebra, vst: viewVst, stock: viewStock, help: viewHelp }[S.tab] || viewPipeline;
     v.innerHTML = fn();
   }
 
@@ -615,6 +632,7 @@ tfoot td { font-weight: 600; border-bottom: 0; }
     if (r.pieces.length > 3) out.push('+' + (r.pieces.length - 3) + ' more');
     var tags = '';
     if (r.vstConfirmed) tags += '<span class="tag good">VST reseller order</span>';
+    (r.flags || []).forEach(function (f) { tags += '<span class="tag warn">Flag: ' + esc(FLAG[f.type].label) + '</span>'; });
     if (r.line.repInvFlag === 'Y') tags += '<span class="tag">Rep: fulfil from disty stock</span>';
     r.hints.forEach(function (h) {
       if (h.kind === 'opp-other-parts') tags += '<span class="tag warn">Opp ordered with ' + h.parts.length + ' other part' + (h.parts.length > 1 ? 's' : '') + '</span>';
@@ -704,6 +722,40 @@ tfoot td { font-weight: 600; border-bottom: 0; }
     });
     h += '</tbody><tfoot><tr><td colspan="2">' + rows.length + ' claim lines</td><td class="num">' + qn(tq) + '</td><td colspan="4" class="muted" style="font-weight:400">Std unit = DSR line value or VAD inventory price. Deal unit = SFDC schedule amount ÷ qty.</td><td class="num">' + usd(te) + '</td></tr></tfoot></table></div>';
     return h;
+  }
+
+  function flagRows() {
+    var f = S.f, fqs = fqAllowed(f.fqScope), q = f.q.trim().toLowerCase();
+    return (S.a.flags || []).filter(function (x) {
+      if (f.flag && x.type !== f.flag) return false;
+      if (fqs && fqs.indexOf(x.fq) < 0) return false;
+      var st = x.lines.length ? x.lines[0].stage : null;
+      if (st && f.stages.indexOf(st) < 0) return false;
+      if (f.dist && x.lines.length && distKeyOf(x.lines[0]) !== f.dist) return false;
+      if (q && [x.oppNo, x.oppName, x.endUser, x.part, x.otherOpp, x.otherName].concat(x.dsr.map(function (d) { return d.po; })).join(' ').toLowerCase().indexOf(q) < 0) return false;
+      return true;
+    }).sort(function (a, b) {
+      var va = a.lines.reduce(function (s, l) { return s + l.amount; }, 0), vb = b.lines.reduce(function (s, l) { return s + l.amount; }, 0);
+      return vb - va || a.oppNo.localeCompare(b.oppNo);
+    });
+  }
+  function viewFlags() {
+    var rows = flagRows();
+    CUR_ROWS = rows.map(function (x) { return x.lines.length ? S.a.byIdx[x.lines[0].idx] : null; });
+    if (!rows.length) return '<div class="tablebox"><div class="empty">No tagging issues in this scope.</div></div>';
+    var h = '<div class="tablebox"><table><thead><tr><th>Flag</th><th>Opportunity · end user</th><th>Part</th><th class="num">USD at stake</th><th>What the DSR shows</th><th>Zebra orders</th><th>Suggested fix</th></tr></thead><tbody>';
+    rows.forEach(function (x, i) {
+      var usdAt = x.lines.reduce(function (s, l) { return s + l.amount; }, 0);
+      var st = x.lines.length ? x.lines[0].stage.replace('Closed - ', '') : (x.stage || '');
+      var pos = x.dsr.map(function (d) { return '<span class="mono">' + esc(d.po) + '</span> · ' + (d.status === 'Open Order' ? 'open' : 'shipped') + ' · ' + qn(d.qty) + (d.oppNo ? ' · <span class="mono">' + esc(d.oppNo) + '</span>' : ''); });
+      h += '<tr class="' + (CUR_ROWS[i] ? 'click' : '') + '" data-row="' + i + '" tabindex="0"><td><span class="st partial">' + esc(FLAG[x.type].label) + '</span></td>' +
+        '<td class="opp"><div class="on">' + esc(x.oppName) + '</div><div class="os"><span class="mono">' + esc(x.oppNo) + '</span> · ' + esc(x.endUser) + ' · ' + esc(st) + ' · ' + esc(x.fq) + '</div></td>' +
+        '<td class="mono">' + esc(x.part) + '</td><td class="num">' + (usdAt ? usd(usdAt) : '—') + '</td>' +
+        '<td class="ev" style="max-width:340px">' + esc(flagText(x)) + '</td>' +
+        '<td class="ev">' + pos.slice(0, 4).join('<br>') + (pos.length > 4 ? '<br>+' + (pos.length - 4) + ' more' : '') + '</td>' +
+        '<td class="ev">' + esc(FLAG[x.type].action) + '</td></tr>';
+    });
+    return h + '</tbody></table></div>';
   }
 
   var TIE = {
@@ -801,6 +853,7 @@ tfoot td { font-weight: 600; border-bottom: 0; }
       '<li><b>VAD stock.</b> Free on-hand stock at the primary VAD: on hand − committed − VST backlog lines that Zebra already shipped or that are not in the DSR. Only for lines shipping from 60 days before the inventory date onward.</li>' +
       '<li><b>Preload incoming.</b> A Zebra order without PC at the VAD that is still open, or shipped after that VAD\'s latest inventory report (so it is not in the stock figures yet), and is not already promised to a VST reseller order.</li>' +
       '</ol>' +
+      '<h3>Tagging flags</h3><p>These checks look for Zebra orders whose Opportunity Number or PC looks attached to the wrong opp. <b>PC may be on the wrong opp</b>: a line is not fully covered, while the same end user and part is ordered on another opp that ships in a later quarter, is closed, is -F / -R, does not list the part, or is already over-ordered. <b>Ordered more than the opp</b>: the quantity ordered on an opp and part is higher than the opp asks for. <b>Ordered part not on the opp</b>: an order line (not a kit component) carries an opp that does not list that part. <b>Order on a closed opp</b>: an order from the last 120 days, or still open, carries an opp that is only Closed-Lost or Closed-Other.</p>' +
       '<h3>Backend claim</h3><p>Items from steps 2–5 were bought at standard discount or DNP, so the deal price is recovered through a backend claim. The indicative claim is (standard unit − deal unit) × quantity. Standard unit comes from the DSR line value or the VAD inventory price. Deal unit is the SFDC schedule amount ÷ quantity. Treat it as a sizing guide and confirm against the PC and price file before you file.</p>' +
       '<h3>VST backlog check</h3><p>The VSTECS backlog PO number is the same PO VSTECS sends to Zebra, so each reseller order is traced to its DSR line. "Zebra still open" means VST is waiting for Zebra. "Zebra shipped · VAD holds stock" means stock is at VST but reserved for that reseller. "Not in DSR" means the PO is newer than the DSR or VST fills it from stock.</p>' +
       '<h3>Uploading</h3><p>Drop or upload any mix of files. The type is detected from the column headers: SFDC pipeline report (.xls), DSR (.xlsx, Hong Kong rows only), VAD inventory and VAD backlog. A new pipeline or DSR replaces the old one; inventory and backlog replace the earlier file for the same VAD. Data stays in this browser.</p>' +
@@ -849,6 +902,11 @@ tfoot td { font-weight: 600; border-bottom: 0; }
     weak = weak.filter(function (po, i) { return weak.indexOf(po) === i; });
     if (weak.length) h += '<div class="piece"><span class="st none">Part also on ' + weak.length + ' no-PC PO' + (weak.length > 1 ? 's' : '') + ' (not counted)</span><div class="faint" style="font-size:.84rem">Only this single part matched, which is too weak to count: <span class="mono">' +
       weak.slice(0, 12).map(esc).join(', ') + (weak.length > 12 ? ' …' : '') + '</span></div></div>';
+    (r.flags || []).forEach(function (f) {
+      h += '<div class="piece"><span class="st partial">' + esc(FLAG[f.type].label) + '</span><div style="font-size:.88rem">' + esc(flagText(f)) +
+        '</div><div class="faint" style="font-size:.84rem">' + f.dsr.map(function (d) { return 'PO ' + esc(d.po) + ' · SO ' + esc(d.orderNo) + ' · ' + (d.status === 'Open Order' ? 'open' : 'shipped') + ' · ' + qn(d.qty) + (d.pc ? ' · PC ' + esc(d.pc) : ''); }).join('<br>') +
+        '</div><div style="font-size:.84rem"><b>Fix:</b> ' + esc(FLAG[f.type].action) + '</div></div>';
+    });
     h += '</div><form class="override" id="ovForm"><div class="label">Your decision</div>' +
       '<label for="ovStatus" class="muted" style="font-size:.86rem">Status</label><select id="ovStatus">' +
       Object.keys(MANUAL).map(function (k) { return '<option value="' + k + '"' + ((o.status || '') === k ? ' selected' : '') + '>' + esc(MANUAL[k]) + '</option>'; }).join('') +
@@ -952,7 +1010,7 @@ tfoot td { font-weight: 600; border-bottom: 0; }
   $('#sheetBg').addEventListener('click', closeSheet);
   document.addEventListener('change', function (e) {
     var id = e.target.id, v = e.target.value;
-    var map = { ffq: 'fqScope', fdist: 'dist', fgroup: 'group', fsort: 'sort', ftie: 'tie', fzebra: 'zebra', fconf: 'claimConf' };
+    var map = { fflag: 'flag', ffq: 'fqScope', fdist: 'dist', fgroup: 'group', fsort: 'sort', ftie: 'tie', fzebra: 'zebra', fconf: 'claimConf' };
     if (id === 'fileInput') { handleFiles(e.target.files); e.target.value = ''; return; }
     if (map[id]) { S.f[map[id]] = v; S.limit = 300; saveFilters(); render(); }
   });

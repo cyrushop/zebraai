@@ -25,6 +25,15 @@ Each Secure, Validate or Closed-Won pipeline line is matched in this order. Ever
 4. **VAD stock.** Free on-hand stock is on hand − committed − VST backlog already shipped by Zebra. This is a backend claim.
 5. **Preload.** A Zebra order without PC that is still open, or shipped after the VAD's latest inventory report, and is not tied to a VST reseller order. This is a backend claim.
 
+## Tagging flags
+
+The **Tagging flags** tab lists Zebra orders whose Opportunity Number or PC looks attached to the wrong opp:
+
+- **PC may be on the wrong opp.** A line is short, while the same end user and part is ordered on another opp. That other opp ships later, is closed or `-F` / `-R`, doesn't list the part, or is already over-ordered.
+- **Ordered more than the opp.** The quantity ordered on an opp and part is higher than the opp asks for.
+- **Ordered part not on the opp.** An order line (not a kit component) carries an opp that doesn't list that part.
+- **Order on a closed opp.** An order that is open, or from the last 120 days, carries an opp that is only Closed-Lost or Closed-Other.
+
 The indicative claim is (standard unit − deal unit) × qty. The standard unit comes from the DSR line value or the VAD inventory price. The deal unit is the SFDC schedule amount ÷ qty.
 
 ## Run it
