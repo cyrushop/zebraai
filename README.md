@@ -151,3 +151,5 @@ GCP_PROJECT=my-project tools/deploy_cloud_run.sh
 ```
 
 It builds the offline page, packs it with `deploy/cloudrun/` (nginx on port 8080) and runs `gcloud run deploy --source` in `asia-east2`, open to anyone with the URL. That is safe because the page holds no data: the PC list stays in each browser. Set `GCP_SA_KEY_B64` to a base64-encoded service account key to sign in without `gcloud auth login`. The key is written outside the uploaded folder and deleted afterwards.
+
+To let Claude deploy from a cloud session, run `tools/gcp_setup_cloudshell.sh PROJECT_ID` once in Cloud Shell (the project needs billing). It enables the APIs, creates the `claude-deployer` service account and prints `GCP_PROJECT` and `GCP_SA_KEY_B64`; add both as environment variables in the Claude environment settings and start a new session. Delete the key in the console when you no longer need it.
