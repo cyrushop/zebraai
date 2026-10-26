@@ -3,7 +3,7 @@
 # Cloud Run with tools/deploy_cloud_run.sh.
 #
 # Run it in Cloud Shell (console.cloud.google.com, the >_ icon at the top right):
-#   bash gcp_setup_cloudshell.sh PROJECT_ID
+#   bash gcp_setup_cloudshell.sh PROJECT_ID   (the project number works too)
 #
 # It enables the Cloud Run, Cloud Build and Artifact Registry APIs, creates the
 # service account claude-deployer with the roles a source deploy needs, and
@@ -16,6 +16,15 @@ if [ -z "$PROJECT" ]; then
   echo "usage: bash gcp_setup_cloudshell.sh PROJECT_ID" >&2
   exit 1
 fi
+# Accept a project number too: most commands below need the project ID.
+ID="$(gcloud projects describe "$PROJECT" --format='value(projectId)')"
+NAME="$(gcloud projects describe "$PROJECT" --format='value(name)')"
+if [ -z "$ID" ]; then
+  echo "Project $PROJECT not found. List yours with: gcloud projects list" >&2
+  exit 1
+fi
+PROJECT="$ID"
+echo "Project: $NAME (ID $PROJECT)"
 gcloud config set project "$PROJECT" >/dev/null
 
 gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com
