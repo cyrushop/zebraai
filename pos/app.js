@@ -4,7 +4,8 @@
   var TABS = ['overview', 'products', 'channel', 'customers', 'notes'];
   var COLORS = ['var(--s1)', 'var(--s2)', 'var(--s3)', 'var(--s4)', 'var(--s5)', 'var(--s6)', 'var(--s7)', 'var(--s8)'];
   var $ = function (id) { return document.getElementById(id); };
-  var state = { sheets: [], result: null, S: null, tab: 'overview', scope: 'all' };
+  // The offline build can embed combined data as window.ZPOS_PRESET = {lines, used}.
+  var state = { sheets: [], preset: window.ZPOS_PRESET || null, result: null, S: null, tab: 'overview', scope: 'all' };
 
   // ---------------------------------------------------------------- storage
   function db() {
@@ -65,6 +66,19 @@
   }
   function rebuild() {
     state.result = state.sheets.length ? ZPos.combine(state.sheets) : null;
+    if (state.preset) {
+      // Files added here replace the built-in data for the years they cover.
+      var r = state.result || { lines: [], used: [], skipped: [] };
+      var have = r.used.map(function (u) { return u.year; });
+      var keep = state.preset.used.filter(function (u) { return have.indexOf(u.year) < 0; });
+      var years = keep.map(function (u) { return u.year; });
+      state.result = {
+        lines: r.lines.concat(state.preset.lines.filter(function (l) { return years.indexOf(l.year) >= 0; })),
+        used: r.used.concat(keep.map(function (u) { return Object.assign({}, u, { file: u.file + ' (built in)' }); }))
+          .sort(function (a, b) { return a.year - b.year; }),
+        skipped: r.skipped
+      };
+    }
     state.S = state.result && state.result.lines.length ? ZPos.summarize(state.result.lines) : null;
     $('btn-csv').disabled = $('btn-clear').disabled = !state.S;
     $('empty').hidden = !!state.S;
@@ -314,6 +328,7 @@
   drop.addEventListener('drop', function (e) { addFiles(e.dataTransfer.files); });
   $('btn-clear').addEventListener('click', function () {
     state.sheets = [];
+    state.preset = null;
     save();
     rebuild();
     $('status').textContent = 'Cleared. Add files to start again.';
@@ -334,5 +349,6 @@
     state.sheets = sheets;
     rebuild();
     if (sheets.length) $('status').textContent = 'Showing the files saved in this browser.';
+    else if (state.preset) $('status').textContent = 'Showing the data built into this file. Add files to replace a year.';
   });
 })();

@@ -81,3 +81,20 @@ Rules:
 - Credits and returns are kept, so totals are net.
 
 The page loads SheetJS and d3 from cdnjs. Tests: `node tests/pos-engine.test.js` (synthetic fixtures only). Never commit the Excel exports: this repository is public.
+
+### Offline version
+
+`pos/offline/zebra-hk-pos-offline.html` is the same app in one file, with d3 and SheetJS built in. Download it and open it from disk: it needs no internet. It holds no data; add your Excel files as usual.
+
+To rebuild it, or to build a copy that opens with your data already loaded:
+
+```sh
+npm pack d3@7.8.5 xlsx@0.18.5 && tar xzf d3-7.8.5.tgz && mv package d3 && tar xzf xlsx-0.18.5.tgz && mv package xlsx
+python3 -I tools/build_pos_offline.py pos/offline/zebra-hk-pos-offline.html --d3 d3/dist/d3.min.js --xlsx xlsx/dist/xlsx.full.min.js
+
+# With data built in (keep the output outside this repository):
+node tools/pos_combine.js xlsx combined.json path/to/*.xlsx
+python3 -I tools/build_pos_offline.py ~/Zebra-HK-POS-offline.html --d3 d3/dist/d3.min.js --xlsx xlsx/dist/xlsx.full.min.js --data combined.json
+```
+
+In a copy with data built in, files you add replace the built-in data for the years they cover.
