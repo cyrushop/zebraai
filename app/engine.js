@@ -313,9 +313,19 @@
     var dsrInBacklog = {};
     backlogRows.forEach(function (r) { r.dsrLines.forEach(function (d) { dsrInBacklog[d.idx] = r; }); });
 
-    // Free VAD stock = on-hand − committed − backlog qty that Zebra already
-    // shipped (or that is not in the DSR, so must come from stock).
-    var stock = {};
+    // Free VAD stock = on-hand − committed − backlog qty that Zebra shipped
+    // before the inventory date (or that is not in the DSR, so must come from
+    // stock). Zebra shipments after a VAD's inventory date are not in its
+    // report yet; they are treated as incoming instead.
+    var stock = {}, invAsOfBy = {};
+    ds.inventory.forEach(function (r) {
+      var key = accountKey(r.dist);
+      if (r.asOf && (!invAsOfBy[key] || r.asOf > invAsOfBy[key])) invAsOfBy[key] = r.asOf;
+    });
+    function shippedAfterInventory(d) {
+      var asOf = invAsOfBy[accountKey(d.account)], when = d.invDate || d.ssd;
+      return d.status === 'Shipped' && asOf && when && when > asOf;
+    }
     ds.inventory.forEach(function (r) {
       var k = accountKey(r.dist) + '|' + r.part;
       var s = stock[k] || (stock[k] = { dist: r.dist, key: accountKey(r.dist), part: r.part, onHand: 0, committed: 0,
@@ -324,6 +334,7 @@
     });
     backlogRows.forEach(function (r) {
       if (r.zebra === 'zebra-open') return;
+      if (r.dsrLines.length && r.dsrLines.every(shippedAfterInventory)) return;
       var s = stock[accountKey(r.b.dist) + '|' + r.b.part];
       if (s) s.backlogHold += r.b.qty;
     });
@@ -473,14 +484,16 @@
       });
     });
 
-    // 5. Incoming no-PC Zebra open orders (preload) not tied to a reseller order
+    // 5. Incoming no-PC Zebra orders (preload) not tied to a reseller order:
+    //    still open, or shipped after the VAD's latest inventory report
     active.forEach(function (l) {
       var r = res[lineKey(l)];
       if (r.covered >= r.need || !current(l)) return;
       var keys = accountKeysFor(l);
       (byPart[l.product] || []).forEach(function (i) {
         var d = dsr[i];
-        if (d.status !== 'Open Order' || d.pc || d.oppNo || !keys[accountKey(d.account)]) return;
+        if (!(d.status === 'Open Order' || shippedAfterInventory(d))) return;
+        if (d.pc || d.oppNo || !keys[accountKey(d.account)]) return;
         if (dsrInBacklog[d.idx]) return;
         take(r, i, 'inc');
       });

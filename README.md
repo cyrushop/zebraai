@@ -23,7 +23,7 @@ Each Secure, Validate or Closed-Won pipeline line is matched in this order. Ever
 2. **End user.** A DSR line has the same end user and part, and is not tied to another opp in the pipeline. If it has no PC, it is a backend claim.
 3. **Stock order without PC.** A no-PC PO at the same VAD contains the opp's parts. Confidence is *high* at ≥60% basket coverage and *medium* at ≥40%. This is a backend claim.
 4. **VAD stock.** Free on-hand stock is on hand − committed − VST backlog already shipped by Zebra. This is a backend claim.
-5. **Preload.** A Zebra open order without PC that is not tied to a VST reseller order. This is a backend claim.
+5. **Preload.** A Zebra order without PC that is still open, or shipped after the VAD's latest inventory report, and is not tied to a VST reseller order. This is a backend claim.
 
 The indicative claim is (standard unit − deal unit) × qty. The standard unit comes from the DSR line value or the VAD inventory price. The deal unit is the SFDC schedule amount ÷ qty.
 

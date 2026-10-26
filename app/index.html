@@ -238,7 +238,7 @@ tfoot td { font-weight: 600; border-bottom: 0; }
     'eu-claim':      { label: 'Ordered, end-user match', group: 'claimorder', desc: 'Same end user and part on a Zebra order without this opp; standard price.' },
     'stock-claim':   { label: 'Stock order, no PC', group: 'claimorder', desc: 'VAD/partner ordered the opp parts on a PO without a PC (standard discount).' },
     'vad-stock':     { label: 'VAD stock available', group: 'claimstock', desc: 'Free on-hand stock at the VAD can fulfil this line.' },
-    'incoming':      { label: 'Preload incoming', group: 'claimstock', desc: 'Zebra open order without PC at the VAD, not tied to a reseller order.' },
+    'incoming':      { label: 'Preload incoming', group: 'claimstock', desc: 'Zebra order without PC at the VAD, still open or shipped after the latest VAD stock report, and not tied to a reseller order.' },
     'partial':       { label: 'Partially covered', group: 'none', desc: 'Some quantity found; the rest has no order or stock.' },
     'substituted':   { label: 'Opp ordered, other part', group: 'partial', desc: 'The opp is on Zebra orders, but with different part numbers.' },
     'not-ordered':   { label: 'No order found', group: 'none', desc: 'Nothing in DSR, VAD stock or preload matches this line.' }
@@ -260,7 +260,7 @@ tfoot td { font-weight: 600; border-bottom: 0; }
   var MANUAL_GROUP = { 'm-ordered': 'ordered', 'm-claim': 'claimstock', 'm-not': 'none' };
   var PIECE = {
     opp: 'Zebra order on this opp/PC', eu: 'Zebra order, same end user', stock: 'VAD stock order (no PC)',
-    inv: 'VAD on-hand stock', inc: 'Preload: Zebra open order (no PC)'
+    inv: 'VAD on-hand stock', inc: 'Preload: Zebra order (no PC), not in VAD stock report yet'
   };
   var PIECE_GROUP = { opp: 'ordered', eu: 'claimorder', stock: 'claimorder', inv: 'claimstock', inc: 'claimstock' };
 
@@ -799,7 +799,7 @@ tfoot td { font-weight: 600; border-bottom: 0; }
       '<li><b>End-user match.</b> A DSR line for the same end user and part, booked no earlier than 30 days before the opp was created, and not tied to a different opp in this pipeline. If it has no PC, it was bought at standard price and is a claim candidate.</li>' +
       '<li><b>Stock order without PC.</b> The VAD (or direct partner) placed a PO without a PC between opp creation (−14 days) and 90 days after the last ship date, and that PO holds the opp\'s parts. <i>High</i> = the PO covers at least 60% of the opp\'s parts; <i>medium</i> = at least 40% (two parts or more), or a single-part opp with the exact quantity on one line. Single-part hits below that are shown only as hints.</li>' +
       '<li><b>VAD stock.</b> Free on-hand stock at the primary VAD: on hand − committed − VST backlog lines that Zebra already shipped or that are not in the DSR. Only for lines shipping from 60 days before the inventory date onward.</li>' +
-      '<li><b>Preload incoming.</b> A Zebra open order without PC at the VAD that is not already promised to a VST reseller order.</li>' +
+      '<li><b>Preload incoming.</b> A Zebra order without PC at the VAD that is still open, or shipped after that VAD\'s latest inventory report (so it is not in the stock figures yet), and is not already promised to a VST reseller order.</li>' +
       '</ol>' +
       '<h3>Backend claim</h3><p>Items from steps 2–5 were bought at standard discount or DNP, so the deal price is recovered through a backend claim. The indicative claim is (standard unit − deal unit) × quantity. Standard unit comes from the DSR line value or the VAD inventory price. Deal unit is the SFDC schedule amount ÷ quantity. Treat it as a sizing guide and confirm against the PC and price file before you file.</p>' +
       '<h3>VST backlog check</h3><p>The VSTECS backlog PO number is the same PO VSTECS sends to Zebra, so each reseller order is traced to its DSR line. "Zebra still open" means VST is waiting for Zebra. "Zebra shipped · VAD holds stock" means stock is at VST but reserved for that reseller. "Not in DSR" means the PO is newer than the DSR or VST fills it from stock.</p>' +

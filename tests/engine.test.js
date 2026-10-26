@@ -7,7 +7,7 @@ const E = require('../app/engine.js');
 const PIPE_H = ['Opportunity Number', 'Opportunity Name', 'Sales Stage', 'First Ship Fiscal Quarter New', 'PC Number',
   'Product Name', 'Schedule Quantity', 'Schedule Amount (converted)', 'Schedule Date', 'Created Date',
   'Primary Distributor', 'Primary Channel Partner', 'Account Name', 'Forecast Notes'];
-const DSR_H = ['Account Name', 'Account Number', 'Account Country', 'End User Name', 'APAC Order Type', 'Line Item Status',
+const DSR_H = ['ERP Invoice Date', 'Account Name', 'Account Number', 'Account Country', 'End User Name', 'APAC Order Type', 'Line Item Status',
   'Purchase Order Number', 'Order Number', 'Line Booked Date', 'Scheduled Ship Date', 'Part Number',
   'Price Concession Number', 'Opportunity Number', 'Quantity', 'Amount USD SUM'];
 const INV_H = ['Distributor Name', 'Distributor Account Number', 'Inventory As Of Date', 'Zebra Part Number', 'On-Hand Quantity',
@@ -52,7 +52,8 @@ const tables = [
     dsr('PO-3', 'MC34', 4, 3200, 'Open Order'),
     dsr('PO-3', 'CRD-MC34', 4, 480, 'Open Order'),
     dsr('PO-7', 'TC58-NEW', 2, 2000, 'Shipped', { 'Opportunity Number': 'Z-7', 'Price Concession Number': 81000007 }),
-    dsr('PO-X', 'TC22', 1, 600, 'Shipped', { 'Account Country': 'Taiwan' })
+    dsr('PO-X', 'TC22', 1, 600, 'Shipped', { 'Account Country': 'Taiwan' }),
+    dsr('PO-9', 'ET401', 5, 2500, 'Shipped', { 'ERP Invoice Date': '2026-10-20T00:00:00' })
   ]),
   table('inventory', INV_H, [{ 'Distributor Name': 'VSTECS HK', 'Distributor Account Number': '61055936',
     'Inventory As Of Date': '2026-10-17T00:00:00', 'Zebra Part Number': 'DS2208', 'On-Hand Quantity': 10, 'Unit Inventory Price': 70 }]),
@@ -89,7 +90,9 @@ assert.strictEqual(stock.status, 'vad-stock');
 assert.strictEqual(stock.q.inv, 6);
 assert.strictEqual(a.stock['vstecs|DS2208'].left, 4);
 
-assert.strictEqual(by('Nothing')[0].status, 'not-ordered');
+const late = by('Nothing')[0];
+assert.strictEqual(late.status, 'incoming', 'no-PC order shipped after the inventory date counts as incoming');
+assert.strictEqual(late.q.inc, 3);
 assert.strictEqual(by('Substituted')[0].status, 'substituted');
 
 assert.ok(E.sameEndUser('A. S. Watson Retail (HK) Limited', 'A.S. Watson'));
