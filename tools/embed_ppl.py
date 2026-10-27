@@ -18,7 +18,8 @@ HOSTS = {
     'weekly': {
         'key': 'hkpr.ppl',
         # shares the page's own pipeline upload (slot 1 at the top) instead of having its own
-        'options': {'upload': False, 'sub': '檢查上方「1 · SFDC pipeline」載入的同一份報表。',
+        # persist: False — the page stores the uploaded file itself and feeds it back on every visit
+        'options': {'upload': False, 'persist': False, 'sub': '檢查上方「1 · SFDC pipeline」載入的同一份報表。',
                     'emptyText': '在上方「1 · SFDC pipeline」上載報表後，這裡會列出有問題的機會。'},
         # mirror whatever pipeline the page shows when it opens; the page exposes it as window.HKPR_PIPE()
         'after_mount': (

@@ -2,6 +2,7 @@
  *
  *   var w = PPLWidget.mount(document.getElementById('ppl'), { storageKey: 'pos.ppl' });
  *   w.load(grid, fileName);   // 宿主 App 已讀好的表格，可直接交給檢查器
+ *   persist: false            // 宿主自己保存檔案並每次重新交給檢查器時用，避免多存一份
  */
 (function (root) {
   'use strict';
@@ -65,7 +66,10 @@
 
   function mount(el, opts) {
     opts = opts || {};
-    var store = ls((opts.storageKey || 'ppl') + '.data'), prefs = ls((opts.storageKey || 'ppl') + '.prefs');
+    // persist: false — the host keeps the file and reloads it, so the widget does not keep a second copy of the rows
+    var store = opts.persist === false ? { get: function (d) { return d; }, set: function () { return true; } } : ls((opts.storageKey || 'ppl') + '.data');
+    var prefs = ls((opts.storageKey || 'ppl') + '.prefs');
+    if (opts.persist === false) { try { localStorage.removeItem((opts.storageKey || 'ppl') + '.data'); } catch (e) { /* storage unavailable */ } }
     var S = {
       rows: null, file: '', loadedAt: '', res: null, err: '', notice: '',
       tab: 'check',
