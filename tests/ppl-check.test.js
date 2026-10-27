@@ -108,6 +108,11 @@ const sn = P.secureNotOrdered(rows);
 assert.strictEqual(sn.length, 1);
 assert.strictEqual(sn[0].amount, 1000);
 
+// a report without the CRSD column: rule 7 is skipped and the message names only that column
+const noCrsd = P.prepare([H.filter(h => h !== 'Customer Requested Ship Date'), ...grid.slice(3).map(r => r.filter((_, i) => H[i] !== 'Customer Requested Ship Date'))]);
+const sk = P.check(noCrsd, { today: '2026-10-21' }).skipped;
+assert.deepStrictEqual(sk, ['標準7（缺 Customer Requested Ship Date 欄）']);
+
 // SFDC links
 const rec = P.sfdcLink('Z-1', '006Ab00000XyZ12AAA');
 assert.strictEqual(rec.url, 'https://zebra.lightning.force.com/lightning/r/Opportunity/006Ab00000XyZ12AAA/view');

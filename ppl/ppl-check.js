@@ -199,7 +199,7 @@
     if (!has('firstShip')) skipped.push('標準3、6（缺 First Ship Date 欄）');
     if (!has('amount') || !has('notes')) skipped.push('標準4（缺 Schedule Amount (converted) 或 Forecast Notes 欄）');
     if (!has('fulfill')) skipped.push('標準5（缺 Fulfillment Type 欄）');
-    if (!has('firstShip') || !has('crsd')) skipped.push('標準7（缺 First Ship Date 或 Customer Requested Ship Date 欄）');
+    if (!has('firstShip') || !has('crsd')) skipped.push('標準7（缺 ' + [has('firstShip') ? '' : 'First Ship Date', has('crsd') ? '' : 'Customer Requested Ship Date'].filter(Boolean).join('、') + ' 欄）');
     var notes = [];
     if (!has('rectype')) notes.push('報表沒有 Opportunity Record Type 欄，所有記錄類型都會檢查。');
     if (!has('firstShip')) notes.push('報表沒有 First Ship Date 欄，不按發貨日篩選。');
