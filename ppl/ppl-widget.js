@@ -121,6 +121,7 @@
       }
       S.res = r;
       renderMeta(); renderTabs(); renderFilters(); renderView();
+      if (opts.onChange) { try { opts.onChange(); } catch (e) { /* host callback */ } }
     }
     function renderMeta() {
       var m = $('.ppl-meta'), n = $('.ppl-notes');
@@ -361,6 +362,13 @@
     return {
       load: function (grid, name) { return load(grid, name, true); },
       fileName: function () { return S.rows ? S.file : ''; },
+      // 給宿主頁面（例如總覽首頁）用的摘要
+      summary: function () {
+        if (!S.res) return { file: S.file, loaded: false, err: S.err };
+        return { file: S.file, loaded: true, today: S.res.today, checkedOpps: S.res.checkedOpps,
+          violations: S.res.violations.length, stats: S.res.stats, skipped: S.res.skipped.length,
+          secureNotOrdered: (function () { try { return P.secureNotOrdered(S.rows).length; } catch (e) { return null; } })() };
+      },
       // 清空並顯示原因（例如宿主的報表沒有檢查用的欄）
       clear: function (notice) {
         S.rows = null; S.file = ''; S.err = ''; S.notice = notice || ''; store.set(null); render();

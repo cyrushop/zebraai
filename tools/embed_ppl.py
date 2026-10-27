@@ -85,8 +85,9 @@ def main(kind, src, dst):
 
     options = dict(h['options'], storageKey=h['key'])
     tail = ('<!-- PPL:code -->\n<style>\n' + css + '</style>\n<script>\n' + js + '\n'
-            "window.PPL_W = PPLWidget.mount(document.getElementById('ppl'), " +
-            json.dumps(options, ensure_ascii=False) + ");\n" + h['after_mount'] +
+            "window.PPL_W = PPLWidget.mount(document.getElementById('ppl'), Object.assign(" +
+            json.dumps(options, ensure_ascii=False) +
+            ", { onChange: function () { if (window.HUB_POST) window.HUB_POST(); } }));\n" + h['after_mount'] +
             "</script>\n<!-- /PPL:code -->\n")
     i = html.rfind('</body>')
     assert i > 0
