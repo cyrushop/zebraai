@@ -28,6 +28,11 @@ def get(url, delay=1.0, binary=False, retries=3, referer=None):
                 charset = r.headers.get_content_charset() or "utf-8"
                 return data.decode(charset, errors="replace")
         except Exception as e:  # network errors: back off and retry
+            if "CERTIFICATE_VERIFY_FAILED" in str(e):
+                raise RuntimeError(
+                    f"GET {url} failed: this Python cannot check HTTPS certificates.\n"
+                    "  On a Mac with Python from python.org, open Finder > Applications > Python 3.x\n"
+                    "  and double-click 'Install Certificates.command', then run the bot again.") from e
             err = e
             time.sleep(2 ** (attempt + 1))
     raise RuntimeError(f"GET {url} failed: {err}")

@@ -2,6 +2,23 @@
 
 記錄自己開箱得到嘅咭，對照比賽 Deck list 睇邊副夠咭砌，砌好預留咭，賣出後自動扣數。
 
+## Mac：一撳就用
+
+1. 下載：https://github.com/cyrushop/zebraai/archive/refs/heads/claude/one-piece-card-tracker-0rpst3.zip ，雙擊解壓。
+2. 打開解壓後嘅 `opcg` 資料夾，雙擊 **`OPCG-Start.command`**。
+   * 第一次會問「試抓 OP10？」，撳 Enter 就開始 (連咭圖約 3–5 分鐘)。
+   * 抓完自動開瀏覽器 http://localhost:8765 。
+   * 用完關咗個 Terminal 視窗就停。
+3. 想手機一齊用 (同一個 Wi-Fi)：雙擊 **`OPCG-Phone.command`**，第一次設定一個 PIN，然後用手機開佢顯示嘅網址。
+
+第一次雙擊，Mac 可能話「無法打開，因為來自未識別的開發者」：
+* macOS 14 或之前：喺 Finder 對住個檔 **右撳 → 打開 → 打開**。
+* macOS 15 (Sequoia) 或之後：撳「完成」，然後去 **系統設定 → 私隱與保安**，拉到最底撳「**仍要打開**」，再雙擊一次。
+
+雙擊冇反應或者話冇權限：打開「終端機」，打 `chmod +x ` (後面有空格)，將兩個 `.command` 檔拖入視窗，撳 Enter。
+
+冇 Python 嘅話，啟動檔會叫 Mac 安裝「Command Line Developer Tools」(入面有 Python 3)，裝完再雙擊。如果 BOT 話 `CERTIFICATE_VERIFY_FAILED`：去「應用程式 → Python 3.x」雙擊 `Install Certificates.command`。
+
 ## 快速開始
 
 需要 Python 3.9+ (唔使裝其他套件)。
