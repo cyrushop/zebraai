@@ -12,7 +12,9 @@
 <header class="top">
   <h1>OPCG 咭庫</h1>
   <nav id="tabs">
-    <button data-tab="collection" class="on">咭庫</button>
+    <button data-tab="home" class="on">主頁</button>
+    <button data-tab="collection">咭庫</button>
+    <button data-tab="sets">系列</button>
     <button data-tab="open">開箱</button>
     <button data-tab="meta">Meta Decks</button>
     <button data-tab="mine">我的 Decks</button>
@@ -23,13 +25,31 @@
 </header>
 
 <main>
-  <section id="tab-collection" class="tab on"></section>
+  <section id="tab-home" class="tab on"></section>
+  <section id="tab-collection" class="tab"></section>
+  <section id="tab-sets" class="tab"></section>
   <section id="tab-open" class="tab"></section>
   <section id="tab-meta" class="tab"></section>
   <section id="tab-mine" class="tab"></section>
   <section id="tab-value" class="tab"></section>
   <section id="tab-settings" class="tab"></section>
 </main>
+
+<nav id="bottom" aria-label="主要分頁">
+  <button data-tab="home"><svg viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>主頁</button>
+  <button data-tab="sets"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>系列</button>
+  <button data-tab="open" class="fab" aria-label="開箱"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg><span>開箱</span></button>
+  <button data-tab="mine"><svg viewBox="0 0 24 24"><rect x="4" y="3" width="11" height="15" rx="2"/><path d="M9 21h9a2 2 0 0 0 2-2V7"/></svg>Decks</button>
+  <button data-tab="more"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>更多</button>
+</nav>
+<div id="sheet" hidden>
+  <div class="sheet-body">
+    <button data-tab="collection">咭庫 (搜尋 / 篩選)</button>
+    <button data-tab="value">貴咭 · 價值</button>
+    <button data-tab="meta">Meta Decks</button>
+    <button data-tab="settings">設定 · 備份 · BOT</button>
+  </div>
+</div>
 
 <dialog id="modal"><div id="modal-body"></div><form method="dialog"><button class="close" aria-label="關閉">×</button></form></dialog>
 <div id="toast" role="status"></div>

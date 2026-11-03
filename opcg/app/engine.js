@@ -244,13 +244,15 @@
       const b = bot[id];
       if (m && m.hkd != null && m.hkd !== '') {
         const ch = historyChange(m.history);
-        return { hkd: Number(m.hkd), source: 'manual', at: m.at, url: b && b.url, jpy: b && b.jpy, change: ch };
+        return { hkd: Number(m.hkd), source: 'manual', at: m.at, url: b && b.url, jpy: b && b.jpy, change: ch,
+          history: (m.history || []).map(h => [h[0], Number(h[1])]) };
       }
       if (b && b.jpy != null && k > 0) {
         const ch = historyChange(b.history);
         const last = b.history && b.history.length ? b.history[b.history.length - 1][0] : '';
         return { hkd: round(b.jpy * k), source: 'bot', jpy: b.jpy, url: b.url, stock: b.stock, at: last,
-          change: ch && { from: round(ch.from * k), to: round(ch.to * k), since: ch.since } };
+          change: ch && { from: round(ch.from * k), to: round(ch.to * k), since: ch.since },
+          history: (b.history || []).map(h => [h[0], round(h[1] * k)]) };
       }
       return null;
     };
@@ -289,6 +291,112 @@
     return { total: round(total), priced, unpriced };
   }
 
+  // ------------------------------------------------------------ search
+  const COLOR_WORDS = {
+    '紅': '紅', '红': '紅', red: '紅', '綠': '綠', '绿': '綠', green: '綠', '藍': '藍', '蓝': '藍', blue: '藍',
+    '紫': '紫', purple: '紫', '黑': '黑', black: '黑', '黃': '黃', '黄': '黃', yellow: '黃',
+  };
+  const CAT_WORDS = {
+    leader: 'LEADER', '領航': 'LEADER', character: 'CHARACTER', chara: 'CHARACTER', '角色': 'CHARACTER',
+    event: 'EVENT', '事件': 'EVENT', stage: 'STAGE', '場地': 'STAGE',
+  };
+  const RARITY_WORDS = ['L', 'C', 'UC', 'R', 'SR', 'SEC', 'SP', 'TR', 'P'];
+
+  function range(s) {
+    const m = /^(\d+)(?:-(\d+))?$/.exec(s);
+    if (!m) return null;
+    return [Number(m[1]), m[2] ? Number(m[2]) : Number(m[1])];
+  }
+
+  /**
+   * Smart search: "Luffy OP17, c5, p6000".
+   *   OP17 / EB02 / PRB01 / ST21  set          c5, c3-5      cost (or life for leaders)
+   *   p6000, p5000-7000           power        k1000         counter
+   *   SR / SEC / L / UC ...       rarity       紅 / red ...  colour
+   *   leader / 領航 / event ...   category     有 / 未有     owned or not
+   *   平行 / alt                  parallels    anything else name, number, type or effect text
+   */
+  function parseQuery(q) {
+    const out = { text: [], sets: [], rarities: [], colors: [], cats: [], cost: null, power: null, counter: null, owned: null, alt: null };
+    for (const raw of String(q || '').split(/[\s,，、]+/)) {
+      const t = raw.trim();
+      if (!t) continue;
+      const low = t.toLowerCase();
+      const up = t.toUpperCase().replace(/^(OP|ST|EB|PRB)-?(\d{1,2})$/, (m, a, b) => a + b.padStart(2, '0'));
+      let m;
+      if (/^(OP|ST|EB|PRB)\d{2}$/.test(up)) out.sets.push(up);
+      else if (normId(t) && normId(t).length >= t.length - 1) out.text.push(normId(t).toLowerCase());
+      else if ((m = /^c(\d+(?:-\d+)?)$/i.exec(t)) && range(m[1])) out.cost = range(m[1]);
+      else if ((m = /^p(\d{3,5}(?:-\d{3,5})?)$/i.exec(t)) && range(m[1])) out.power = range(m[1]);
+      else if ((m = /^k(\d{1,4}(?:-\d{1,4})?)$/i.exec(t)) && range(m[1])) out.counter = range(m[1]);
+      else if (RARITY_WORDS.includes(up)) out.rarities.push(up);
+      else if (COLOR_WORDS[low]) out.colors.push(COLOR_WORDS[low]);
+      else if (CAT_WORDS[low]) out.cats.push(CAT_WORDS[low]);
+      else if (['有', 'have', 'owned'].includes(low)) out.owned = true;
+      else if (['未有', 'missing', '!have', 'need'].includes(low)) out.owned = false;
+      else if (['平行', 'alt', 'parallel'].includes(low)) out.alt = true;
+      else out.text.push(low);
+    }
+    return out;
+  }
+
+  function inRange(v, r) { return v != null && v >= r[0] && v <= r[1]; }
+
+  /** Does a card match a parsed query? ownedCount is how many copies the user has of this exact id. */
+  function matchCard(card, q, ownedCount) {
+    if (q.sets.length && !q.sets.some(s => setOf(card.id) === s || card.set === s || (card.series || []).some(x => x.code === s))) return false;
+    if (q.rarities.length && !q.rarities.includes(String(card.rarity || '').toUpperCase())) return false;
+    if (q.colors.length && !q.colors.every(c => cardColors(card).includes(c))) return false;
+    if (q.cats.length && !q.cats.includes(normCategory(card.category))) return false;
+    if (q.cost && !inRange(card.cost != null ? card.cost : card.life, q.cost)) return false;
+    if (q.power && !inRange(card.power, q.power)) return false;
+    if (q.counter && !inRange(card.counter || 0, q.counter)) return false;
+    if (q.owned === true && !(ownedCount > 0)) return false;
+    if (q.owned === false && ownedCount > 0) return false;
+    if (q.alt && card.id === baseId(card.id)) return false;
+    if (q.text.length) {
+      const hay = [card.id, card.name, card.feature, card.text, card.trigger, card.attribute].join(' ').toLowerCase();
+      if (!q.text.every(t => hay.includes(t))) return false;
+    }
+    return true;
+  }
+
+  // -------------------------------------------------------------- sets
+  const SET_GROUPS = [
+    ['OP', '補充包'], ['EB', '額外補充包'], ['PRB', '高級補充包'], ['ST', '預組'], ['P', '推廣卡'],
+  ];
+  function setGroup(code) {
+    const prefix = String(code || '').replace(/\d+$/, '');
+    const g = SET_GROUPS.find(x => x[0] === prefix);
+    return g ? g[1] : '其他';
+  }
+
+  /** Is a card part of a set (its own number, or listed in that series on the official site)? */
+  function inSet(card, code) {
+    return setOf(card.id) === code || (card.series || []).some(s => s.code === code);
+  }
+
+  /**
+   * Collection progress for one set. Normal cards count by card number; parallels
+   * are a separate bucket and only count towards the total when includeParallels.
+   */
+  function setProgress(cards, owned, code, includeParallels) {
+    const byRarity = {};
+    let total = 0, have = 0, copies = 0;
+    for (const c of cards) {
+      if (!inSet(c, code)) continue;
+      const alt = c.id !== baseId(c.id);
+      if (alt && !includeParallels) continue;
+      const key = alt ? '平行' : (c.rarity || '?');
+      const n = owned[c.id] || 0;
+      byRarity[key] = byRarity[key] || { total: 0, have: 0 };
+      byRarity[key].total++; total++;
+      copies += n;
+      if (n > 0) { byRarity[key].have++; have++; }
+    }
+    return { code, total, have, copies, pct: total ? have / total : 0, byRarity };
+  }
+
   /** Set code of a card: 'OP08-001' -> 'OP08', 'P-001' -> 'P'. */
   function setOf(id) {
     return String(id || '').split('-')[0].toUpperCase();
@@ -298,6 +406,7 @@
     normId, baseId, quickId, parseDeckText, deckToText, toDg, normCategory, leaderOf,
     ownedTotals, reservedTotals, availableTotals, deckStatus, validateDeck, cardColors,
     sellDeck, shoppingList, setOf, historyChange, makePricer, deckCost, missingCost, collectionValue,
+    parseQuery, matchCard, setGroup, inSet, setProgress,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.OPCGEngine = api;

@@ -16,12 +16,16 @@
   const variantsOf = {};
   for (const c of CARDS) (variantsOf[E.baseId(c.id)] = variantsOf[E.baseId(c.id)] || []).push(c.id);
 
+  const setRank = s => ({ OP: 0, EB: 1, PRB: 2, ST: 3, P: 4 }[s.replace(/\d+/g, '')] ?? 5);
+  // Newest first (for drop-downs).
+  function setSort(a, b) { return setRank(a) - setRank(b) || b.localeCompare(a, 'en', { numeric: true }); }
   const SETS = Array.from(new Set(CARDS.map(c => c.set || E.setOf(c.id)).filter(Boolean))).sort(setSort);
-  function setSort(a, b) {
-    const rank = s => ({ OP: 0, EB: 1, PRB: 2, ST: 3, P: 4 }[s.replace(/\d+/g, '')] ?? 5);
-    return rank(a) - rank(b) || b.localeCompare(a, 'en', { numeric: true });
-  }
 
+  // Oldest first (for the set browser, like a binder).
+  const SET_CODES = Array.from(new Set(CARDS.flatMap(c => [E.setOf(c.id)].concat((c.series || []).map(x => x.code)))
+    .filter(Boolean))).sort((a, b) => setRank(a) - setRank(b) || a.localeCompare(b, 'en', { numeric: true }));
+  const SERIES_LABEL = {};
+  for (const x of ((window.OPCG_CARDS && window.OPCG_CARDS.series) || [])) if (x.code && !SERIES_LABEL[x.code]) SERIES_LABEL[x.code] = x.label;
   const COLOR_HEX = { '紅': 'red', '红': 'red', Red: 'red', '綠': 'green', '绿': 'green', Green: 'green', '藍': 'blue', '蓝': 'blue', Blue: 'blue',
     '紫': 'purple', Purple: 'purple', '黑': 'black', Black: 'black', '黃': 'yellow', '黄': 'yellow', Yellow: 'yellow' };
   const COLORS = Array.from(new Set(CARDS.flatMap(c => E.cardColors(c)))).filter(Boolean);
@@ -194,6 +198,34 @@
   function dots(card) {
     return `<span class="dots">${E.cardColors(card || {}).map(c => `<i class="dot" title="${esc(c)}" style="background:var(--${COLOR_HEX[c] || 'muted'})"></i>`).join('')}</span>`;
   }
+  /** Progress ring (SVG). */
+  function ring(pct, size, label) {
+    const r = size / 2 - 3, c = 2 * Math.PI * r, v = Math.max(0, Math.min(1, pct || 0));
+    return `<svg class="ring" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" aria-label="${Math.round(v * 100)}%">
+      <circle cx="${size / 2}" cy="${size / 2}" r="${r}" class="ring-bg"/>
+      <circle cx="${size / 2}" cy="${size / 2}" r="${r}" class="ring-fg" stroke-dasharray="${(c * v).toFixed(1)} ${c.toFixed(1)}" transform="rotate(-90 ${size / 2} ${size / 2})"/>
+      ${label != null ? `<text x="50%" y="50%" dominant-baseline="central" text-anchor="middle">${esc(label)}</text>` : ''}</svg>`;
+  }
+  /** Small price-trend line from [[date, value], ...]. */
+  function sparkline(history, w, h) {
+    if (!history || history.length < 2) return '<span class="muted" style="font-size:12px">未有足夠歷史畫走勢 (BOT 每次更新會加一點)</span>';
+    w = w || 260; h = h || 56;
+    const vals = history.map(x => Number(x[1]));
+    const min = Math.min(...vals), max = Math.max(...vals), span = max - min || 1;
+    const pts = vals.map((v, i) => `${(i / (vals.length - 1) * (w - 4) + 2).toFixed(1)},${(h - 4 - (v - min) / span * (h - 8)).toFixed(1)}`).join(' ');
+    const up = vals[vals.length - 1] >= vals[0];
+    return `<svg class="spark ${up ? 'up' : 'down'}" viewBox="0 0 ${w} ${h}" width="100%" height="${h}" preserveAspectRatio="none" role="img"
+      aria-label="由 ${esc(history[0][0])} ${hk(vals[0])} 至 ${esc(history[history.length - 1][0])} ${hk(vals[vals.length - 1])}"><polyline points="${pts}"/></svg>
+      <div class="spark-axis muted"><span>${esc(history[0][0])}</span><span>低 ${hk(min)} · 高 ${hk(max)}</span><span>${esc(history[history.length - 1][0])}</span></div>`;
+  }
+  /** Effect text with 【keyword】 brackets shown as chips. */
+  function effectHtml(text) {
+    return esc(text || '').replace(/【([^】]{1,16})】/g, (m, k) => {
+      const cls = /登場|On Play/.test(k) ? 'k-play' : /起動|Activate|主要|Main/.test(k) ? 'k-act' : /觸發|Trigger/.test(k) ? 'k-trig'
+        : /阻擋|Blocker|速攻|Rush|雙重|Double|斬殺|Banish/.test(k) ? 'k-kw' : 'k-other';
+      return `<span class="kw ${cls}">${k}</span>`;
+    }).replace(/\n/g, '<br>');
+  }
   function barClass(p) { return p >= 0.999 ? '' : p >= 0.8 ? 'mid' : 'low'; }
   function uid() { return 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
   function noDataNotice(what) {
@@ -203,17 +235,38 @@
   }
 
   // ------------------------------------------------------------- tabs
-  let current = 'collection';
+  const TABS = ['home', 'collection', 'sets', 'open', 'meta', 'mine', 'value', 'settings'];
+  const MORE = ['collection', 'value', 'meta', 'settings'];
+  let current = 'home';
   function showTab(name) {
+    if (name === 'more') { $('#sheet').hidden = !$('#sheet').hidden; return; }
+    $('#sheet').hidden = true;
     current = name;
     $$('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === name));
+    $$('#bottom button').forEach(b => b.classList.toggle('on', b.dataset.tab === name || (b.dataset.tab === 'more' && MORE.includes(name))));
     $$('.tab').forEach(s => s.classList.toggle('on', s.id === 'tab-' + name));
     render();
+    window.scrollTo(0, 0);
     try { localStorage.setItem('opcg-tab', name); } catch (e) { /* ignore */ }
   }
-  $('#tabs').addEventListener('click', e => { const b = e.target.closest('button'); if (b) showTab(b.dataset.tab); });
+  for (const nav of ['#tabs', '#bottom', '#sheet']) {
+    $(nav).addEventListener('click', e => {
+      const b = e.target.closest('button');
+      if (b) showTab(b.dataset.tab);
+      else if (nav === '#sheet') $('#sheet').hidden = true;
+    });
+  }
   function render() {
-    ({ collection: renderCollection, open: renderOpen, meta: renderMeta, mine: renderMine, value: renderValue, settings: renderSettings })[current]();
+    ({ home: renderHome, collection: renderCollection, sets: renderSets, open: renderOpen, meta: renderMeta,
+      mine: renderMine, value: renderValue, settings: renderSettings })[current]();
+  }
+
+  const SEARCH_HINT = '搜尋語法：<code>OP08</code> 系列 · <code>c5</code> 費用 (<code>c3-5</code>) · <code>p6000</code> 力量 · <code>k1000</code> 反擊 · <code>SR</code> 稀有度 · <code>紅</code> 顏色 · <code>領航</code>/<code>事件</code> · <code>有</code>/<code>未有</code> · <code>平行</code> · 其他字 = 名 / 特徵 / 效果';
+  function openCollection(q) {
+    cf.q = q || ''; cf.set = ''; cf.color = ''; cf.cat = ''; cf.rarity = ''; cf.owned = ''; cf.limit = 120;
+    const el = $('#tab-collection');
+    if (el.dataset.ready) for (const k of ['q', 'set', 'color', 'cat', 'rarity', 'owned']) $('#cf-' + k).value = cf[k];
+    showTab('collection');
   }
 
   // ======================================================== COLLECTION
@@ -221,7 +274,7 @@
   function collectionItems() {
     const ids = new Set(CARDS.map(c => c.id));
     for (const id of Object.keys(state.owned)) ids.add(id);
-    const q = cf.q.trim().toLowerCase();
+    const q = E.parseQuery(cf.q);
     const reserved = E.reservedTotals(state.decks);
     let list = Array.from(ids).map(id => byId[id] || { id, name: '', set: E.setOf(id), colors: [], unknown: true });
     list = list.filter(c => {
@@ -233,9 +286,7 @@
       if (cf.owned === 'none' && ownedOf(c.id)) return false;
       if (cf.owned === 'spare' && !(ownedOf(c.id) > 4)) return false;
       if (cf.owned === 'reserved' && !reserved[E.baseId(c.id)]) return false;
-      if (q && !(c.id.toLowerCase().includes(q) || (c.name || '').toLowerCase().includes(q) ||
-        (c.feature || '').toLowerCase().includes(q) || (c.text || '').toLowerCase().includes(q))) return false;
-      return true;
+      return E.matchCard(c, q, ownedOf(c.id));
     });
     const cmpId = (a, b) => a.id.localeCompare(b.id, 'en', { numeric: true });
     if (cf.sort === 'owned') list.sort((a, b) => ownedOf(b.id) - ownedOf(a.id) || cmpId(a, b));
@@ -251,7 +302,7 @@
       el.innerHTML = `
         ${CARDS.length ? '' : noDataNotice('咭表')}
         <div class="toolbar">
-          <input type="search" id="cf-q" placeholder="搜尋 編號 / 名 / 特徵 / 效果">
+          <input type="search" id="cf-q" placeholder="例如：路飛 OP08 c5 p6000 紅 SR 有">
           <button class="filter-toggle" id="cf-ft">篩選</button>
           <div class="filters">
           <select id="cf-set"><option value="">全部系列</option>${SETS.map(s => opt(s, s)).join('')}</select>
@@ -262,11 +313,11 @@
           <select id="cf-sort"><option value="id">按編號</option><option value="owned">按數量</option><option value="cost">按費用</option><option value="price">按價錢</option></select>
           </div>
         </div>
+        <div class="muted hint">${SEARCH_HINT}</div>
         <div class="stats" id="cf-stats"></div>
         <div class="grid" id="cf-grid"></div>
         <button class="more" id="cf-more">顯示更多</button>`;
       el.dataset.ready = '1';
-      if (!cf.set && SETS.includes(settings().quickSet)) cf.set = settings().quickSet;
       for (const k of ['q', 'set', 'color', 'cat', 'rarity', 'owned', 'sort']) {
         const input = $('#cf-' + k);
         input.value = cf[k];
@@ -295,7 +346,7 @@
     const p = (price || pricer())(c.id);
     const r = c.id === E.baseId(c.id) ? reserved[c.id] || 0 : 0;
     return `<div class="tile${n ? ' has' : ''}" data-id="${esc(c.id)}">
-      <div class="img" data-act="detail">${imgTag(c.id)}</div>
+      <div class="img" data-act="detail">${imgTag(c.id)}${n ? `<span class="own-badge">×${n}</span>` : ''}${c.id !== E.baseId(c.id) ? '<span class="alt-badge">平行</span>' : ''}</div>
       <div class="meta">${esc(c.id)} <span class="muted">${esc(c.rarity || '')}</span> ${dots(c)}</div>
       <div class="meta name" title="${esc(c.name)}">${esc(c.name || (c.unknown ? '(咭表冇資料)' : ''))}</div>
       <div class="sub">${p ? `<b class="price">${hk(p.hkd)}</b> ${changeHtml(p.change)} ` : ''}${r ? `預留 ${r} · 可用 ${Math.max(0, n - r)}` : ''}</div>
@@ -318,26 +369,50 @@
     const c = byId[id] || { id };
     const base = E.baseId(id);
     const usedIn = state.decks.filter(d => d.status !== 'sold' && d.entries.some(e => e.id === base));
-    const vars = Array.from(new Set((variantsOf[base] || [id]).concat(Object.keys(state.owned).filter(k => E.baseId(k) === base))));
+    const vars = Array.from(new Set([base].concat(variantsOf[base] || [], Object.keys(state.owned).filter(k => E.baseId(k) === base))))
+      .sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
     const price = pricer();
-    const field = (k, v) => v || v === 0 ? `<dt>${k}</dt><dd>${esc(v)}</dd>` : '';
-    $('#modal-body').innerHTML = `<div class="detail">
-      <div>${imgSrc(id) ? `<img src="${esc(imgSrc(id))}" alt="${esc(c.name || id)}">` : ''}</div>
-      <div>
-        <h2 style="margin-top:0">${esc(c.name || id)}</h2>
-        <dl>
-          ${field('編號', id)}${field('稀有度', c.rarity)}${field('類別', CATS[c.category] || c.categoryRaw || c.category)}
-          ${field('生命', c.life)}${field('費用', c.cost)}${field('力量', c.power)}${field('反擊', c.counter)}
-          ${field('顏色', c.color)}${field('屬性', c.attribute)}${field('特徵', c.feature)}
-          ${field('效果', c.text)}${field('觸發', c.trigger)}${field('收錄', c.getInfo)}
-        </dl>
-        <h3>我有</h3>
-        <table class="list"><tr><th>版本</th><th>數量</th><th>價錢</th></tr>${vars.map(v => { const p = price(v); return `<tr><td>${esc(v)}${v === base ? '' : ' <span class="muted">(平行/異圖)</span>'}</td>
-          <td style="white-space:nowrap"><button class="small" data-d="${esc(v)}" data-n="-1">−</button> <b>${ownedOf(v)}</b> <button class="small" data-d="${esc(v)}" data-n="1">+</button></td>
-          <td>${p ? `${hk(p.hkd)} ${changeHtml(p.change)}<br><span class="muted">${p.source === 'manual' ? '手動' : '悠々亭 ¥' + Number(p.jpy).toLocaleString()}</span>` : '<span class="muted">未有</span>'}
-            <br><input class="mp" data-mp="${esc(v)}" type="number" min="0" step="1" placeholder="手動價 HK$" value="${esc((state.manualPrices[v] || {}).hkd ?? '')}" style="width:110px">
-            <a href="${esc(shopUrl(v))}" target="_blank" rel="noopener">悠々亭</a></td></tr>`; }).join('')}</table>
-        ${usedIn.length ? `<h3>用喺</h3><ul>${usedIn.map(d => `<li>${esc(d.name)} (${d.entries.find(e => e.id === base).count} 張, ${statusLabel(d.status)})</li>`).join('')}</ul>` : ''}
+    const p = price(id);
+    const reserved = E.reservedTotals(state.decks)[base] || 0;
+    const isLeader = E.normCategory(c.category) === 'LEADER';
+    const tile = (k, v, extra) => v || v === 0 ? `<div class="stat"><span>${k}</span><b>${extra || esc(v)}</b></div>` : '';
+    const setCode = E.setOf(id);
+    const label = v => v === base ? '普通' : '平行 ' + v.split('_')[1];
+    $('#modal-body').innerHTML = `<div class="cd">
+      <div class="cd-left">
+        <div class="cd-img">${imgSrc(id) ? `<img src="${esc(imgSrc(id))}" alt="${esc((c.name || '') + ' ' + id)}">` : `<span class="ph">${esc(id)}</span>`}</div>
+        ${vars.length > 1 ? `<div class="alts">${vars.map(v => `<button class="alt${v === id ? ' on' : ''}" data-detail="${esc(v)}" title="${esc(v)}">
+          <div class="thumb">${imgTag(v)}</div><span>${esc(label(v))}</span></button>`).join('')}</div>` : ''}
+      </div>
+      <div class="cd-right">
+        <div class="chips">${c.category ? `<span class="chip">${esc(CATS[c.category] || c.categoryRaw || c.category)}</span>` : ''}<span class="chip">${esc(id)}</span>
+          ${c.rarity ? `<span class="chip strong">${esc(c.rarity)}</span>` : ''}${setCode ? `<button class="chip link" data-goset="${esc(setCode)}">${esc(setCode)} ›</button>` : ''}</div>
+        <h2>${esc(c.name || id)}</h2>
+        ${c.feature ? `<div class="muted">${esc(c.feature)}</div>` : ''}
+        <div class="stats-tiles">
+          ${isLeader ? tile('生命', c.life) : tile('費用', c.cost)}${tile('力量', c.power)}${tile('反擊', c.counter)}
+          ${tile('顏色', c.color, c.color ? dots(c) + ' ' + esc(c.color) : '')}${tile('屬性', c.attribute)}
+        </div>
+        <div class="box">
+          <div class="box-head"><span>價錢${id === base ? '' : ' (呢個平行版)'}</span>
+            <span>${p ? `<b class="big price">${hk(p.hkd)}</b> ${changeHtml(p.change)}` : '<span class="muted">未有價</span>'}</span></div>
+          ${p ? `<div class="muted small">${p.source === 'manual' ? `手動價 · ${esc(p.at || '')}` : `悠々亭 ¥${Number(p.jpy).toLocaleString()} × ${rate()}${Number(settings().factor) !== 1 ? ' × ' + esc(settings().factor) : ''} · ${esc(p.at || '')}${p.stock === 0 ? ' · 缺貨' : ''}`}</div>
+            ${sparkline(p.history)}` : ''}
+          <div class="toolbar" style="margin:8px 0 0">
+            <input class="mp" data-mp="${esc(id)}" type="number" min="0" step="1" placeholder="手動價 HK$" value="${esc((state.manualPrices[id] || {}).hkd ?? '')}" style="width:130px">
+            <a href="${esc(shopUrl(id))}" target="_blank" rel="noopener">悠々亭 ›</a></div>
+        </div>
+        <div class="box">
+          <div class="box-head"><span>我的收藏</span><span class="muted">${vars.reduce((t, v) => t + ownedOf(v), 0)} 張${reserved ? ` · 預留 ${reserved}` : ''}</span></div>
+          ${vars.map(v => { const vp = price(v); return `<div class="own-row${v === id ? ' on' : ''}">
+            <span class="grow">${esc(label(v))} <span class="muted">${esc(v)}</span></span>
+            <span class="muted small">${vp ? hk(vp.hkd) : ''}</span>
+            <span class="cnt"><button class="small" data-d="${esc(v)}" data-n="-1" aria-label="減一">−</button><b>${ownedOf(v)}</b><button class="small primary" data-d="${esc(v)}" data-n="1" aria-label="加一">+</button></span>
+          </div>`; }).join('')}
+        </div>
+        ${c.text || c.trigger ? `<div class="box effect">${effectHtml(c.text)}${c.trigger ? `<div style="margin-top:6px"><span class="kw k-trig">觸發</span> ${effectHtml(c.trigger)}</div>` : ''}</div>` : ''}
+        ${c.getInfo ? `<div class="muted small">收錄：${esc(c.getInfo)}</div>` : ''}
+        ${usedIn.length ? `<div class="box"><div class="box-head"><span>用喺我的 Decks</span></div>${usedIn.map(d => `<div class="own-row"><span class="grow">${esc(d.name)}</span><span class="muted small">${d.entries.find(e => e.id === base).count} 張 · ${statusLabel(d.status)}</span></div>`).join('')}</div>` : ''}
       </div></div>`;
     $('#modal-body').onchange = e => {
       const m = e.target.closest('[data-mp]');
@@ -347,14 +422,167 @@
       render();
     };
     $('#modal-body').onclick = e => {
+      const g = e.target.closest('[data-goset]');
+      if (g) { $('#modal').close(); sv.set = g.dataset.goset; showTab('sets'); return; }
       const b = e.target.closest('[data-d]');
       if (!b) return;
       setOwned(b.dataset.d, ownedOf(b.dataset.d) + Number(b.dataset.n));
       showDetail(id);
       if (current === 'collection') drawGrid();
+      else if (current === 'sets' || current === 'home') render();
     };
     const dlg = $('#modal');
     if (!dlg.open) dlg.showModal();
+  }
+
+  // =============================================================== HOME
+  function renderHome() {
+    const el = $('#tab-home');
+    const price = pricer();
+    const totalCopies = Object.values(state.owned).reduce((t, n) => t + n, 0);
+    const value = E.collectionValue(state.owned, price);
+    const mySets = SET_CODES.map(code => E.setProgress(CARDS, state.owned, code, false)).filter(x => x.total);
+    const started = mySets.filter(x => x.have).sort((a, b) => b.pct - a.pct);
+    const allTotal = mySets.reduce((t, x) => t + x.total, 0);
+    const recent = [];
+    for (const x of state.openLog) if (!recent.includes(x.id)) { recent.push(x.id); if (recent.length >= 16) break; }
+    const decks = state.decks.filter(d => d.status !== 'sold');
+    const top = Object.keys(state.owned).map(id => ({ id, p: price(id) })).filter(x => x.p).sort((a, b) => b.p.hkd - a.p.hkd).slice(0, 12);
+    const counts = st => state.decks.filter(d => d.status === st).length;
+    el.innerHTML = `
+      ${CARDS.length ? '' : noDataNotice('咭表')}
+      <div class="hero-search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+        <input type="search" id="h-q" placeholder="路飛 OP08, c5, p6000…" autocomplete="off" enterkeyhint="search"></div>
+      <div class="muted hint">${SEARCH_HINT}</div>
+      <div id="h-results"></div>
+      <div class="kpis">
+        <button class="kpi" data-go="collection"><span>我嘅咭</span><b>${totalCopies.toLocaleString()}</b><small>${Object.keys(state.owned).length} 款</small></button>
+        <button class="kpi" data-go="value"><span>總值</span><b class="price">${hk(value.total)}</b><small>${value.unpriced ? value.unpriced + ' 張未有價' : '全部有價'}</small></button>
+        <button class="kpi" data-go="sets"><span>系列收集</span><b>${allTotal ? Math.round(started.reduce((t, x) => t + x.have, 0) / allTotal * 100) : 0}%</b><small>${started.length} 個系列有咭</small></button>
+        <button class="kpi" data-go="mine"><span>Decks</span><b>${counts('plan')} / ${counts('built')} / ${counts('sold')}</b><small>計劃 / 砌好 / 已賣</small></button>
+      </div>
+      <section class="home-sec"><div class="sec-head"><h2>我嘅系列</h2><button class="see" data-go="sets">全部 ›</button></div>
+        ${started.length ? `<div class="hscroll">${started.map(x => `<button class="setcard" data-set="${esc(x.code)}">${ring(x.pct, 54, Math.round(x.pct * 100) + '%')}
+          <b>${esc(x.code)}</b><small>${x.have}/${x.total}</small></button>`).join('')}</div>` : '<p class="muted">未有咭。去「開箱」開始入咭。</p>'}</section>
+      ${recent.length ? `<section class="home-sec"><div class="sec-head"><h2>最近加入</h2><button class="see" data-go="open">開箱 ›</button></div>
+        <div class="hscroll">${recent.map(id => `<button class="mini" data-detail="${esc(id)}"><div class="thumb">${imgTag(id)}</div><small>${esc(id)}</small></button>`).join('')}</div></section>` : ''}
+      <section class="home-sec"><div class="sec-head"><h2>我的 Decks <span class="count">${decks.length}</span></h2><button class="see" data-go="mine">全部 ›</button></div>
+        ${decks.length ? `<div class="hscroll">${decks.map(d => {
+          const lead = E.leaderOf(d.entries, byId);
+          const st = E.deckStatus(d.entries, available(d.id));
+          return `<button class="deckcard" data-deck="${esc(d.id)}"><div class="grow"><b>${esc(d.name)}</b><small>${st.have}/${st.need} · ${statusLabel(d.status)}</small>
+            <div class="bar ${barClass(st.pct)}"><i style="width:${(st.pct * 100).toFixed(0)}%"></i></div></div><div class="thumb">${imgTag(lead || '?')}</div></button>`;
+        }).join('')}</div>` : '<p class="muted">未有 Deck。去「Meta Decks」揀一副。</p>'}</section>
+      ${top.length ? `<section class="home-sec"><div class="sec-head"><h2>最貴嘅咭</h2><button class="see" data-go="value">貴咭 ›</button></div>
+        <div class="hscroll">${top.map(x => `<button class="mini" data-detail="${esc(x.id)}"><div class="thumb">${imgTag(x.id)}</div><small class="price">${hk(x.p.hkd)}</small></button>`).join('')}</div></section>` : ''}`;
+    const input = $('#h-q');
+    let timer;
+    input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(() => homeResults(input.value), 120); });
+    input.addEventListener('keydown', e => { if (e.key === 'Enter' && input.value.trim()) openCollection(input.value); });
+    el.onclick = e => {
+      const go = e.target.closest('[data-go]');
+      if (go) return showTab(go.dataset.go);
+      const st = e.target.closest('[data-set]');
+      if (st) { sv.set = st.dataset.set; return showTab('sets'); }
+      const dk = e.target.closest('[data-deck]');
+      if (dk) { mineOpen[dk.dataset.deck] = true; return showTab('mine'); }
+      const all = e.target.closest('[data-all]');
+      if (all) openCollection(input.value);
+    };
+  }
+  function homeResults(text) {
+    const box = $('#h-results');
+    if (!text.trim()) { box.innerHTML = ''; return; }
+    const q = E.parseQuery(text);
+    const hits = CARDS.filter(c => E.matchCard(c, q, ownedOf(c.id)));
+    const price = pricer();
+    box.innerHTML = `<div class="sec-head"><h2>${hits.length} 個結果</h2>${hits.length > 24 ? `<button class="see" data-all="1">睇晒 ›</button>` : ''}</div>
+      <div class="hscroll wrap">${hits.slice(0, 24).map(c => { const n = ownedOf(c.id), p = price(c.id); return `<button class="mini" data-detail="${esc(c.id)}">
+        <div class="thumb">${imgTag(c.id)}${n ? `<span class="own-badge">×${n}</span>` : ''}</div><small>${esc(c.id)}</small>${p ? `<small class="price">${hk(p.hkd)}</small>` : ''}</button>`; }).join('')}</div>`;
+  }
+
+  // =============================================================== SETS
+  const sv = { group: '', set: '', parallels: false, show: '', sort: 'id' };
+  function renderSets() {
+    const el = $('#tab-sets');
+    if (!CARDS.length) { el.innerHTML = noDataNotice('咭表'); return; }
+    return sv.set ? renderSetPage(el) : renderSetIndex(el);
+  }
+  function renderSetIndex(el) {
+    const groups = {};
+    for (const code of SET_CODES) (groups[E.setGroup(code)] = groups[E.setGroup(code)] || []).push(code);
+    const names = Object.keys(groups);
+    if (!names.includes(sv.group)) sv.group = names[0];
+    el.innerHTML = `
+      <div class="subtabs">${names.map(g => `<button data-group="${esc(g)}" class="${g === sv.group ? 'on' : ''}">${esc(g)}</button>`).join('')}</div>
+      <label class="muted small"><input type="checkbox" id="sv-par"${sv.parallels ? ' checked' : ''}> 連平行版一齊計</label>
+      ${names.filter(g => g === sv.group).map(g => {
+        const prog = groups[g].map(code => E.setProgress(CARDS, state.owned, code, sv.parallels)).filter(x => x.total);
+        const tot = prog.reduce((t, x) => t + x.total, 0), have = prog.reduce((t, x) => t + x.have, 0);
+        return `<div class="panel"><div class="group-head">${ring(tot ? have / tot : 0, 46, Math.round(tot ? have / tot * 100 : 0) + '%')}<h2>${esc(g)}</h2>
+          <span class="muted">${have}/${tot} 款</span></div>
+          <div class="setgrid">${prog.map(x => `<button class="setdot" data-set="${esc(x.code)}" title="${esc(SERIES_LABEL[x.code] || x.code)}">
+            ${ring(x.pct, 58, x.code.replace(/^(OP|EB|PRB|ST)/, '$1 '))}<small>${x.have}/${x.total}</small></button>`).join('')}</div></div>`;
+      }).join('')}`;
+    el.onclick = e => {
+      const g = e.target.closest('[data-group]');
+      if (g) { sv.group = g.dataset.group; return renderSets(); }
+      const st = e.target.closest('[data-set]');
+      if (st) { sv.set = st.dataset.set; renderSets(); window.scrollTo(0, 0); }
+    };
+    el.onchange = e => { if (e.target.id === 'sv-par') { sv.parallels = e.target.checked; renderSets(); } };
+  }
+  function setCards() {
+    let list = CARDS.filter(c => E.inSet(c, sv.set) && (sv.parallels || c.id === E.baseId(c.id)));
+    if (sv.show === 'have') list = list.filter(c => ownedOf(c.id));
+    if (sv.show === 'none') list = list.filter(c => !ownedOf(c.id));
+    const cmp = (a, b) => a.id.localeCompare(b.id, 'en', { numeric: true });
+    if (sv.sort === 'price') { const pr = pricer(); const v = c => (pr(c.id) || { hkd: -1 }).hkd; list.sort((a, b) => v(b) - v(a) || cmp(a, b)); }
+    else list.sort(cmp);
+    return list;
+  }
+  function renderSetPage(el) {
+    const x = E.setProgress(CARDS, state.owned, sv.set, sv.parallels);
+    const rarOrder = ['L', 'C', 'UC', 'R', 'SR', 'SEC', 'SP', 'TR', 'P', '平行'];
+    const rars = Object.keys(x.byRarity).sort((a, b) => (rarOrder.indexOf(a) + 1 || 99) - (rarOrder.indexOf(b) + 1 || 99));
+    const value = E.collectionValue(Object.fromEntries(CARDS.filter(c => E.inSet(c, sv.set)).map(c => [c.id, ownedOf(c.id)])), pricer());
+    el.innerHTML = `
+      <div class="set-head">
+        <button class="back" data-back="1" aria-label="返回">‹</button>
+        ${ring(x.pct, 64, Math.round(x.pct * 100) + '%')}
+        <div class="grow"><h2>${esc(sv.set)}</h2><div class="muted">${esc(SERIES_LABEL[sv.set] || E.setGroup(sv.set))}</div>
+          <div class="small">${x.have}/${x.total} 款 · ${x.copies} 張 · 值 <b class="price">${hk(value.total)}</b></div></div>
+      </div>
+      <div class="rarity-row">${rars.map(r => `<div class="rar"><b>${x.byRarity[r].have}/${x.byRarity[r].total}</b><span>${esc(r)}</span></div>`).join('')}</div>
+      <div class="toolbar">
+        <label class="small"><input type="checkbox" id="sp-par"${sv.parallels ? ' checked' : ''}> 包括平行版</label>
+        <select id="sp-show"><option value="">全部</option><option value="have">我有嘅</option><option value="none">未有 (缺咭)</option></select>
+        <select id="sp-sort"><option value="id">按編號</option><option value="price">按價錢</option></select>
+        <button class="small" id="sp-copy">複製缺咭清單</button>
+      </div>
+      <div class="grid" id="sp-grid"></div>`;
+    $('#sp-show').value = sv.show; $('#sp-sort').value = sv.sort;
+    const reserved = E.reservedTotals(state.decks), price = pricer();
+    $('#sp-grid').innerHTML = setCards().map(c => tileHtml(c, reserved, price)).join('');
+    el.onclick = e => {
+      if (e.target.closest('[data-back]')) { sv.set = ''; return renderSets(); }
+      if (e.target.closest('#sp-copy')) {
+        const miss = CARDS.filter(c => E.inSet(c, sv.set) && (sv.parallels || c.id === E.baseId(c.id)) && !ownedOf(c.id));
+        return copyText(miss.map(c => `${c.id} ${c.rarity || ''} ${c.name || ''}`).join('\n'));
+      }
+      const btn = e.target.closest('[data-act]'), tile = e.target.closest('.tile');
+      if (!btn || !tile) return;
+      const id = tile.dataset.id;
+      if (btn.dataset.act === 'detail') return showDetail(id);
+      setOwned(id, ownedOf(id) + (btn.dataset.act === 'inc' ? 1 : -1));
+      tile.outerHTML = tileHtml(byId[id] || { id }, E.reservedTotals(state.decks));
+    };
+    el.onchange = e => {
+      if (e.target.id === 'sp-par') sv.parallels = e.target.checked;
+      if (e.target.id === 'sp-show') sv.show = e.target.value;
+      if (e.target.id === 'sp-sort') sv.sort = e.target.value;
+      renderSets();
+    };
   }
 
   // ============================================================== OPEN
@@ -919,8 +1147,8 @@
   // ---------------------------------------------------------------- boot
   try { const t = localStorage.getItem('opcg-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) { /* ignore */ }
   load().then(() => {
-    let tab = 'collection';
+    let tab = 'home';
     try { tab = localStorage.getItem('opcg-tab') || tab; } catch (e) { /* ignore */ }
-    showTab(['collection', 'open', 'meta', 'mine', 'value', 'settings'].includes(tab) ? tab : 'collection');
+    showTab(TABS.includes(tab) ? tab : 'home');
   });
 })();

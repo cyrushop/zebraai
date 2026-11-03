@@ -144,4 +144,54 @@ t('deck cost, missing cost, collection value', () => {
   assert.deepStrictEqual(E.collectionValue({ 'OP08-002': 3, 'OP08-002_p1': 1, 'OP08-009': 2 }, price), { total: 265, priced: 4, unpriced: 2 });
 });
 
+t('smart search query', () => {
+  const q = E.parseQuery('Luffy OP17, c5, p6000 紅 SR');
+  assert.deepStrictEqual(q.text, ['luffy']);
+  assert.deepStrictEqual(q.sets, ['OP17']);
+  assert.deepStrictEqual(q.cost, [5, 5]);
+  assert.deepStrictEqual(q.power, [6000, 6000]);
+  assert.deepStrictEqual(q.colors, ['紅']);
+  assert.deepStrictEqual(q.rarities, ['SR']);
+  const q2 = E.parseQuery('op-8 c3-5 k1000 leader 未有 平行 op08-001');
+  assert.deepStrictEqual(q2.sets, ['OP08']);
+  assert.deepStrictEqual(q2.cost, [3, 5]);
+  assert.deepStrictEqual(q2.counter, [1000, 1000]);
+  assert.deepStrictEqual(q2.cats, ['LEADER']);
+  assert.strictEqual(q2.owned, false); assert.strictEqual(q2.alt, true);
+  assert.deepStrictEqual(q2.text, ['op08-001']);
+
+  const luffy = { id: 'OP17-010', name: 'Monkey.D.Luffy', cost: 5, power: 6000, colors: ['紅'], rarity: 'SR', category: 'CHARACTER', feature: '草帽一夥' };
+  assert.ok(E.matchCard(luffy, q, 0));
+  assert.ok(!E.matchCard(Object.assign({}, luffy, { cost: 4 }), q, 0));
+  assert.ok(E.matchCard(luffy, E.parseQuery('草帽 有'), 2));
+  assert.ok(!E.matchCard(luffy, E.parseQuery('草帽 有'), 0));
+  const leader = { id: 'OP08-001', name: 'x', life: 5, category: 'LEADER', colors: ['紅', '綠'] };
+  assert.ok(E.matchCard(leader, E.parseQuery('c5 leader 紅 綠'), 0), 'leader cost filter uses life');
+  assert.ok(!E.matchCard(leader, E.parseQuery('平行'), 0));
+  assert.ok(E.matchCard({ id: 'OP08-001_p1', name: 'x' }, E.parseQuery('平行'), 0));
+});
+
+t('set groups and progress', () => {
+  assert.strictEqual(E.setGroup('OP17'), '補充包');
+  assert.strictEqual(E.setGroup('PRB01'), '高級補充包');
+  assert.strictEqual(E.setGroup('P'), '推廣卡');
+  const cs = [
+    { id: 'OP08-001', rarity: 'L' }, { id: 'OP08-002', rarity: 'SR' }, { id: 'OP08-003', rarity: 'SR' },
+    { id: 'OP08-002_p1', rarity: 'SR' }, { id: 'OP01-016', rarity: 'R', series: [{ code: 'PRB01' }] },
+  ];
+  const owned = { 'OP08-002': 3, 'OP08-002_p1': 1 };
+  const a = E.setProgress(cs, owned, 'OP08', false);
+  assert.deepStrictEqual([a.total, a.have, a.copies], [3, 1, 3]);
+  assert.deepStrictEqual(a.byRarity, { L: { total: 1, have: 0 }, SR: { total: 2, have: 1 } });
+  const b = E.setProgress(cs, owned, 'OP08', true);
+  assert.deepStrictEqual([b.total, b.have], [4, 2]);
+  assert.deepStrictEqual(b.byRarity['平行'], { total: 1, have: 1 });
+  assert.strictEqual(E.setProgress(cs, owned, 'PRB01', false).total, 1, 'reprint counts in its series');
+});
+
+t('pricer returns history in HKD', () => {
+  const price = E.makePricer({ bot: { a: { jpy: 200, history: [['2026-11-01', 100], ['2026-11-03', 200]] } }, rate: 0.05 });
+  assert.deepStrictEqual(price('a').history, [['2026-11-01', 5], ['2026-11-03', 10]]);
+});
+
 console.log(`\n${passed} tests passed`);
