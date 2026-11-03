@@ -47,6 +47,16 @@ python3 opcg/bot/scrape_decks.py
 | 貴咭 | 單價 HK$50 (可改) 或以上嘅咭：單價、數量、總值、7 日升跌、悠々亭連結。可以逐張輸入手動價。顯示成個咭庫總值，可匯出 CSV。 |
 | 設定 | 行 BOT、匯率同價錢係數、平行版計唔計入 Deck、匯出 / 匯入 JSON 備份、匯出 CSV。 |
 
+### 揀 Deck 嚟砌
+
+1. 喺 https://onepiecetopdecks.com/deck-list/ 揀咗想砌嘅 Deck。
+2. 複製佢個 deckgen 連結 (`.../deckgen/?dn=RG%20Luffy&...&dg=1nOP13-001a4nOP13-016...`)，或者「Decklist in text」(`1xOP13-001` …)。
+3. 貼落「我的 Decks」頂嘅匯入框 (或者直接貼落主頁搜尋框)。一次可以貼幾條連結，每行一條。
+4. Deck 名、名次、比賽、作者、日期自動讀入；即刻顯示你有幾多張、差邊幾張、補齊要幾錢。
+5. 撳「顯示中文效果」：每張咭下面顯示官方中文效果 (來自 asia-tc.onepiece-cardgame.com)，【登場時】【啟動主要】【每回合1次】等關鍵字會標色。
+
+Meta Deck 好多時用到 OP01、ST、PRB、EB 等舊系列嘅咭，所以咭表 BOT 預設會讀晒所有系列。
+
 ### 智能搜尋
 
 用空格或逗號分隔，可以混合使用：

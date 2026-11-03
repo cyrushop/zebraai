@@ -8,7 +8,10 @@ writes opcg/data/decks.json + decks.js for the app.
 
 It recognises two ways a deck is written on a page:
   * deck-builder links whose query string has dg=1nOP08-001a4nOP08-002a...
-    (with dn=deck name, au=author, date=, pl=placement when present)
+    (with dn=deck name, au=author, date=M/D/YYYY, pl=placement, hs=event,
+    tn=event type, cn=country when present), e.g.
+    /deck-list/<page>/deckgen/?dn=RG%20Luffy&date=11/1/2026&cn=JP&au=Shishi
+    &pl=2nd%20(7-1)&tn=ShopEvent&hs=DragonTail%20Cup&dg=1nOP13-001a4nOP13-016a...
   * plain text lists, one card per line: "4xOP08-002" / "4 OP08-002" / "OP08-002 x4"
 
 Standard library only. Waits about 1 s between requests.
@@ -56,6 +59,12 @@ def _leader(entries):
     return entries[0]["id"] if entries and entries[0]["count"] == 1 else ""
 
 
+def iso_date(s):
+    """'11/1/2026' (M/D/YYYY, as the site writes it) -> '2026-11-01'."""
+    m = re.match(r"^\s*(\d{1,2})/(\d{1,2})/(\d{4})\s*$", s or "")
+    return f"{m.group(3)}-{int(m.group(1)):02d}-{int(m.group(2)):02d}" if m else (s or "")
+
+
 def _first(qs, *keys):
     for k in keys:
         v = qs.get(k)
@@ -94,9 +103,10 @@ def parse_decks(html, page_url):
             decks.append({
                 "name": _first(qs, "dn") or htmldom.clean(node.text()) or ctx[:80] or page_title,
                 "author": _first(qs, "au"),
-                "date": _first(qs, "date"),
+                "date": iso_date(_first(qs, "date")),
                 "placement": _first(qs, "pl"),
-                "event": _first(qs, "tn", "hs", "tr"),
+                "event": _first(qs, "hs", "tn"),
+                "eventType": _first(qs, "tn"),
                 "country": _first(qs, "cn"),
                 "context": ctx,
                 "page": page_title,

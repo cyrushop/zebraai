@@ -219,12 +219,33 @@
       <div class="spark-axis muted"><span>${esc(history[0][0])}</span><span>低 ${hk(min)} · 高 ${hk(max)}</span><span>${esc(history[history.length - 1][0])}</span></div>`;
   }
   /** Effect text with 【keyword】 brackets shown as chips. */
+  const KW = [
+    ['k-play', /登場時|攻擊時|被KO時|回合結束時|對方回合中|自己回合中|對方的攻擊時|On Play|When Attacking|On K\.?O\.?|Opponent's Turn|Your Turn|End of Your Turn/],
+    ['k-act', /啟動|起動|主要|反擊|Activate|Main|Counter/],
+    ['k-once', /每回合1次|1回合1次|Once Per Turn/],
+    ['k-trig', /觸發|Trigger/],
+    ['k-kw', /阻擋者|速攻|雙重攻擊|消滅|Blocker|Rush|Double Attack|Banish/],
+    ['k-don', /咚|DON|ドン/],
+  ];
+  /** Effect text with 【keyword】 chips (colours by kind) and 《type》 names in bold. */
   function effectHtml(text) {
-    return esc(text || '').replace(/【([^】]{1,16})】/g, (m, k) => {
-      const cls = /登場|On Play/.test(k) ? 'k-play' : /起動|Activate|主要|Main/.test(k) ? 'k-act' : /觸發|Trigger/.test(k) ? 'k-trig'
-        : /阻擋|Blocker|速攻|Rush|雙重|Double|斬殺|Banish/.test(k) ? 'k-kw' : 'k-other';
-      return `<span class="kw ${cls}">${k}</span>`;
-    }).replace(/\n/g, '<br>');
+    return esc(text || '')
+      .replace(/【([^】]{1,20})】/g, (m, k) => `<span class="kw ${(KW.find(x => x[1].test(k)) || ['k-other'])[0]}">${k}</span>`)
+      .replace(/《([^》]{1,24})》/g, '<b class="ftype">《$1》</b>')
+      .replace(/\n/g, '<br>');
+  }
+  function triggerHtml(t) {
+    if (!t) return '';
+    return /^\s*【(觸發|トリガー|Trigger)】/.test(t) ? effectHtml(t) : `<span class="kw k-trig">觸發</span> ${effectHtml(t)}`;
+  }
+  function costPower(c) {
+    if (!c) return '';
+    const bits = [];
+    if (c.life != null) bits.push('生命 ' + c.life);
+    else if (c.cost != null) bits.push('費 ' + c.cost);
+    if (c.power) bits.push(c.power);
+    if (c.counter) bits.push('反擊 ' + c.counter);
+    return bits.join(' · ');
   }
   function barClass(p) { return p >= 0.999 ? '' : p >= 0.8 ? 'mid' : 'low'; }
   function uid() { return 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
@@ -390,8 +411,8 @@
         <h2>${esc(c.name || id)}</h2>
         ${c.feature ? `<div class="muted">${esc(c.feature)}</div>` : ''}
         <div class="stats-tiles">
-          ${isLeader ? tile('生命', c.life) : tile('費用', c.cost)}${tile('力量', c.power)}${tile('反擊', c.counter)}
-          ${tile('顏色', c.color, c.color ? dots(c) + ' ' + esc(c.color) : '')}${tile('屬性', c.attribute)}
+          ${isLeader ? tile('生命值', c.life) : tile('費用', c.cost)}${tile('力量值', c.power)}${tile('反擊值', c.counter == null ? (c.category ? '-' : null) : c.counter)}
+          ${tile('顏色', c.color, c.color ? dots(c) + ' ' + esc(c.color) : '')}${tile('屬性', c.attribute)}${tile('擴張記號', c.block)}
         </div>
         <div class="box">
           <div class="box-head"><span>價錢${id === base ? '' : ' (呢個平行版)'}</span>
@@ -410,8 +431,9 @@
             <span class="cnt"><button class="small" data-d="${esc(v)}" data-n="-1" aria-label="減一">−</button><b>${ownedOf(v)}</b><button class="small primary" data-d="${esc(v)}" data-n="1" aria-label="加一">+</button></span>
           </div>`; }).join('')}
         </div>
-        ${c.text || c.trigger ? `<div class="box effect">${effectHtml(c.text)}${c.trigger ? `<div style="margin-top:6px"><span class="kw k-trig">觸發</span> ${effectHtml(c.trigger)}</div>` : ''}</div>` : ''}
-        ${c.getInfo ? `<div class="muted small">收錄：${esc(c.getInfo)}</div>` : ''}
+        ${c.text || c.trigger ? `<div class="box effect">${effectHtml(c.text)}${c.trigger ? `<div style="margin-top:6px">${triggerHtml(c.trigger)}</div>` : ''}</div>` : ''}
+        ${c.getInfo ? `<div class="muted small">獲取方法：${esc(c.getInfo)}</div>` : ''}
+        ${!c.text && !CARDS.length ? '<div class="notice small">未有官方中文效果：先行咭表 BOT (asia-tc.onepiece-cardgame.com)。</div>' : ''}
         ${usedIn.length ? `<div class="box"><div class="box-head"><span>用喺我的 Decks</span></div>${usedIn.map(d => `<div class="own-row"><span class="grow">${esc(d.name)}</span><span class="muted small">${d.entries.find(e => e.id === base).count} 張 · ${statusLabel(d.status)}</span></div>`).join('')}</div>` : ''}
       </div></div>`;
     $('#modal-body').onchange = e => {
@@ -478,7 +500,10 @@
     const input = $('#h-q');
     let timer;
     input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(() => homeResults(input.value), 120); });
-    input.addEventListener('keydown', e => { if (e.key === 'Enter' && input.value.trim()) openCollection(input.value); });
+    input.addEventListener('keydown', e => {
+      if (e.key !== 'Enter' || !input.value.trim()) return;
+      if (/[?&]dg=/i.test(input.value)) importDecks(input.value); else openCollection(input.value);
+    });
     el.onclick = e => {
       const go = e.target.closest('[data-go]');
       if (go) return showTab(go.dataset.go);
@@ -493,6 +518,12 @@
   function homeResults(text) {
     const box = $('#h-results');
     if (!text.trim()) { box.innerHTML = ''; return; }
+    if (/[?&]dg=|^\s*\d+\s*x\s*(OP|ST|EB|PRB)/im.test(text)) {
+      box.innerHTML = `<div class="panel"><h3>識別到 Deck</h3>${importPreview(text)}
+        <div class="actions" style="margin-top:8px"><button class="primary" data-import="1">匯入去「我的 Decks」</button></div></div>`;
+      box.querySelector('[data-import]').onclick = () => importDecks(text);
+      return;
+    }
     const q = E.parseQuery(text);
     const hits = CARDS.filter(c => E.matchCard(c, q, ownedOf(c.id)));
     const price = pricer();
@@ -659,7 +690,7 @@
     const el = $('#tab-meta');
     if (!META.length) {
       el.innerHTML = noDataNotice('Deck list') + importPanelHtml();
-      bindImport();
+      bindImport($('#tab-meta'));
       return;
     }
     const src = window.OPCG_DECKS;
@@ -667,12 +698,13 @@
       <div class="toolbar">
         <input type="search" id="mf-q" placeholder="搜尋 Deck / 領航 / 作者 / 比賽">
         <select id="mf-color"><option value="">全部顏色</option>${COLORS.map(c => `<option>${esc(c)}</option>`).join('')}</select>
+        ${fxButton()}
         <select id="mf-sort"><option value="pct">我最夠咭先</option><option value="missing">差最少張先</option><option value="fill">補咭最平先</option><option value="value">市值最高先</option><option value="date">最新先</option></select>
       </div>
       <div class="stats"><span>${META.length} 副 Deck · 來源 <a href="${esc(src.source)}" target="_blank" rel="noopener">${esc(src.source)}</a> · 更新 ${esc((src.scrapedAt || '').slice(0, 10))}</span></div>
       <div class="decks" id="mf-list"></div>
       <button class="more" id="mf-more">顯示更多</button>
-      ${importPanelHtml()}`;
+      ${importPanelHtml(false)}`;
     for (const k of ['q', 'color', 'sort']) {
       const input = $('#mf-' + k);
       input.value = mf[k];
@@ -684,10 +716,11 @@
       if (!b) return;
       const d = META.find(x => x.id === b.dataset.id);
       if (b.dataset.act === 'toggle') { mf.open[d.id] = !mf.open[d.id]; drawMeta(); }
-      if (b.dataset.act === 'copy') addMyDeck(d.name || 'Meta deck', d.entries, { from: d.url, meta: d.id });
+      if (b.dataset.act === 'copy') addMyDeck(d.name || 'Meta deck', d.entries, { from: d.url, meta: d.id, author: d.author, date: d.date,
+        placement: d.placement, event: d.event, eventType: d.eventType, country: d.country });
       if (b.dataset.act === 'text') copyText(E.deckToText(d.entries, byId));
     });
-    bindImport();
+    bindImport($('#tab-meta'));
     drawMeta();
   }
   function drawMeta() {
@@ -715,7 +748,7 @@
   }
   function metaDeckHtml(d) {
     const leadCard = byId[d.lead];
-    const info = [d.placement, d.event, d.country, d.author && 'by ' + d.author, d.date].filter(Boolean).join(' · ');
+    const info = [d.placement, d.event, d.eventType && d.eventType !== d.event ? d.eventType : '', d.country, d.author && 'by ' + d.author, d.date].filter(Boolean).join(' · ');
     return `<div class="deck${mf.open[d.id] ? ' wide' : ''}">
       <div class="head"><div class="thumb">${imgTag(d.lead)}</div>
         <div class="grow"><div class="title">${esc(d.name || cardName(d.lead) || d.lead)}</div>
@@ -732,6 +765,7 @@
     </div>`;
   }
   function costLine(cost, fill) {
+    if (cost.cost === 0 && cost.unknown.length) return '<div class="muted small">未有價錢</div>';
     const unk = cost.unknown.length ? ` <span class="muted">(${cost.unknown.length} 款未有價)</span>` : '';
     return `<div class="muted" style="font-size:13px">市值 <b class="price">${hk(cost.cost)}</b>${unk}${fill ? ` · 補齊要 <b class="price">${hk(fill.cost)}</b>${fill.unknown ? ` +${fill.unknown} 張未有價` : ''}` : ''}</div>`;
   }
@@ -742,9 +776,11 @@
       const la = ca.category === 'LEADER' ? 0 : 1, lb = cb.category === 'LEADER' ? 0 : 1;
       return la - lb || (ca.cost ?? 99) - (cb.cost ?? 99) || a.id.localeCompare(b.id);
     });
-    return `<div class="rows">${sorted.map(r => `<div class="row${r.missing ? ' miss' : ''}">
+    const fx = !!settings().showEffects;
+    return `<div class="rows${fx ? ' fx' : ''}">${sorted.map(r => `<div class="row${r.missing ? ' miss' : ''}">
       <div class="thumb" data-detail="${esc(r.id)}">${imgTag(r.id)}</div>
-      <div class="grow"><b>${esc(r.id)}</b> ${esc(cardName(r.id))}</div>
+      <div class="grow"><b>${esc(r.id)}</b> ${esc(cardName(r.id))} <span class="muted small">${esc(costPower(byId[r.id]))}</span>
+        ${fx ? `<div class="row-fx">${byId[r.id] && byId[r.id].text ? effectHtml(byId[r.id].text) : '<span class="muted">未有效果資料</span>'}${byId[r.id] && byId[r.id].trigger ? `<div>${triggerHtml(byId[r.id].trigger)}</div>` : ''}</div>` : ''}</div>
       <span class="muted rowprice">${(p => p ? hk(p.hkd) : '')(price(r.id))}</span>
       <span class="muted" title="可用 (扣除其他已砌 Deck)">有 ${r.free}</span>
       ${editable ? `<span class="cnt"><button class="small" data-e="${esc(r.id)}" data-n="-1">−</button><b class="need">${r.need}</b><button class="small" data-e="${esc(r.id)}" data-n="1">+</button></span>`
@@ -753,24 +789,60 @@
   }
   document.addEventListener('click', e => {
     const t = e.target.closest('[data-detail]');
-    if (t) showDetail(t.dataset.detail);
+    if (t) return showDetail(t.dataset.detail);
+    const fx = e.target.closest('[data-fx]');
+    if (fx) { settings().showEffects = !settings().showEffects; save(); render(); }
   });
-  function importPanelHtml() {
-    return `<div class="panel" style="margin-top:16px"><h3>貼上 Deck list 匯入</h3>
-      <p class="muted">支援 <code>4xOP08-002</code>、<code>4 OP08-002</code>、OPTCGSim 格式，或者 onepiecetopdecks 嘅 deckgen 連結 (dg=...)。</p>
-      <input id="imp-name" placeholder="Deck 名" style="width:100%;margin-bottom:6px">
-      <textarea id="imp-text" placeholder="1xOP08-001&#10;4xOP08-002&#10;..."></textarea>
-      <div class="actions" style="margin-top:8px"><button class="primary" id="imp-go">匯入做我的 Deck</button></div></div>`;
+  function fxButton() {
+    return `<button class="small${settings().showEffects ? ' primary' : ''}" data-fx="1">${settings().showEffects ? '收埋中文效果' : '顯示中文效果'}</button>`;
   }
-  function bindImport() {
-    const go = $('#imp-go');
+  function deckInfo(d) {
+    const bits = [d.placement, d.event, d.eventType && d.eventType !== d.event ? d.eventType : '', d.country, d.author && 'by ' + d.author, d.date].filter(Boolean);
+    const link = d.from || d.url;
+    return bits.length || link ? `<div class="muted small">${esc(bits.join(' · '))}${link && /^https?:/.test(link) ? ` · <a href="${esc(link)}" target="_blank" rel="noopener">原 Deck ›</a>` : ''}</div>` : '';
+  }
+  function importPanelHtml(open) {
+    return `<details class="panel import"${open ? ' open' : ''}><summary><b>＋ 貼上 Deck 連結或 Deck list</b></summary>
+      <p class="muted small">喺 onepiecetopdecks 揀咗想砌嘅 Deck，複製個 <b>deckgen 連結</b> (可以一次貼幾條，每行一條) 或者「Decklist in text」(<code>4xOP08-002</code>) 貼落嚟。Deck 名、作者、名次、比賽、日期會自動讀入。</p>
+      <textarea class="imp-text" aria-label="Deck 連結或 Deck list" placeholder="https://onepiecetopdecks.com/deck-list/.../deckgen/?dn=...&amp;dg=1nOP13-001a4nOP13-016...&#10;或者&#10;1xOP13-001&#10;4xOP13-016&#10;..."></textarea>
+      <div class="imp-preview muted small"></div>
+      <div class="actions" style="margin-top:8px"><input class="imp-name" placeholder="Deck 名 (可留空)" aria-label="Deck 名" style="flex:1;min-width:0"><button class="primary imp-go">匯入</button></div></details>`;
+  }
+  function importDecks(text, nameOverride) {
+    const found = E.parseDeckImports(text).filter(d => d.entries.length);
+    if (!found.length) { toast('搵唔到咭號'); return 0; }
+    const ids = [];
+    for (const d of found) {
+      const lead = E.leaderOf(d.entries, byId);
+      const name = (found.length === 1 && nameOverride) || d.meta.name || cardName(lead) || lead || '新 Deck';
+      const meta = Object.assign({}, d.meta); delete meta.name;
+      if (meta.url) { meta.from = meta.url; delete meta.url; }
+      const deck = Object.assign({ id: uid(), name, entries: d.entries, status: 'plan', price: '', createdAt: new Date().toISOString() }, meta);
+      state.decks.unshift(deck);
+      ids.push(deck.id);
+    }
+    if (ids.length === 1) mineOpen[ids[0]] = true;
+    mineImportOpen = false;
+    save();
+    const skipped = found.reduce((t, d) => t + d.unknown.filter(u => !/^decklist/i.test(u)).length, 0);
+    toast(`已匯入 ${ids.length} 副 Deck` + (skipped ? `，${skipped} 行睇唔明已略過` : ''));
+    if (current !== 'mine') showTab('mine'); else render();
+    return ids.length;
+  }
+  function importPreview(text) {
+    const found = E.parseDeckImports(text).filter(d => d.entries.length);
+    const avail = available();
+    return found.map(d => {
+      const st = E.deckStatus(d.entries, avail);
+      const lead = E.leaderOf(d.entries, byId);
+      return `<div>${esc(d.meta.name || cardName(lead) || lead)} · ${esc(lead)} · ${st.need} 張 · 我有 ${st.have} · <span class="${st.missing ? 'bad' : 'ok'}">差 ${st.missing}</span></div>`;
+    }).join('');
+  }
+  function bindImport(root) {
+    const go = $('.imp-go', root);
     if (!go) return;
-    go.addEventListener('click', () => {
-      const { entries, unknown } = E.parseDeckText($('#imp-text').value);
-      if (!entries.length) { toast('搵唔到咭號'); return; }
-      addMyDeck($('#imp-name').value || cardName(E.leaderOf(entries, byId)) || '新 Deck', entries, {});
-      if (unknown.length) toast(`${unknown.length} 行睇唔明，已略過`);
-    });
+    $('.imp-text', root).addEventListener('input', e => { $('.imp-preview', root).innerHTML = importPreview(e.target.value); });
+    go.addEventListener('click', () => importDecks($('.imp-text', root).value, $('.imp-name', root).value.trim()));
   }
 
   // ================================================================ MINE
@@ -778,6 +850,7 @@
   const statusLabel = s => STATUS[s] || s;
   const mineOpen = {};
   let mineFilter = 'active';
+  let mineImportOpen = true;
   function addMyDeck(name, entries, extra) {
     const d = Object.assign({ id: uid(), name, entries: entries.map(e => ({ id: e.id, count: e.count })), status: 'plan', price: '', createdAt: new Date().toISOString() }, extra);
     state.decks.unshift(d);
@@ -795,16 +868,17 @@
     const shop = E.shoppingList(plan, available());
     el.innerHTML = `
       <div class="toolbar">
-        <button class="primary" id="new-deck">＋ 新 Deck</button>
+        <button id="new-deck">＋ 空白 Deck</button>
+        ${fxButton()}
         <select id="mine-filter"><option value="active">計劃中 + 已砌好</option><option value="plan">計劃中</option><option value="built">已砌好</option><option value="sold">已賣出</option><option value="all">全部</option></select>
       </div>
+      ${importPanelHtml(!state.decks.length || mineImportOpen)}
       <div class="stats"><span>計劃中 <b>${plan.length}</b></span><span>已砌好 <b>${state.decks.filter(d => d.status === 'built').length}</b></span>
         <span>已賣出 <b>${sold.length}</b> 副 · 收入 <b>${hk(income)}</b> · 對比市值 <b class="${profit >= 0 ? 'ok' : 'bad'}">${profit >= 0 ? '+' : ''}${hk(profit)}</b></span></div>
       <div class="decks" id="mine-list"></div>
       ${plan.length ? `<div class="panel" style="margin-top:16px"><h3>補咭清單 (全部「計劃中」Deck 一齊計)</h3>
         ${shop.length ? `<table class="list"><tr><th>咭</th><th>需要</th><th>可用</th><th>仲差</th></tr>${shop.map(r => `<tr><td><b>${esc(r.id)}</b> ${esc(cardName(r.id))}</td><td>${r.need}</td><td>${r.free}</td><td class="bad">${r.missing}</td></tr>`).join('')}</table>
-        <div class="actions" style="margin-top:8px"><button class="small" id="copy-shop">複製清單</button></div>` : '<p class="ok">全部計劃中 Deck 都夠咭！</p>'}</div>` : ''}
-      ${importPanelHtml()}`;
+        <div class="actions" style="margin-top:8px"><button class="small" id="copy-shop">複製清單</button></div>` : '<p class="ok">全部計劃中 Deck 都夠咭！</p>'}</div>` : ''}`;
     $('#mine-filter').value = mineFilter;
     $('#mine-filter').addEventListener('change', e => { mineFilter = e.target.value; drawMine(); });
     $('#new-deck').addEventListener('click', () => addMyDeck('新 Deck', [], {}));
@@ -813,7 +887,8 @@
     $('#mine-list').addEventListener('click', onMineClick);
     $('#mine-list').addEventListener('change', onMineChange);
     $('#mine-list').addEventListener('input', onMineInput);
-    bindImport();
+    bindImport(el);
+    $('.import', el).addEventListener('toggle', e => { mineImportOpen = e.target.open; });
     drawMine();
   }
   function drawMine() {
@@ -837,20 +912,22 @@
         <div class="grow">
           <div class="title">${open && !sold ? `<input data-f="name" value="${esc(d.name)}">` : esc(d.name)}</div>
           <div class="muted">${esc(lead)} ${esc(cardName(lead))} ${dots(byId[lead])}</div>
+          ${deckInfo(d)}
           <span class="badge ${d.status}">${statusLabel(d.status)}</span>
           ${sold ? `<span class="muted"> ${esc((d.soldAt || '').slice(0, 10))} · 賣 ${hk(d.soldPrice)}</span>` : ''}
         </div></div>
       <div class="money">
+        ${!sold && cost.unknown.length === d.entries.length ? '<span>市值 <span class="muted">未有價錢 (行價錢 BOT 或者輸入手動價)</span></span>' : `
         <span>市值${sold ? ' (賣出時)' : ''} <b class="price">${hk(base)}</b>${!sold && cost.unknown.length ? ` <span class="muted">(${cost.unknown.length} 款未有價)</span>` : ''}</span>
-        ${!sold && st.missing ? `<span>補齊要 <b class="price">${hk(E.missingCost(st.rows, price).cost)}</b></span>` : ''}
+        ${!sold && st.missing ? `<span>補齊要 <b class="price">${hk(E.missingCost(st.rows, price).cost)}</b></span>` : ''}`}
         ${profit != null ? `<span>${sold ? '賺蝕' : '預計賺蝕'} <b class="${profit >= 0 ? 'ok' : 'bad'}">${profit >= 0 ? '+' : ''}${hk(profit)}</b></span>` : ''}
       </div>
       ${sold ? '' : `<div class="bar ${barClass(st.pct)}"><i style="width:${(st.pct * 100).toFixed(0)}%"></i></div>
       <div>${st.have}/${st.need} 張 · ${st.missing ? `<span class="bad">差 ${st.missing} 張</span>` : '<span class="ok">夠晒咭</span>'}</div>`}
       ${issues.length && !sold ? `<ul class="issues">${issues.map(i => `<li>${esc(i)}</li>`).join('')}</ul>` : ''}
       ${open ? `
-        ${!sold ? `<label>售價 HK$ <input data-f="price" type="number" min="0" step="1" value="${esc(d.price)}" style="width:110px"></label>
-          <button class="small" data-act="askmarket">用市值做售價</button>` : ''}
+        ${!sold ? `<div class="toolbar" style="margin:0"><label>售價 HK$ <input data-f="price" type="number" min="0" step="1" value="${esc(d.price)}" style="width:110px"></label>
+          <button class="small" data-act="askmarket">用市值做售價</button></div>` : ''}
         ${rowsHtml(st.rows, !sold)}
         ${!sold ? `<div class="picker"><input data-f="search" placeholder="加咭：打編號或名" style="width:100%"><div class="results"></div></div>` : ''}
         <textarea data-f="notes" placeholder="備註 (買家、交收…)" style="min-height:50px">${esc(d.notes || '')}</textarea>` : ''}

@@ -22,18 +22,18 @@ CARDLIST = """
   <option value="554901">推廣卡</option>
 </select></form>
 <div class="resultCol">
-<dl class="modalCol" id="OP08-001">
-  <dt><div class="infoCol"><span>OP08-001</span> | <span>L</span> | <span>LEADER</span></div>
-      <div class="cardName">托尼托尼・喬巴</div></dt>
-  <dd><div class="frontCol"><img class="lazy" data-src="../images/cardlist/card/OP08-001.png?250101" src="data:image/gif;base64,R0"></div>
+<dl class="modalCol" id="OP10-001">
+  <dt><div class="infoCol"><span>OP10-001</span> | <span>L</span> | <span>LEADER</span></div>
+      <div class="cardName">斯摩格</div></dt>
+  <dd><div class="frontCol"><img class="lazy" data-src="../images/cardlist/card/OP10-001.png?250101" src="data:image/gif;base64,R0"></div>
     <div class="backCol">
-      <div class="col2"><div class="cost"><h3>生命</h3>4</div>
-        <div class="attribute"><h3>屬性</h3><img src="x.png" alt="打"><i>打</i></div></div>
-      <div class="col2"><div class="power"><h3>力量</h3>5000</div><div class="counter"><h3>反擊</h3>-</div></div>
-      <div class="color"><h3>顏色</h3>紅/綠</div>
-      <div class="feature"><h3>特徵</h3>動物/草帽一夥</div>
-      <div class="text"><h3>效果</h3>【起動主要】【1回合1次】<br>效果第二行</div>
-      <div class="getInfo"><h3>入手情報</h3>擴充包【OP-08】</div>
+      <div class="col2"><div class="cost"><h3>生命值</h3>4</div>
+        <div class="attribute"><h3>屬性</h3><img src="x.png" alt="斬"><i>斬</i></div></div>
+      <div class="col2"><div class="power"><h3>力量值</h3>5000</div><div class="counter"><h3>反擊值</h3>-</div></div>
+      <div class="col2"><div class="color"><h3>顏色</h3>紅/綠</div><div class="block"><h3>擴張記號</h3>3</div></div>
+      <div class="feature"><h3>特征</h3>龐克哈薩特/海軍</div>
+      <div class="text"><h3>效果</h3>【對方回合中】自己擁有《海軍》或《龐克哈薩特》特徵的角色卡全數力量值+1000。<br>【啟動主要】【每回合1次】若場上有自己力量值7000以上的角色卡時，將最多2張自己的咚!!卡置為活動狀態。</div>
+      <div class="getInfo"><h3>獲取方法</h3>王族血脈【OP-10】</div>
     </div></dd>
 </dl>
 <dl class="modalCol" id="OP08-002_p1">
@@ -66,6 +66,7 @@ DECK_PAGE = """
 <html><body><h1>Japan OP-12 Decks</h1>
 <table>
 <tr><td>1st Place</td><td><a href="https://onepiecetopdecks.com/deckgen/?dn=Red%20Zoro&amp;au=Taro&amp;date=2026-10-01&amp;pl=1st&amp;dg=1nOP08-001a4nOP08-002a4nOP08-003a4nOP08-004a4nOP08-005a4nOP08-006">Red Zoro</a></td></tr>
+<tr><td>2nd</td><td><a href="/deck-list/japan-eb05op18-deck-list-heroines-and-the-dominance-of-god/deckgen/?dn=RG%20Luffy&amp;date=11/1/2026&amp;cn=JP&amp;au=Shishi&amp;pl=2nd%20(7-1)&amp;tn=ShopEvent&amp;hs=DragonTail%20Cup&amp;dg=1nOP13-001a4nOP13-016a4nST30-004a2nPRB02-003a4nEB05-001a4nOP07-022a3nOP06-033a4nEB01-013a4nOP14-031a4nOP12-023a4nST32-002a4nOP13-031a3nOP17-022a2nOP01-055a2nOP08-036a2nOP10-040&amp;cs=213">RG Luffy</a></td></tr>
 <tr><td>Dup</td><td><a href="/deckgen/?dg=4nOP08-002a1nOP08-001a4nOP08-003a4nOP08-004a4nOP08-005a4nOP08-006">same</a></td></tr>
 </table>
 <h2>Blue Doffy (text list)</h2>
@@ -117,19 +118,22 @@ class CardBot(unittest.TestCase):
 
     def test_cards(self):
         url = "https://asia-tc.onepiece-cardgame.com/cardlist/?series=554108"
-        cards = scrape_cards.parse_cards(CARDLIST, url, {"value": "554108", "code": "OP08"})
-        self.assertEqual([c["id"] for c in cards], ["OP08-001", "OP08-002_p1"])
+        cards = scrape_cards.parse_cards(CARDLIST, url, {"value": "554110", "code": "OP10"})
+        self.assertEqual([c["id"] for c in cards], ["OP10-001", "OP08-002_p1"])
         lead, char = cards
-        self.assertEqual(lead["name"], "托尼托尼・喬巴")
-        self.assertEqual(lead["category"], "LEADER")
-        self.assertEqual(lead["life"], 4)
-        self.assertIsNone(lead["cost"])
+        # Field labels as shown on the official Asia (Traditional Chinese) card page.
+        self.assertEqual(lead["name"], "斯摩格")
+        self.assertEqual((lead["rarity"], lead["category"]), ("L", "LEADER"))
+        self.assertEqual((lead["life"], lead["cost"], lead["power"], lead["counter"]), (4, None, 5000, None))
         self.assertEqual(lead["colors"], ["紅", "綠"])
-        self.assertEqual(lead["image"], "https://asia-tc.onepiece-cardgame.com/images/cardlist/card/OP08-001.png?250101")
-        self.assertIn("效果第二行", lead["text"])
-        self.assertIn("\n", lead["text"])
-        self.assertTrue(lead["attribute"].startswith("打"))
-        self.assertEqual(lead["set"], "OP08")
+        self.assertEqual(lead["block"], "3")
+        self.assertEqual(lead["feature"], "龐克哈薩特/海軍")
+        self.assertEqual(lead["image"], "https://asia-tc.onepiece-cardgame.com/images/cardlist/card/OP10-001.png?250101")
+        self.assertTrue(lead["text"].startswith("【對方回合中】自己擁有《海軍》"))
+        self.assertIn("\n【啟動主要】【每回合1次】", lead["text"])
+        self.assertTrue(lead["attribute"].startswith("斬"))
+        self.assertEqual(lead["getInfo"], "王族血脈【OP-10】")
+        self.assertEqual(lead["set"], "OP10")
         self.assertEqual(char["baseId"], "OP08-002")
         self.assertEqual(char["rarity"], "SR")
         self.assertEqual((char["cost"], char["power"], char["counter"]), (3, 4000, 1000))
@@ -147,14 +151,20 @@ class DeckBot(unittest.TestCase):
 
     def test_decks(self):
         decks = scrape_decks.parse_decks(DECK_PAGE, "https://onepiecetopdecks.com/deck-list/japan-op-12-decks/")
-        self.assertEqual(len(decks), 3)  # two links (same deck) + one text list
+        self.assertEqual(len(decks), 4)  # three links (two are the same deck) + one text list
         a = decks[0]
         self.assertEqual(a["name"], "Red Zoro")
         self.assertEqual((a["author"], a["date"], a["placement"]), ("Taro", "2026-10-01", "1st"))
         self.assertEqual(a["entries"][0], {"id": "OP08-001", "count": 1})
         self.assertEqual(sum(e["count"] for e in a["entries"]), 21)
-        self.assertEqual(scrape_decks.deck_key(a["entries"]), scrape_decks.deck_key(decks[1]["entries"]))
-        t = decks[2]
+        luffy = decks[1]  # the real link format from the site (Nov 2026)
+        self.assertEqual((luffy["name"], luffy["author"], luffy["date"], luffy["placement"], luffy["event"], luffy["eventType"], luffy["country"]),
+                         ("RG Luffy", "Shishi", "2026-11-01", "2nd (7-1)", "DragonTail Cup", "ShopEvent", "JP"))
+        self.assertEqual(len(luffy["entries"]), 16)
+        self.assertEqual(sum(e["count"] for e in luffy["entries"]), 51)
+        self.assertEqual(scrape_decks._leader(luffy["entries"]), "OP13-001")
+        self.assertEqual(scrape_decks.deck_key(a["entries"]), scrape_decks.deck_key(decks[2]["entries"]))
+        t = decks[3]
         self.assertEqual(t["name"], "Blue Doffy (text list)")
         self.assertEqual(sum(e["count"] for e in t["entries"]), 51)
         self.assertEqual(scrape_decks._leader(t["entries"]), "OP10-002")

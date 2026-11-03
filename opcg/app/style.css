@@ -255,3 +255,18 @@ table.list td, table.list th { border-bottom: 1px solid var(--line); padding: 4p
 a { color: var(--link, #1f5fbf); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --link: #7fb0ff; } }
 :root[data-theme="dark"] { --link: #7fb0ff; }
+
+/* v4: Chinese effects in deck lists, import box */
+.rows.fx { max-height: none; }
+.rows.fx .row { align-items: flex-start; padding: 8px 0; }
+.rows.fx .row .thumb { width: 52px; cursor: zoom-in; }
+.row-fx { font-size: 13px; line-height: 1.7; margin-top: 3px; color: var(--ink); }
+.ftype { font-weight: 600; }
+.kw.k-once { background: #c0392b; } .kw.k-don { background: #1d1f23; } .kw.k-other { background: #6b7078; }
+:root[data-theme="dark"] .kw.k-don { background: #000; }
+details.import summary { cursor: pointer; list-style: none; }
+details.import summary::-webkit-details-marker { display: none; }
+details.import summary::before { content: '▸ '; color: var(--muted); }
+details.import[open] summary::before { content: '▾ '; }
+details.import textarea { margin-top: 6px; min-height: 90px; }
+.imp-preview { margin-top: 6px; line-height: 1.7; }

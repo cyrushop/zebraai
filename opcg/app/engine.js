@@ -73,6 +73,42 @@
     return { entries: order.map(id => ({ id, count: counts[id] })), unknown };
   }
 
+  /** '11/1/2026' (M/D/YYYY) or '2026-11-01' -> '2026-11-01'. Anything else is returned as is. */
+  function isoDate(s) {
+    const t = String(s || '').trim();
+    let m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(t);
+    if (m) return m[3] + '-' + m[1].padStart(2, '0') + '-' + m[2].padStart(2, '0');
+    m = /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/.exec(t);
+    if (m) return m[1] + '-' + m[2].padStart(2, '0') + '-' + m[3].padStart(2, '0');
+    return t;
+  }
+
+  /** Deck details from an onepiecetopdecks deckgen link (dn, au, date, pl, tn, hs, cn). */
+  function deckMetaFromUrl(text) {
+    const m = /https?:\/\/\S*?[?&]dg=\S+/i.exec(String(text || ''));
+    if (!m) return null;
+    let url;
+    try { url = new URL(m[0]); } catch (e) { return null; }
+    const q = k => (url.searchParams.get(k) || '').trim();
+    return {
+      name: q('dn'), author: q('au'), date: isoDate(q('date')), placement: q('pl'),
+      event: q('hs'), eventType: q('tn'), country: q('cn'), url: url.href,
+    };
+  }
+
+  /**
+   * One paste can hold several deckgen links (one per line) or one text list.
+   * Returns [{ meta, entries, unknown }].
+   */
+  function parseDeckImports(text) {
+    const src = String(text || '');
+    const links = src.split(/\s+/).filter(t => /[?&]dg=/i.test(t));
+    if (links.length > 1 || (links.length === 1 && !/\n\s*\d+\s*x/i.test(src))) {
+      return links.map(l => Object.assign({ meta: deckMetaFromUrl(l) || {} }, parseDeckText(l)));
+    }
+    return [Object.assign({ meta: deckMetaFromUrl(src) || {} }, parseDeckText(links.length ? src.replace(/\S*[?&]dg=\S+/i, '') : src))];
+  }
+
   /** Entries -> "1xOP08-001" lines (leader first when known). */
   function deckToText(entries, cardsById) {
     const lead = leaderOf(entries, cardsById);
@@ -406,7 +442,7 @@
     normId, baseId, quickId, parseDeckText, deckToText, toDg, normCategory, leaderOf,
     ownedTotals, reservedTotals, availableTotals, deckStatus, validateDeck, cardColors,
     sellDeck, shoppingList, setOf, historyChange, makePricer, deckCost, missingCost, collectionValue,
-    parseQuery, matchCard, setGroup, inSet, setProgress,
+    parseQuery, matchCard, setGroup, inSet, setProgress, isoDate, deckMetaFromUrl, parseDeckImports,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.OPCGEngine = api;

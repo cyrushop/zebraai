@@ -194,4 +194,53 @@ t('pricer returns history in HKD', () => {
   assert.deepStrictEqual(price('a').history, [['2026-11-01', 5], ['2026-11-03', 10]]);
 });
 
+const URL1 = 'https://onepiecetopdecks.com/deck-list/japan-eb05op18-deck-list-heroines-and-the-dominance-of-god/deckgen/?dn=RG%20Luffy&date=11/1/2026&cn=JP&au=Shishi&pl=2nd%20(7-1)&tn=ShopEvent&hs=DragonTail%20Cup&dg=1nOP13-001a4nOP13-016a4nST30-004a2nPRB02-003a4nEB05-001a4nOP07-022a3nOP06-033a4nEB01-013a4nOP14-031a4nOP12-023a4nST32-002a4nOP13-031a3nOP17-022a2nOP01-055a2nOP08-036a2nOP10-040&cs=213';
+const TEXT1 = `Decklist in text:
+1xOP13-001
+4xOP13-016
+4xST30-004
+2xPRB02-003
+4xEB05-001
+4xOP07-022
+3xOP06-033
+4xEB01-013
+4xOP14-031
+4xOP12-023
+4xST32-002
+4xOP13-031
+3xOP17-022
+2xOP01-055
+2xOP08-036
+2xOP10-040`;
+
+t('real onepiecetopdecks deckgen link (RG Luffy)', () => {
+  const [d] = E.parseDeckImports(URL1);
+  assert.deepStrictEqual(d.meta, {
+    name: 'RG Luffy', author: 'Shishi', date: '2026-11-01', placement: '2nd (7-1)',
+    event: 'DragonTail Cup', eventType: 'ShopEvent', country: 'JP', url: d.meta.url,
+  });
+  assert.strictEqual(d.entries.length, 16);
+  assert.deepStrictEqual(d.entries[0], { id: 'OP13-001', count: 1 });
+  assert.deepStrictEqual(d.entries[3], { id: 'PRB02-003', count: 2 });
+  assert.strictEqual(d.entries.reduce((s, e) => s + e.count, 0), 51);
+});
+
+t('real text list gives the same deck; link + text together', () => {
+  const [a] = E.parseDeckImports(URL1);
+  const [b] = E.parseDeckImports(TEXT1);
+  assert.deepStrictEqual(b.entries, a.entries);
+  assert.deepStrictEqual(b.unknown, ['Decklist in text:']);
+  assert.deepStrictEqual(b.meta, {});
+  const both = E.parseDeckImports(URL1 + '\n\n' + TEXT1);
+  assert.strictEqual(both.length, 1);
+  assert.strictEqual(both[0].meta.name, 'RG Luffy');
+  assert.deepStrictEqual(both[0].entries, a.entries);
+});
+
+t('several links in one paste make several decks', () => {
+  const two = E.parseDeckImports(URL1 + '\n' + URL1.replace('dn=RG%20Luffy', 'dn=Copy'));
+  assert.deepStrictEqual(two.map(d => d.meta.name), ['RG Luffy', 'Copy']);
+  assert.strictEqual(E.isoDate('3/9/2026'), '2026-03-09');
+});
+
 console.log(`\n${passed} tests passed`);

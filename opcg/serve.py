@@ -72,7 +72,7 @@ class Handler(SimpleHTTPRequestHandler):
         super().__init__(*a, directory=ROOT, **kw)
 
     def log_message(self, fmt, *args):  # quieter console
-        if "/api/" in (args[0] if args else ""):
+        if args and "/api/" in str(args[0]):
             return
         super().log_message(fmt, *args)
 
