@@ -15,6 +15,8 @@
 * macOS 14 或之前：喺 Finder 對住個檔 **右撳 → 打開 → 打開**。
 * macOS 15 (Sequoia) 或之後：撳「完成」，然後去 **系統設定 → 私隱與保安**，拉到最底撳「**仍要打開**」，再雙擊一次。
 
+如果「仍要打開」個掣冇出現：打開「終端機」，打 `xattr -dr com.apple.quarantine ` (後面有空格)，將成個解壓咗嘅資料夾拖入視窗，撳 Enter，再雙擊。呢個指令只係話 Mac 知呢個資料夾係你自己下載嘅。
+
 雙擊冇反應或者話冇權限：打開「終端機」，打 `chmod +x ` (後面有空格)，將兩個 `.command` 檔拖入視窗，撳 Enter。
 
 冇 Python 嘅話，啟動檔會叫 Mac 安裝「Command Line Developer Tools」(入面有 Python 3)，裝完再雙擊。如果 BOT 話 `CERTIFICATE_VERIFY_FAILED`：去「應用程式 → Python 3.x」雙擊 `Install Certificates.command`。
