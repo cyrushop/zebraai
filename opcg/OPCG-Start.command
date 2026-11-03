@@ -33,19 +33,20 @@ if curl -s -o /dev/null --max-time 2 "$URL/app/"; then
   exit 0
 fi
 
-# 3. 第一次用：試抓 OP10
+# 3. 第一次用：抓晒所有系列嘅咭表（咭圖直接由官方網站顯示）
 if [ ! -f data/cards.json ]; then
   say_line "第一次用：未有咭表。"
-  printf '而家試抓 OP10（連咭圖，大約 3–5 分鐘）？ [Y/n] '
+  printf '而家抓晒所有系列嘅咭表（大約 1–2 分鐘）？ [Y/n] '
   read -r ans
   if [ "$ans" != "n" ] && [ "$ans" != "N" ]; then
-    "$PY" -u bot/scrape_cards.py --series OP10 --images --save-html
+    "$PY" -u bot/scrape_cards.py --save-html
     if [ $? -ne 0 ]; then
       say_line "咭表 BOT 出錯。請將上面嘅訊息，同埋 opcg/data/raw/ 入面嘅檔案，畀 Claude 睇。"
       printf '照樣開 App？ [Y/n] '; read -r ans2
       if [ "$ans2" = "n" ] || [ "$ans2" = "N" ]; then pause_exit 1; fi
+    else
+      echo "咭圖會直接由官方網站顯示。想將咭圖存落部機（冇網都睇到，約 30–60 分鐘）：開 App →「設定」→「更新咭表 + 下載圖片」。"
     fi
-    echo "之後想抓晒所有系列：開 App →「設定」→「更新咭表 + 下載圖片」。"
   fi
 fi
 

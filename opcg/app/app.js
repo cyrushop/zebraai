@@ -207,7 +207,7 @@
     const remote = c && c.localImage && c.image ? c.image : '';
     const ph = `<span class="ph">${esc(id)}</span>`;
     if (!src) return ph;
-    return `${ph}<img loading="lazy" alt="${esc(id + ' ' + (c ? c.name : ''))}" src="${esc(src)}"${remote ? ` data-remote="${esc(remote)}"` : ''} class="${cls || ''}">`;
+    return `${ph}<img loading="lazy" referrerpolicy="no-referrer" alt="${esc(id + ' ' + (c ? c.name : ''))}" src="${esc(src)}"${remote ? ` data-remote="${esc(remote)}"` : ''} class="${cls || ''}">`;
   }
   // Fall back to the official image when a local copy is missing; hide broken images.
   document.addEventListener('error', ev => {
@@ -423,7 +423,7 @@
     const label = v => v === base ? '普通' : '平行 ' + v.split('_')[1];
     $('#modal-body').innerHTML = `<div class="cd">
       <div class="cd-left">
-        <div class="cd-img">${imgSrc(id) ? `<img src="${esc(imgSrc(id))}" alt="${esc((c.name || '') + ' ' + id)}">` : `<span class="ph">${esc(id)}</span>`}</div>
+        <div class="cd-img">${imgSrc(id) ? `<img referrerpolicy="no-referrer" src="${esc(imgSrc(id))}" alt="${esc((c.name || '') + ' ' + id)}">` : `<span class="ph">${esc(id)}</span>`}</div>
         ${vars.length > 1 ? `<div class="alts">${vars.map(v => `<button class="alt${v === id ? ' on' : ''}" data-detail="${esc(v)}" title="${esc(v)}">
           <div class="thumb">${imgTag(v)}</div><span>${esc(label(v))}</span></button>`).join('')}</div>` : ''}
       </div>
@@ -486,7 +486,8 @@
     const totalCopies = Object.values(state.owned).reduce((t, n) => t + n, 0);
     const value = E.collectionValue(state.owned, price);
     const mySets = SET_CODES.map(code => E.setProgress(CARDS, state.owned, code, false)).filter(x => x.total);
-    const started = mySets.filter(x => x.have).sort((a, b) => b.pct - a.pct);
+    const started = mySets.filter(x => x.have);
+    const homeSets = mySets.slice().sort((a, b) => setSort(a.code, b.code)); // every series, newest first
     const allTotal = mySets.reduce((t, x) => t + x.total, 0);
     const recent = [];
     for (const x of state.openLog) if (!recent.includes(x.id)) { recent.push(x.id); if (recent.length >= 16) break; }
@@ -502,12 +503,12 @@
       <div class="kpis">
         <button class="kpi" data-go="collection"><span>我嘅咭</span><b>${totalCopies.toLocaleString()}</b><small>${Object.keys(state.owned).length} 款</small></button>
         <button class="kpi" data-go="value"><span>總值</span><b class="price">${hk(value.total)}</b><small>${value.unpriced ? value.unpriced + ' 張未有價' : '全部有價'}</small></button>
-        <button class="kpi" data-go="sets"><span>系列收集</span><b>${allTotal ? Math.round(started.reduce((t, x) => t + x.have, 0) / allTotal * 100) : 0}%</b><small>${started.length} 個系列有咭</small></button>
+        <button class="kpi" data-go="sets"><span>系列收集</span><b>${allTotal ? Math.round(started.reduce((t, x) => t + x.have, 0) / allTotal * 100) : 0}%</b><small>${started.length}/${mySets.length} 個系列有咭</small></button>
         <button class="kpi" data-go="mine"><span>Decks</span><b>${counts('plan')} / ${counts('built')} / ${counts('sold')}</b><small>計劃 / 砌好 / 已賣</small></button>
       </div>
-      <section class="home-sec"><div class="sec-head"><h2>我嘅系列</h2><button class="see" data-go="sets">全部 ›</button></div>
-        ${started.length ? `<div class="hscroll">${started.map(x => `<button class="setcard" data-set="${esc(x.code)}">${ring(x.pct, 54, Math.round(x.pct * 100) + '%')}
-          <b>${esc(x.code)}</b><small>${x.have}/${x.total}</small></button>`).join('')}</div>` : '<p class="muted">未有咭。去「開箱」開始入咭。</p>'}</section>
+      <section class="home-sec"><div class="sec-head"><h2>全部系列 <span class="count">${mySets.length}</span></h2><button class="see" data-go="sets">按類別睇 ›</button></div>
+        ${homeSets.length ? `<div class="hscroll">${homeSets.map(x => `<button class="setcard${x.have ? '' : ' empty'}" data-set="${esc(x.code)}" title="${esc(SERIES_LABEL[x.code] || x.code)}">${ring(x.pct, 54, Math.round(x.pct * 100) + '%')}
+          <b>${esc(x.code)}</b><small>${x.have}/${x.total}</small></button>`).join('')}</div>` : '<p class="muted">未有咭表。行咭表 BOT 之後，所有系列都會喺度出現。</p>'}</section>
       ${recent.length ? `<section class="home-sec"><div class="sec-head"><h2>最近加入</h2><button class="see" data-go="open">開箱 ›</button></div>
         <div class="hscroll">${recent.map(id => `<button class="mini" data-detail="${esc(id)}"><div class="thumb">${imgTag(id)}</div><small>${esc(id)}</small></button>`).join('')}</div></section>` : ''}
       <section class="home-sec"><div class="sec-head"><h2>我的 Decks <span class="count">${decks.length}</span></h2><button class="see" data-go="mine">全部 ›</button></div>

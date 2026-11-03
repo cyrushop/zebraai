@@ -6,7 +6,7 @@
 
 1. 下載：https://github.com/cyrushop/zebraai/archive/refs/heads/claude/one-piece-card-tracker-0rpst3.zip ，雙擊解壓。
 2. 打開解壓後嘅 `opcg` 資料夾，雙擊 **`OPCG-Start.command`**。
-   * 第一次會問「試抓 OP10？」，撳 Enter 就開始 (連咭圖約 3–5 分鐘)。
+   * 第一次會問「抓晒所有系列嘅咭表？」，撳 Enter 就開始 (約 1–2 分鐘)。所有系列都會顯示，有冇庫存你自己喺 App 入面填。咭圖直接由官方網站顯示；想存落部機就喺「設定」撳「更新咭表 + 下載圖片」。
    * 抓完自動開瀏覽器 http://localhost:8765 。
    * 用完關咗個 Terminal 視窗就停。
 3. 想手機一齊用 (同一個 Wi-Fi)：雙擊 **`OPCG-Phone.command`**，第一次設定一個 PIN，然後用手機開佢顯示嘅網址。

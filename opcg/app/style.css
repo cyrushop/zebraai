@@ -283,3 +283,4 @@ button.danger { background: var(--bad); border-color: var(--bad); color: #fff; }
 /* the card-number placeholder sits behind the image, only visible while it loads or if it fails */
 .ph { z-index: 0; }
 .img img, .thumb img, .cd-img img { position: relative; z-index: 1; }
+.setcard.empty { opacity: .7; }
