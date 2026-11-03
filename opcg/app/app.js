@@ -556,7 +556,8 @@
   }
 
   // =============================================================== SETS
-  const sv = { group: '', set: '', parallels: false, show: '', sort: 'id' };
+  const sv = { group: '', set: '', parallels: false, show: '', sort: 'id', mode: 'grid' };
+  try { sv.mode = localStorage.getItem('opcg-setmode') || 'grid'; } catch (e) { /* ignore */ }
   function renderSets() {
     const el = $('#tab-sets');
     if (!CARDS.length) { el.innerHTML = noDataNotice('咭表'); return; }
@@ -595,31 +596,80 @@
     else list.sort(cmp);
     return list;
   }
-  function renderSetPage(el) {
+  const RAR_ORDER = ['L', 'C', 'UC', 'R', 'SR', 'SEC', 'SP', 'TR', 'P', '平行'];
+  function setSummaryHtml() {
     const x = E.setProgress(CARDS, state.owned, sv.set, sv.parallels);
-    const rarOrder = ['L', 'C', 'UC', 'R', 'SR', 'SEC', 'SP', 'TR', 'P', '平行'];
-    const rars = Object.keys(x.byRarity).sort((a, b) => (rarOrder.indexOf(a) + 1 || 99) - (rarOrder.indexOf(b) + 1 || 99));
+    const rars = Object.keys(x.byRarity).sort((a, b) => (RAR_ORDER.indexOf(a) + 1 || 99) - (RAR_ORDER.indexOf(b) + 1 || 99));
     const value = E.collectionValue(Object.fromEntries(CARDS.filter(c => E.inSet(c, sv.set)).map(c => [c.id, ownedOf(c.id)])), pricer());
-    el.innerHTML = `
-      <div class="set-head">
+    return `<div class="set-head">
         <button class="back" data-back="1" aria-label="返回">‹</button>
         ${ring(x.pct, 64, Math.round(x.pct * 100) + '%')}
         <div class="grow"><h2>${esc(sv.set)}</h2><div class="muted">${esc(SERIES_LABEL[sv.set] || E.setGroup(sv.set))}</div>
           <div class="small">${x.have}/${x.total} 款 · ${x.copies} 張 · 值 <b class="price">${hk(value.total)}</b></div></div>
       </div>
-      <div class="rarity-row">${rars.map(r => `<div class="rar"><b>${x.byRarity[r].have}/${x.byRarity[r].total}</b><span>${esc(r)}</span></div>`).join('')}</div>
+      <div class="rarity-row">${rars.map(r => `<div class="rar"><b>${x.byRarity[r].have}/${x.byRarity[r].total}</b><span>${esc(r)}</span></div>`).join('')}</div>`;
+  }
+  function batchRowHtml(c) {
+    const n = ownedOf(c.id);
+    const alt = c.id !== E.baseId(c.id);
+    return `<div class="brow${n ? ' has' : ''}" data-id="${esc(c.id)}">
+      <div class="thumb" data-detail="${esc(c.id)}">${imgTag(c.id)}</div>
+      <label class="grow" for="b-${esc(c.id)}"><b>${esc(c.id)}</b> <span class="muted">${esc(c.rarity || '')}</span>${alt ? ' <span class="badge">平行</span>' : ''}
+        <span class="bname">${esc(c.name || '')}</span></label>
+      <input id="b-${esc(c.id)}" class="bnum" data-bid="${esc(c.id)}" value="${n || ''}" placeholder="0"
+        inputmode="numeric" enterkeyhint="next" autocomplete="off" maxlength="3" aria-label="${esc(c.id)} 數量">
+    </div>`;
+  }
+  function renderSetPage(el) {
+    const batch = sv.mode === 'batch';
+    el.innerHTML = `
+      <div id="sp-summary">${setSummaryHtml()}</div>
       <div class="toolbar">
+        <div class="seg" role="group" aria-label="顯示方式">
+          <button data-mode="grid" class="${batch ? '' : 'on'}">咭圖</button><button data-mode="batch" class="${batch ? 'on' : ''}">批量輸入</button></div>
         <label class="small"><input type="checkbox" id="sp-par"${sv.parallels ? ' checked' : ''}> 包括平行版</label>
         <select id="sp-show"><option value="">全部</option><option value="have">我有嘅</option><option value="none">未有 (缺咭)</option></select>
         <select id="sp-sort"><option value="id">按編號</option><option value="price">按價錢</option></select>
         <button class="small" id="sp-copy">複製缺咭清單</button>
       </div>
-      <div class="grid" id="sp-grid"></div>`;
+      ${batch ? `<p class="muted small batch-help">打數量，撳 <kbd>Enter</kbd> / <kbd>Tab</kbd> / <kbd>↓</kbd> 去下一張，<kbd>↑</kbd> 返上一張。留空 = 0。每打一個數即刻儲存。</p>
+        <div class="batch" id="sp-batch">${setCards().map(batchRowHtml).join('')}</div>`
+        : '<div class="grid" id="sp-grid"></div>'}`;
     $('#sp-show').value = sv.show; $('#sp-sort').value = sv.sort;
-    const reserved = E.reservedTotals(state.decks), price = pricer();
-    $('#sp-grid').innerHTML = setCards().map(c => tileHtml(c, reserved, price)).join('');
+    if (!batch) {
+      const reserved = E.reservedTotals(state.decks), price = pricer();
+      $('#sp-grid').innerHTML = setCards().map(c => tileHtml(c, reserved, price)).join('');
+    } else {
+      const inputs = () => $$('.bnum', el);
+      const move = (from, step) => {
+        const all = inputs(), i = all.indexOf(from), next = all[i + step];
+        if (next) { next.focus(); next.select(); next.scrollIntoView({ block: 'nearest' }); }
+      };
+      let sumTimer;
+      const commit = input => {
+        const clean = input.value.replace(/[^\d]/g, '').slice(0, 3);
+        if (clean !== input.value) input.value = clean;
+        const id = input.dataset.bid, n = clean === '' ? 0 : Number(clean);
+        if (n === ownedOf(id)) return;
+        setOwned(id, n);
+        input.closest('.brow').classList.toggle('has', n > 0);
+        clearTimeout(sumTimer);
+        sumTimer = setTimeout(() => { $('#sp-summary').innerHTML = setSummaryHtml(); }, 250);
+      };
+      $('#sp-batch').addEventListener('input', e => { if (e.target.dataset.bid) commit(e.target); });
+      $('#sp-batch').addEventListener('focusin', e => { if (e.target.dataset.bid) e.target.select(); });
+      $('#sp-batch').addEventListener('keydown', e => {
+        if (!e.target.dataset.bid) return;
+        if (e.key === 'Enter' || e.key === 'ArrowDown') { e.preventDefault(); move(e.target, 1); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); move(e.target, -1); }
+      });
+      const first = inputs()[0];
+      if (first && matchMedia('(pointer: fine)').matches) first.focus();
+    }
     el.onclick = e => {
       if (e.target.closest('[data-back]')) { sv.set = ''; return renderSets(); }
+      const m = e.target.closest('[data-mode]');
+      if (m) { sv.mode = m.dataset.mode; try { localStorage.setItem('opcg-setmode', sv.mode); } catch (err) { /* ignore */ } return renderSets(); }
       if (e.target.closest('#sp-copy')) {
         const miss = CARDS.filter(c => E.inSet(c, sv.set) && (sv.parallels || c.id === E.baseId(c.id)) && !ownedOf(c.id));
         return copyText(miss.map(c => `${c.id} ${c.rarity || ''} ${c.name || ''}`).join('\n'));
@@ -630,8 +680,10 @@
       if (btn.dataset.act === 'detail') return showDetail(id);
       setOwned(id, ownedOf(id) + (btn.dataset.act === 'inc' ? 1 : -1));
       tile.outerHTML = tileHtml(byId[id] || { id }, E.reservedTotals(state.decks));
+      $('#sp-summary').innerHTML = setSummaryHtml();
     };
     el.onchange = e => {
+      if (e.target.dataset.bid) return;
       if (e.target.id === 'sp-par') sv.parallels = e.target.checked;
       if (e.target.id === 'sp-show') sv.show = e.target.value;
       if (e.target.id === 'sp-sort') sv.sort = e.target.value;

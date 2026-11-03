@@ -284,3 +284,22 @@ button.danger { background: var(--bad); border-color: var(--bad); color: #fff; }
 .ph { z-index: 0; }
 .img img, .thumb img, .cd-img img { position: relative; z-index: 1; }
 .setcard.empty { opacity: .7; }
+
+/* v6: batch entry on the series page */
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+.seg button { border: none; border-radius: 0; padding: 5px 14px; background: var(--panel); }
+.seg button.on { background: var(--accent); color: var(--accent-ink); }
+.batch-help { margin: -4px 0 8px; }
+kbd { font: 11px ui-monospace, Menlo, Consolas, monospace; border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; background: var(--panel); }
+.batch { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 0 18px; }
+.brow { display: flex; align-items: center; gap: 10px; padding: 5px 4px; border-bottom: 1px solid var(--line); }
+.brow .thumb { width: 36px; cursor: zoom-in; }
+.brow label { min-width: 0; font-size: 13px; cursor: text; }
+.brow .bname { display: block; color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.brow.has .bname { color: var(--ink); }
+.bnum { width: 64px; text-align: center; font-size: 18px; font-weight: 700; padding: 6px 4px; font-variant-numeric: tabular-nums; }
+.brow.has .bnum { border-color: var(--ok); }
+.bnum:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+@media (max-width: 640px) { .bnum { font-size: 16px; width: 58px; } }
+.brow label { flex: 1; }
+.bnum { margin-left: auto; flex: none; }
