@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#c8102e">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <title>OPCG 咭庫</title>
 <link rel="stylesheet" href="style.css">
 </head>
@@ -14,6 +16,7 @@
     <button data-tab="open">開箱</button>
     <button data-tab="meta">Meta Decks</button>
     <button data-tab="mine">我的 Decks</button>
+    <button data-tab="value">貴咭</button>
     <button data-tab="settings">設定</button>
   </nav>
   <span id="save-state" class="muted"></span>
@@ -24,6 +27,7 @@
   <section id="tab-open" class="tab"></section>
   <section id="tab-meta" class="tab"></section>
   <section id="tab-mine" class="tab"></section>
+  <section id="tab-value" class="tab"></section>
   <section id="tab-settings" class="tab"></section>
 </main>
 
@@ -34,6 +38,7 @@
 <!-- Bot output (opcg/data). If missing, the app still works from card numbers only. -->
 <script src="../data/cards.js"></script>
 <script src="../data/decks.js"></script>
+<script src="../data/prices.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

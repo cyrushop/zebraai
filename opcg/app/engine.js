@@ -216,6 +216,79 @@
       .filter(r => r.missing > 0);
   }
 
+  // ------------------------------------------------------------ prices
+  const round = n => Math.round(n * 10) / 10;
+
+  /** Price change from a [[date, value], ...] history: latest vs the last point at least `days` older. */
+  function historyChange(history, days) {
+    if (!history || history.length < 2) return null;
+    const [lastDate, last] = history[history.length - 1];
+    const cutoff = new Date(new Date(lastDate).getTime() - (days || 7) * 864e5).toISOString().slice(0, 10);
+    let prev = null;
+    for (const h of history) if (h[0] <= cutoff) prev = h;
+    if (!prev) prev = history[0];
+    if (prev[0] === lastDate) return null;
+    return { from: prev[1], to: last, since: prev[0] };
+  }
+
+  /**
+   * Price lookup. A manual price (HKD) wins over the bot price (JPY x rate x factor).
+   * opts: { manual: {id: {hkd, at, history}}, bot: {id: {jpy, history, url, stock}}, rate, factor }
+   * Returns id -> { hkd, source: 'manual'|'bot', jpy, url, stock, at, change: {from, to, since} } or null.
+   */
+  function makePricer(opts) {
+    const manual = opts.manual || {}, bot = opts.bot || {};
+    const k = (opts.rate || 0) * (opts.factor == null ? 1 : opts.factor);
+    return function price(id) {
+      const m = manual[id];
+      const b = bot[id];
+      if (m && m.hkd != null && m.hkd !== '') {
+        const ch = historyChange(m.history);
+        return { hkd: Number(m.hkd), source: 'manual', at: m.at, url: b && b.url, jpy: b && b.jpy, change: ch };
+      }
+      if (b && b.jpy != null && k > 0) {
+        const ch = historyChange(b.history);
+        const last = b.history && b.history.length ? b.history[b.history.length - 1][0] : '';
+        return { hkd: round(b.jpy * k), source: 'bot', jpy: b.jpy, url: b.url, stock: b.stock, at: last,
+          change: ch && { from: round(ch.from * k), to: round(ch.to * k), since: ch.since } };
+      }
+      return null;
+    };
+  }
+
+  /** Market cost of a deck (normal versions). Cards without a price are listed in `unknown`. */
+  function deckCost(entries, price) {
+    let cost = 0;
+    const unknown = [];
+    for (const e of entries) {
+      const p = price(baseId(e.id));
+      if (p) cost += p.hkd * e.count; else unknown.push(e.id);
+    }
+    return { cost: round(cost), unknown };
+  }
+
+  /** Cost of the cards a deck is still missing. rows from deckStatus. */
+  function missingCost(rows, price) {
+    let cost = 0, unknown = 0;
+    for (const r of rows) {
+      if (!r.missing) continue;
+      const p = price(r.id);
+      if (p) cost += p.hkd * r.missing; else unknown += r.missing;
+    }
+    return { cost: round(cost), unknown };
+  }
+
+  /** Value of the whole collection; parallels use their own price. */
+  function collectionValue(owned, price) {
+    let total = 0, priced = 0, unpriced = 0;
+    for (const [id, n] of Object.entries(owned || {})) {
+      if (!(n > 0)) continue;
+      const p = price(id);
+      if (p) { total += p.hkd * n; priced += n; } else unpriced += n;
+    }
+    return { total: round(total), priced, unpriced };
+  }
+
   /** Set code of a card: 'OP08-001' -> 'OP08', 'P-001' -> 'P'. */
   function setOf(id) {
     return String(id || '').split('-')[0].toUpperCase();
@@ -224,7 +297,7 @@
   const api = {
     normId, baseId, quickId, parseDeckText, deckToText, toDg, normCategory, leaderOf,
     ownedTotals, reservedTotals, availableTotals, deckStatus, validateDeck, cardColors,
-    sellDeck, shoppingList, setOf,
+    sellDeck, shoppingList, setOf, historyChange, makePricer, deckCost, missingCost, collectionValue,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.OPCGEngine = api;

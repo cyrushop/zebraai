@@ -9,6 +9,8 @@
   // ------------------------------------------------------------ data
   const CARDS = (window.OPCG_CARDS && window.OPCG_CARDS.cards) || [];
   const META = (window.OPCG_DECKS && window.OPCG_DECKS.decks) || [];
+  const PRICES = window.OPCG_PRICES || { prices: {} };
+  const DEFAULT_RATE = 0.049; // JPY -> HKD (mid-Aug 2026); the price bot refreshes it
   const byId = {};
   for (const c of CARDS) byId[c.id] = c;
   const variantsOf = {};
@@ -33,7 +35,8 @@
   let saveTimer = null;
 
   function blankState() {
-    return { version: 1, owned: {}, decks: [], settings: { includeParallels: false, quickSet: '' }, openLog: [] };
+    return { version: 1, owned: {}, decks: [], manualPrices: {}, openLog: [],
+      settings: { includeParallels: false, quickSet: '', rate: '', factor: 1, valuableMin: 50 } };
   }
   function normalise(s) {
     const b = blankState();
@@ -42,45 +45,85 @@
       version: 1,
       owned: s.owned && typeof s.owned === 'object' ? s.owned : {},
       decks: Array.isArray(s.decks) ? s.decks : [],
+      manualPrices: s.manualPrices && typeof s.manualPrices === 'object' ? s.manualPrices : {},
       settings: Object.assign(b.settings, s.settings || {}),
       openLog: Array.isArray(s.openLog) ? s.openLog.slice(0, 200) : [],
       savedAt: s.savedAt,
+      rev: s.rev,
     };
   }
   function readLocal() {
     try { return JSON.parse(localStorage.getItem(LS_KEY) || 'null'); } catch (e) { return null; }
   }
+  async function fetchServerState() {
+    const r = await fetch('/api/state', { cache: 'no-store' });
+    if (r.status === 401) { location.reload(); throw new Error('login'); }
+    const j = await r.json();
+    if (!j.ok) throw new Error('server');
+    return j.state;
+  }
   async function load() {
     const local = readLocal();
     if (serverMode) {
       try {
-        const r = await fetch('/api/state', { cache: 'no-store' });
-        const j = await r.json();
-        if (j.ok) {
-          const srv = j.state;
-          // Prefer whichever copy was saved last.
-          const pick = !srv ? local : (local && (local.savedAt || '') > (srv.savedAt || '') ? local : srv);
-          state = normalise(pick);
-          setSaveLabel('已連接本機伺服器 · 資料存喺 opcg/data/collection.json');
-          return;
-        }
+        const srv = await fetchServerState();
+        // The file on the computer is the master copy; the browser copy is only used if the file is empty.
+        state = normalise(srv || local);
+        if (!srv) state.rev = 0;
+        setSaveLabel('已連接本機伺服器 · 資料存喺 opcg/data/collection.json');
+        return;
       } catch (e) { /* not running serve.py: fall back to the browser */ }
     }
+    serverOk = false;
     state = normalise(local);
     setSaveLabel('資料存喺瀏覽器 (記得喺設定匯出備份)');
   }
+  let saving = false, dirty = false, serverOk = serverMode;
   function save() {
     state.savedAt = new Date().toISOString();
     try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { /* storage full or blocked */ }
+    if (!serverOk) return;
+    dirty = true;
     clearTimeout(saveTimer);
-    if (!serverMode) return;
-    saveTimer = setTimeout(async () => {
-      try {
-        const r = await fetch('/api/state', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(state) });
-        setSaveLabel(r.ok ? '已儲存 ' + new Date().toLocaleTimeString() : '儲存失敗 (伺服器)');
-      } catch (e) { setSaveLabel('儲存失敗：伺服器未開？資料仍喺瀏覽器'); }
-    }, 400);
+    saveTimer = setTimeout(flush, 400);
   }
+  // One request at a time, so each save carries the revision the server last gave us.
+  async function flush() {
+    if (saving || !dirty) return;
+    saving = true; dirty = false;
+    try {
+      const r = await fetch('/api/state', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(state) });
+      const j = await r.json().catch(() => ({}));
+      if (r.status === 409 && j.state) {
+        state = normalise(j.state);
+        try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
+        dirty = false;
+        toast('另一部機啱啱改咗資料，已載入最新版本，請再做一次最後嗰個改動');
+        render();
+      } else if (r.ok && j.ok) {
+        state.rev = j.rev;
+        try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
+        setSaveLabel('已儲存 ' + new Date().toLocaleTimeString());
+      } else {
+        setSaveLabel('儲存失敗 (伺服器)');
+        dirty = true;
+      }
+    } catch (e) {
+      setSaveLabel('儲存失敗：伺服器未開？資料仍喺瀏覽器');
+      dirty = true;
+    } finally {
+      saving = false;
+      if (dirty) saveTimer = setTimeout(flush, 1500);
+    }
+  }
+  // Coming back to the tab (e.g. on the phone): pick up changes made on the other device.
+  document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState !== 'visible' || !serverOk || dirty || saving) return;
+    try {
+      const srv = await fetchServerState();
+      if (srv && (srv.rev || 0) > (state.rev || 0)) { state = normalise(srv); render(); toast('已同步最新資料'); }
+    } catch (e) { /* offline */ }
+  });
   function setSaveLabel(t) { $('#save-state').textContent = t; }
 
   function toast(msg) {
@@ -97,6 +140,34 @@
     n = Math.max(0, n | 0);
     if (n) state.owned[id] = n; else delete state.owned[id];
     save();
+  }
+  function rate() { return Number(settings().rate) || PRICES.jpyToHkd || DEFAULT_RATE; }
+  function pricer() {
+    return E.makePricer({ manual: state.manualPrices, bot: PRICES.prices, rate: rate(), factor: Number(settings().factor) || 1 });
+  }
+  function hk(n) {
+    if (n == null || n === '' || isNaN(n)) return '—';
+    const v = Math.round(Number(n) * 10) / 10;
+    return (v < 0 ? '−' : '') + 'HK$' + Math.abs(v).toLocaleString();
+  }
+  function changeHtml(ch) {
+    if (!ch || !ch.from) return '';
+    const pct = (ch.to - ch.from) / ch.from * 100;
+    if (Math.abs(pct) < 0.5) return '<span class="muted">±0%</span>';
+    return `<span class="${pct > 0 ? 'ok' : 'bad'}" title="由 ${esc(ch.since)} ${hk(ch.from)}">${pct > 0 ? '▲' : '▼'}${Math.abs(pct).toFixed(0)}%</span>`;
+  }
+  function setManualPrice(id, value) {
+    const today = new Date().toISOString().slice(0, 10);
+    if (value === '' || value == null || isNaN(Number(value))) { delete state.manualPrices[id]; save(); return; }
+    const m = state.manualPrices[id] || { history: [] };
+    m.hkd = Number(value); m.at = today;
+    m.history = (m.history || []).filter(h => h[0] !== today).concat([[today, m.hkd]]).slice(-180);
+    state.manualPrices[id] = m;
+    save();
+  }
+  function shopUrl(id) {
+    const p = PRICES.prices[id];
+    return (p && p.url) || 'https://yuyu-tei.jp/sell/opc/s/search?search_word=' + encodeURIComponent(E.baseId(id));
   }
   function cardName(id) { const c = byId[id] || byId[E.baseId(id)]; return c ? c.name : ''; }
   function imgSrc(id) {
@@ -125,7 +196,6 @@
   }
   function barClass(p) { return p >= 0.999 ? '' : p >= 0.8 ? 'mid' : 'low'; }
   function uid() { return 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
-  function money(n) { return n || n === 0 ? '$' + Number(n).toLocaleString() : ''; }
   function noDataNotice(what) {
     return `<div class="notice"><b>未有${what}資料。</b> 喺電腦行 BOT：
       <pre>python3 opcg/bot/scrape_cards.py --images\npython3 opcg/bot/scrape_decks.py</pre>
@@ -143,7 +213,7 @@
   }
   $('#tabs').addEventListener('click', e => { const b = e.target.closest('button'); if (b) showTab(b.dataset.tab); });
   function render() {
-    ({ collection: renderCollection, open: renderOpen, meta: renderMeta, mine: renderMine, settings: renderSettings })[current]();
+    ({ collection: renderCollection, open: renderOpen, meta: renderMeta, mine: renderMine, value: renderValue, settings: renderSettings })[current]();
   }
 
   // ======================================================== COLLECTION
@@ -170,6 +240,7 @@
     const cmpId = (a, b) => a.id.localeCompare(b.id, 'en', { numeric: true });
     if (cf.sort === 'owned') list.sort((a, b) => ownedOf(b.id) - ownedOf(a.id) || cmpId(a, b));
     else if (cf.sort === 'cost') list.sort((a, b) => (a.cost ?? -1) - (b.cost ?? -1) || cmpId(a, b));
+    else if (cf.sort === 'price') { const pr = pricer(); const v = c => (pr(c.id) || { hkd: -1 }).hkd; list.sort((a, b) => v(b) - v(a) || cmpId(a, b)); }
     else list.sort(cmpId);
     return list;
   }
@@ -181,12 +252,15 @@
         ${CARDS.length ? '' : noDataNotice('咭表')}
         <div class="toolbar">
           <input type="search" id="cf-q" placeholder="搜尋 編號 / 名 / 特徵 / 效果">
+          <button class="filter-toggle" id="cf-ft">篩選</button>
+          <div class="filters">
           <select id="cf-set"><option value="">全部系列</option>${SETS.map(s => opt(s, s)).join('')}</select>
           <select id="cf-color"><option value="">全部顏色</option>${COLORS.map(c => opt(c, c)).join('')}</select>
           <select id="cf-cat"><option value="">全部類別</option>${Object.entries(CATS).map(([k, v]) => opt(k, v)).join('')}</select>
           <select id="cf-rarity"><option value="">全部稀有度</option>${RARITIES.map(r => opt(r, r)).join('')}</select>
           <select id="cf-owned"><option value="">全部</option><option value="have">我有嘅</option><option value="none">未有</option><option value="spare">多過 4 張</option><option value="reserved">已預留畀 Deck</option></select>
-          <select id="cf-sort"><option value="id">按編號</option><option value="owned">按數量</option><option value="cost">按費用</option></select>
+          <select id="cf-sort"><option value="id">按編號</option><option value="owned">按數量</option><option value="cost">按費用</option><option value="price">按價錢</option></select>
+          </div>
         </div>
         <div class="stats" id="cf-stats"></div>
         <div class="grid" id="cf-grid"></div>
@@ -199,6 +273,7 @@
         input.addEventListener(k === 'q' ? 'input' : 'change', () => { cf[k] = input.value; cf.limit = 120; drawGrid(); });
       }
       $('#cf-more').addEventListener('click', () => { cf.limit += 240; drawGrid(); });
+      $('#cf-ft').addEventListener('click', () => el.querySelector('.toolbar').classList.toggle('show-filters'));
       $('#cf-grid').addEventListener('click', onGridClick);
     }
     drawGrid();
@@ -211,17 +286,19 @@
     $('#cf-stats').innerHTML = `<span>總共 <b>${totalCopies}</b> 張 · <b>${distinct}</b> 款</span>
       <span>符合篩選 <b>${list.length}</b> 款</span>
       <span>預留畀已砌 Deck <b>${Object.values(reserved).reduce((s, n) => s + n, 0)}</b> 張</span>`;
-    $('#cf-grid').innerHTML = list.slice(0, cf.limit).map(c => tileHtml(c, reserved)).join('');
+    const price = pricer();
+    $('#cf-grid').innerHTML = list.slice(0, cf.limit).map(c => tileHtml(c, reserved, price)).join('');
     $('#cf-more').style.display = list.length > cf.limit ? '' : 'none';
   }
-  function tileHtml(c, reserved) {
+  function tileHtml(c, reserved, price) {
     const n = ownedOf(c.id);
+    const p = (price || pricer())(c.id);
     const r = c.id === E.baseId(c.id) ? reserved[c.id] || 0 : 0;
     return `<div class="tile${n ? ' has' : ''}" data-id="${esc(c.id)}">
       <div class="img" data-act="detail">${imgTag(c.id)}</div>
       <div class="meta">${esc(c.id)} <span class="muted">${esc(c.rarity || '')}</span> ${dots(c)}</div>
       <div class="meta name" title="${esc(c.name)}">${esc(c.name || (c.unknown ? '(咭表冇資料)' : ''))}</div>
-      <div class="sub">${r ? `預留 ${r} · 可用 ${Math.max(0, n - r)}` : ''}</div>
+      <div class="sub">${p ? `<b class="price">${hk(p.hkd)}</b> ${changeHtml(p.change)} ` : ''}${r ? `預留 ${r} · 可用 ${Math.max(0, n - r)}` : ''}</div>
       <div class="qty"><button data-act="dec" aria-label="減一">−</button><span class="n${n ? '' : ' zero'}">${n}</span><button data-act="inc" aria-label="加一">+</button></div>
     </div>`;
   }
@@ -241,7 +318,8 @@
     const c = byId[id] || { id };
     const base = E.baseId(id);
     const usedIn = state.decks.filter(d => d.status !== 'sold' && d.entries.some(e => e.id === base));
-    const vars = (variantsOf[base] || [id]);
+    const vars = Array.from(new Set((variantsOf[base] || [id]).concat(Object.keys(state.owned).filter(k => E.baseId(k) === base))));
+    const price = pricer();
     const field = (k, v) => v || v === 0 ? `<dt>${k}</dt><dd>${esc(v)}</dd>` : '';
     $('#modal-body').innerHTML = `<div class="detail">
       <div>${imgSrc(id) ? `<img src="${esc(imgSrc(id))}" alt="${esc(c.name || id)}">` : ''}</div>
@@ -254,10 +332,20 @@
           ${field('效果', c.text)}${field('觸發', c.trigger)}${field('收錄', c.getInfo)}
         </dl>
         <h3>我有</h3>
-        <table class="list">${vars.map(v => `<tr><td>${esc(v)}${v === base ? '' : ' <span class="muted">(平行/異圖)</span>'}</td>
-          <td><button class="small" data-d="${esc(v)}" data-n="-1">−</button> <b>${ownedOf(v)}</b> <button class="small" data-d="${esc(v)}" data-n="1">+</button></td></tr>`).join('')}</table>
+        <table class="list"><tr><th>版本</th><th>數量</th><th>價錢</th></tr>${vars.map(v => { const p = price(v); return `<tr><td>${esc(v)}${v === base ? '' : ' <span class="muted">(平行/異圖)</span>'}</td>
+          <td style="white-space:nowrap"><button class="small" data-d="${esc(v)}" data-n="-1">−</button> <b>${ownedOf(v)}</b> <button class="small" data-d="${esc(v)}" data-n="1">+</button></td>
+          <td>${p ? `${hk(p.hkd)} ${changeHtml(p.change)}<br><span class="muted">${p.source === 'manual' ? '手動' : '悠々亭 ¥' + Number(p.jpy).toLocaleString()}</span>` : '<span class="muted">未有</span>'}
+            <br><input class="mp" data-mp="${esc(v)}" type="number" min="0" step="1" placeholder="手動價 HK$" value="${esc((state.manualPrices[v] || {}).hkd ?? '')}" style="width:110px">
+            <a href="${esc(shopUrl(v))}" target="_blank" rel="noopener">悠々亭</a></td></tr>`; }).join('')}</table>
         ${usedIn.length ? `<h3>用喺</h3><ul>${usedIn.map(d => `<li>${esc(d.name)} (${d.entries.find(e => e.id === base).count} 張, ${statusLabel(d.status)})</li>`).join('')}</ul>` : ''}
       </div></div>`;
+    $('#modal-body').onchange = e => {
+      const m = e.target.closest('[data-mp]');
+      if (!m) return;
+      setManualPrice(m.dataset.mp, m.value);
+      showDetail(id);
+      render();
+    };
     $('#modal-body').onclick = e => {
       const b = e.target.closest('[data-d]');
       if (!b) return;
@@ -351,7 +439,7 @@
       <div class="toolbar">
         <input type="search" id="mf-q" placeholder="搜尋 Deck / 領航 / 作者 / 比賽">
         <select id="mf-color"><option value="">全部顏色</option>${COLORS.map(c => `<option>${esc(c)}</option>`).join('')}</select>
-        <select id="mf-sort"><option value="pct">我最夠咭先</option><option value="missing">差最少張先</option><option value="date">最新先</option></select>
+        <select id="mf-sort"><option value="pct">我最夠咭先</option><option value="missing">差最少張先</option><option value="fill">補咭最平先</option><option value="value">市值最高先</option><option value="date">最新先</option></select>
       </div>
       <div class="stats"><span>${META.length} 副 Deck · 來源 <a href="${esc(src.source)}" target="_blank" rel="noopener">${esc(src.source)}</a> · 更新 ${esc((src.scrapedAt || '').slice(0, 10))}</span></div>
       <div class="decks" id="mf-list"></div>
@@ -376,11 +464,14 @@
   }
   function drawMeta() {
     const avail = available();
+    const price = pricer();
     const q = mf.q.trim().toLowerCase();
     let list = META.map(d => {
       const lead = d.leader || E.leaderOf(d.entries, byId);
       const main = d.entries.filter(e => e.id !== lead);
-      return Object.assign({}, d, { lead, st: E.deckStatus(d.entries, avail), mainCount: main.reduce((s, e) => s + e.count, 0) });
+      const st = E.deckStatus(d.entries, avail);
+      return Object.assign({}, d, { lead, st, mainCount: main.reduce((s, e) => s + e.count, 0),
+        cost: E.deckCost(d.entries, price), fill: E.missingCost(st.rows, price) });
     }).filter(d => {
       if (mf.color && !E.cardColors(byId[d.lead] || {}).includes(mf.color)) return false;
       if (!q) return true;
@@ -389,6 +480,8 @@
     if (mf.sort === 'pct') list.sort((a, b) => b.st.pct - a.st.pct || a.st.missing - b.st.missing);
     if (mf.sort === 'missing') list.sort((a, b) => a.st.missing - b.st.missing);
     if (mf.sort === 'date') list.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    if (mf.sort === 'fill') list.sort((a, b) => a.fill.cost - b.fill.cost || a.st.missing - b.st.missing);
+    if (mf.sort === 'value') list.sort((a, b) => b.cost.cost - a.cost.cost);
     $('#mf-list').innerHTML = list.slice(0, mf.limit).map(d => metaDeckHtml(d)).join('') || '<p class="muted">冇符合嘅 Deck</p>';
     $('#mf-more').style.display = list.length > mf.limit ? '' : 'none';
   }
@@ -402,6 +495,7 @@
           <div class="muted" style="font-size:12px">${esc(info || d.context || d.page)}</div></div></div>
       <div class="bar ${barClass(d.st.pct)}"><i style="width:${(d.st.pct * 100).toFixed(0)}%"></i></div>
       <div>${d.st.have}/${d.st.need} 張 · ${d.st.missing ? `<span class="bad">差 ${d.st.missing} 張</span>` : '<span class="ok">夠晒咭，可以砌！</span>'}</div>
+      ${costLine(d.cost, d.st.missing ? d.fill : null)}
       ${mf.open[d.id] ? rowsHtml(d.st.rows) : ''}
       <div class="actions"><button class="small" data-act="toggle" data-id="${esc(d.id)}">${mf.open[d.id] ? '收埋' : '睇咭表'}</button>
         <button class="small primary" data-act="copy" data-id="${esc(d.id)}">加入我的 Deck</button>
@@ -409,7 +503,12 @@
         <a class="small muted" href="${esc(d.url)}" target="_blank" rel="noopener">來源</a></div>
     </div>`;
   }
+  function costLine(cost, fill) {
+    const unk = cost.unknown.length ? ` <span class="muted">(${cost.unknown.length} 款未有價)</span>` : '';
+    return `<div class="muted" style="font-size:13px">市值 <b class="price">${hk(cost.cost)}</b>${unk}${fill ? ` · 補齊要 <b class="price">${hk(fill.cost)}</b>${fill.unknown ? ` +${fill.unknown} 張未有價` : ''}` : ''}</div>`;
+  }
   function rowsHtml(rows, editable) {
+    const price = pricer();
     const sorted = rows.slice().sort((a, b) => {
       const ca = byId[a.id] || {}, cb = byId[b.id] || {};
       const la = ca.category === 'LEADER' ? 0 : 1, lb = cb.category === 'LEADER' ? 0 : 1;
@@ -418,6 +517,7 @@
     return `<div class="rows">${sorted.map(r => `<div class="row${r.missing ? ' miss' : ''}">
       <div class="thumb" data-detail="${esc(r.id)}">${imgTag(r.id)}</div>
       <div class="grow"><b>${esc(r.id)}</b> ${esc(cardName(r.id))}</div>
+      <span class="muted rowprice">${(p => p ? hk(p.hkd) : '')(price(r.id))}</span>
       <span class="muted" title="可用 (扣除其他已砌 Deck)">有 ${r.free}</span>
       ${editable ? `<span class="cnt"><button class="small" data-e="${esc(r.id)}" data-n="-1">−</button><b class="need">${r.need}</b><button class="small" data-e="${esc(r.id)}" data-n="1">+</button></span>`
         : `<b class="need">×${r.need}</b>`}
@@ -462,6 +562,7 @@
     const el = $('#tab-mine');
     const sold = state.decks.filter(d => d.status === 'sold');
     const income = sold.reduce((s, d) => s + (Number(d.soldPrice) || 0), 0);
+    const profit = sold.reduce((s, d) => s + (d.soldPrice !== '' && d.costAtSale != null ? Number(d.soldPrice) - d.costAtSale : 0), 0);
     const plan = state.decks.filter(d => d.status === 'plan');
     const shop = E.shoppingList(plan, available());
     el.innerHTML = `
@@ -470,7 +571,7 @@
         <select id="mine-filter"><option value="active">計劃中 + 已砌好</option><option value="plan">計劃中</option><option value="built">已砌好</option><option value="sold">已賣出</option><option value="all">全部</option></select>
       </div>
       <div class="stats"><span>計劃中 <b>${plan.length}</b></span><span>已砌好 <b>${state.decks.filter(d => d.status === 'built').length}</b></span>
-        <span>已賣出 <b>${sold.length}</b> 副 · 收入 <b>${money(income) || '$0'}</b></span></div>
+        <span>已賣出 <b>${sold.length}</b> 副 · 收入 <b>${hk(income)}</b> · 對比市值 <b class="${profit >= 0 ? 'ok' : 'bad'}">${profit >= 0 ? '+' : ''}${hk(profit)}</b></span></div>
       <div class="decks" id="mine-list"></div>
       ${plan.length ? `<div class="panel" style="margin-top:16px"><h3>補咭清單 (全部「計劃中」Deck 一齊計)</h3>
         ${shop.length ? `<table class="list"><tr><th>咭</th><th>需要</th><th>可用</th><th>仲差</th></tr>${shop.map(r => `<tr><td><b>${esc(r.id)}</b> ${esc(cardName(r.id))}</td><td>${r.need}</td><td>${r.free}</td><td class="bad">${r.missing}</td></tr>`).join('')}</table>
@@ -494,6 +595,11 @@
   function myDeckHtml(d) {
     const avail = available(d.id);
     const st = E.deckStatus(d.entries, avail);
+    const price = pricer();
+    const cost = E.deckCost(d.entries, price);
+    const ask = d.status === 'sold' ? d.soldPrice : d.price;
+    const base = d.status === 'sold' && d.costAtSale != null ? d.costAtSale : cost.cost;
+    const profit = ask === '' || ask == null ? null : Number(ask) - base;
     const lead = E.leaderOf(d.entries, byId);
     const issues = E.validateDeck(d.entries, byId);
     const open = !!mineOpen[d.id];
@@ -504,13 +610,19 @@
           <div class="title">${open && !sold ? `<input data-f="name" value="${esc(d.name)}">` : esc(d.name)}</div>
           <div class="muted">${esc(lead)} ${esc(cardName(lead))} ${dots(byId[lead])}</div>
           <span class="badge ${d.status}">${statusLabel(d.status)}</span>
-          ${sold ? `<span class="muted"> ${esc((d.soldAt || '').slice(0, 10))} · ${money(d.soldPrice)}</span>` : ''}
+          ${sold ? `<span class="muted"> ${esc((d.soldAt || '').slice(0, 10))} · 賣 ${hk(d.soldPrice)}</span>` : ''}
         </div></div>
+      <div class="money">
+        <span>市值${sold ? ' (賣出時)' : ''} <b class="price">${hk(base)}</b>${!sold && cost.unknown.length ? ` <span class="muted">(${cost.unknown.length} 款未有價)</span>` : ''}</span>
+        ${!sold && st.missing ? `<span>補齊要 <b class="price">${hk(E.missingCost(st.rows, price).cost)}</b></span>` : ''}
+        ${profit != null ? `<span>${sold ? '賺蝕' : '預計賺蝕'} <b class="${profit >= 0 ? 'ok' : 'bad'}">${profit >= 0 ? '+' : ''}${hk(profit)}</b></span>` : ''}
+      </div>
       ${sold ? '' : `<div class="bar ${barClass(st.pct)}"><i style="width:${(st.pct * 100).toFixed(0)}%"></i></div>
       <div>${st.have}/${st.need} 張 · ${st.missing ? `<span class="bad">差 ${st.missing} 張</span>` : '<span class="ok">夠晒咭</span>'}</div>`}
       ${issues.length && !sold ? `<ul class="issues">${issues.map(i => `<li>${esc(i)}</li>`).join('')}</ul>` : ''}
       ${open ? `
-        ${!sold ? `<label>售價 <input data-f="price" type="number" min="0" step="1" value="${esc(d.price)}" style="width:110px"></label>` : ''}
+        ${!sold ? `<label>售價 HK$ <input data-f="price" type="number" min="0" step="1" value="${esc(d.price)}" style="width:110px"></label>
+          <button class="small" data-act="askmarket">用市值做售價</button>` : ''}
         ${rowsHtml(st.rows, !sold)}
         ${!sold ? `<div class="picker"><input data-f="search" placeholder="加咭：打編號或名" style="width:100%"><div class="results"></div></div>` : ''}
         <textarea data-f="notes" placeholder="備註 (買家、交收…)" style="min-height:50px">${esc(d.notes || '')}</textarea>` : ''}
@@ -559,8 +671,9 @@
       d.status = 'built'; d.builtAt = new Date().toISOString(); save(); renderMine();
     }
     if (act === 'unbuild') { d.status = 'plan'; save(); renderMine(); }
+    if (act === 'askmarket') { d.price = Math.ceil(E.deckCost(d.entries, pricer()).cost); save(); redrawDeck(d); }
     if (act === 'sell') {
-      const price = prompt('賣咗幾錢？(可留空)', d.price || '');
+      const price = prompt('賣咗幾錢 (HK$)？(可留空)', d.price || '');
       if (price === null) return;
       const before = Object.assign({}, state.owned);
       const res = E.sellDeck(state.owned, d.entries, settings().includeParallels);
@@ -568,13 +681,14 @@
       state.owned = res.owned;
       d.removed = {};
       for (const id of Object.keys(before)) { const diff = before[id] - (res.owned[id] || 0); if (diff) d.removed[id] = diff; }
+      d.costAtSale = E.deckCost(d.entries, pricer()).cost;
       d.status = 'sold'; d.soldAt = new Date().toISOString(); d.soldPrice = price === '' ? '' : Number(price);
       save(); renderMine(); toast('已從咭庫扣除');
     }
     if (act === 'unsell') {
       if (!confirm('撤銷賣出：將賣出時扣除嘅咭加返入咭庫？')) return;
       for (const [id, n] of Object.entries(d.removed || {})) state.owned[id] = (state.owned[id] || 0) + n;
-      d.status = 'plan'; delete d.removed; delete d.soldAt; save(); renderMine();
+      d.status = 'plan'; delete d.removed; delete d.soldAt; delete d.costAtSale; save(); renderMine();
     }
     if (act === 'text') copyText(E.deckToText(d.entries, byId));
     if (act === 'dup') addMyDeck(d.name + ' (2)', d.entries, { notes: '' });
@@ -588,6 +702,7 @@
     if (!d || !f || f === 'search') return;
     d[f] = f === 'price' ? (e.target.value === '' ? '' : Number(e.target.value)) : e.target.value;
     save();
+    if (f === 'price' || f === 'name') redrawDeck(d);
   }
   function onMineInput(e) {
     if (e.target.dataset.f !== 'search') return;
@@ -609,6 +724,96 @@
       <span class="muted">有 ${Math.max(0, avail[c.id] || 0)}</span><button class="small" data-e="${esc(c.id)}" data-n="1">+1</button><button class="small" data-e="${esc(c.id)}" data-n="4">+4</button></div>`).join('');
   }
 
+  // ============================================================== VALUE
+  const vf = { q: '', scope: 'mine', sort: 'total', limit: 150 };
+  function valueRows() {
+    const price = pricer();
+    const min = Number(settings().valuableMin) || 0;
+    const reserved = E.reservedTotals(state.decks);
+    const ids = new Set(Object.keys(state.owned));
+    if (vf.scope === 'all') { for (const id of Object.keys(PRICES.prices)) ids.add(id); for (const id of Object.keys(state.manualPrices)) ids.add(id); }
+    const q = vf.q.trim().toLowerCase();
+    let rows = [];
+    for (const id of ids) {
+      const p = price(id);
+      const n = ownedOf(id);
+      if (!p || p.hkd < min) continue;
+      if (vf.scope === 'mine' && !n) continue;
+      const c = byId[id] || {};
+      if (q && !(id.toLowerCase().includes(q) || (c.name || '').toLowerCase().includes(q))) continue;
+      const pct = p.change && p.change.from ? (p.change.to - p.change.from) / p.change.from : 0;
+      rows.push({ id, c, n, p, total: p.hkd * n, pct, reserved: id === E.baseId(id) ? reserved[id] || 0 : 0 });
+    }
+    const by = { total: (a, b) => b.total - a.total, unit: (a, b) => b.p.hkd - a.p.hkd, up: (a, b) => b.pct - a.pct, down: (a, b) => a.pct - b.pct, id: (a, b) => a.id.localeCompare(b.id) }[vf.sort];
+    rows.sort((a, b) => by(a, b) || a.id.localeCompare(b.id));
+    return rows;
+  }
+  function renderValue() {
+    const el = $('#tab-value');
+    const price = pricer();
+    const v = E.collectionValue(state.owned, price);
+    const hasBot = Object.keys(PRICES.prices || {}).length > 0;
+    el.innerHTML = `
+      ${hasBot ? '' : `<div class="notice"><b>未有自動價錢。</b> 行價錢 BOT（悠々亭日版售價 × 匯率）：<pre>python3 opcg/bot/scrape_prices.py</pre>或者喺「設定」撳「更新價錢」。冇 BOT 都可以喺下面或者咭嘅詳情入面自己輸入價錢。</div>`}
+      <div class="stats">
+        <span>咭庫總值 <b class="price">${hk(v.total)}</b></span>
+        <span>有價 <b>${v.priced}</b> 張 · 未有價 <b>${v.unpriced}</b> 張</span>
+        <span id="vf-sum"></span>
+        <span>價錢 ${PRICES.fetchedAt ? '更新 ' + esc(PRICES.fetchedAt.slice(0, 10)) : '未更新'} · 1 JPY = ${rate()} HKD${Number(settings().factor) !== 1 ? ' · 係數 ×' + esc(settings().factor) : ''}</span>
+      </div>
+      <div class="toolbar">
+        <input type="search" id="vf-q" placeholder="搜尋 編號 / 名">
+        <label>HK$ <input id="vf-min" type="number" min="0" step="10" style="width:90px"> 或以上</label>
+        <select id="vf-scope"><option value="mine">我有嘅</option><option value="all">全部有價嘅咭</option></select>
+        <select id="vf-sort"><option value="total">總值高先</option><option value="unit">單價高先</option><option value="up">升得多先</option><option value="down">跌得多先</option><option value="id">按編號</option></select>
+        <button id="vf-csv" class="small">匯出 CSV</button>
+      </div>
+      <div class="vlist" id="vf-list"></div>
+      <button class="more" id="vf-more">顯示更多</button>`;
+    $('#vf-min').value = settings().valuableMin;
+    $('#vf-min').addEventListener('change', e => { settings().valuableMin = Number(e.target.value) || 0; save(); drawValue(); });
+    for (const k of ['q', 'scope', 'sort']) {
+      const input = $('#vf-' + k);
+      input.value = vf[k];
+      input.addEventListener(k === 'q' ? 'input' : 'change', () => { vf[k] = input.value; vf.limit = 150; drawValue(); });
+    }
+    $('#vf-more').addEventListener('click', () => { vf.limit += 150; drawValue(); });
+    $('#vf-csv').addEventListener('click', () => {
+      const rows = [['id', 'name', 'rarity', 'count', 'unit_hkd', 'total_hkd', 'source', 'jpy', 'price_date']].concat(valueRows().map(r =>
+        [r.id, r.c.name || '', r.c.rarity || '', r.n, r.p.hkd, Math.round(r.total * 10) / 10, r.p.source, r.p.jpy ?? '', r.p.at || '']));
+      download('opcg-valuable.csv', '﻿' + rows.map(r => r.map(x => `"${String(x).replace(/"/g, '""')}"`).join(',')).join('\n'), 'text/csv');
+    });
+    const list = $('#vf-list');
+    list.addEventListener('change', e => {
+      const m = e.target.closest('[data-mp]');
+      if (!m) return;
+      setManualPrice(m.dataset.mp, m.value);
+      drawValue();
+    });
+    list.addEventListener('click', e => {
+      const b = e.target.closest('[data-clear]');
+      if (b) { setManualPrice(b.dataset.clear, ''); drawValue(); }
+    });
+    drawValue();
+  }
+  function drawValue() {
+    const rows = valueRows();
+    const sum = rows.reduce((s, r) => s + r.total, 0);
+    $('#vf-sum').innerHTML = `呢度 <b>${rows.length}</b> 款 · 總值 <b class="price">${hk(sum)}</b>`;
+    $('#vf-list').innerHTML = rows.slice(0, vf.limit).map(r => `<div class="vrow">
+      <div class="thumb" data-detail="${esc(r.id)}">${imgTag(r.id)}</div>
+      <div class="grow">
+        <div><b>${esc(r.id)}</b> <span class="muted">${esc(r.c.rarity || '')}</span> ${esc(r.c.name || '')}${r.id !== E.baseId(r.id) ? ' <span class="badge">平行</span>' : ''}</div>
+        <div class="muted" style="font-size:12px">${r.p.source === 'manual' ? `手動 (${esc(r.p.at || '')}) <button class="small" data-clear="${esc(r.id)}">用返自動價</button>` : `悠々亭 ¥${Number(r.p.jpy).toLocaleString()}${r.p.stock === 0 ? ' · 缺貨' : ''} · ${esc(r.p.at || '')}`}
+          · <a href="${esc(shopUrl(r.id))}" target="_blank" rel="noopener">悠々亭</a>${r.reserved ? ` · 預留 ${r.reserved}` : ''}</div>
+      </div>
+      <div class="vnum"><div class="muted">單價</div><b class="price">${hk(r.p.hkd)}</b> ${changeHtml(r.p.change)}</div>
+      <div class="vnum"><div class="muted">× ${r.n}</div><b class="price">${hk(r.total)}</b></div>
+      <div class="vnum"><input data-mp="${esc(r.id)}" type="number" min="0" step="1" placeholder="改價" aria-label="手動價 HK$" style="width:84px"></div>
+    </div>`).join('') || '<p class="muted">冇符合嘅咭。試吓降低價錢門檻，或者揀「全部有價嘅咭」。</p>';
+    $('#vf-more').style.display = rows.length > vf.limit ? '' : 'none';
+  }
+
   // ============================================================ SETTINGS
   function renderSettings() {
     const el = $('#tab-settings');
@@ -618,12 +823,20 @@
         <div class="panel"><h2>資料</h2>
           <p>咭表：${cs ? `<b>${CARDS.length}</b> 張 · ${esc((cs.series || []).length)} 個系列 · 更新 ${esc((cs.scrapedAt || '').slice(0, 16).replace('T', ' '))}` : '<span class="warn">未有</span>'}</p>
           <p>Meta Decks：${ds ? `<b>${META.length}</b> 副 · 更新 ${esc((ds.scrapedAt || '').slice(0, 16).replace('T', ' '))}` : '<span class="warn">未有</span>'}</p>
+          <p>價錢：${PRICES.fetchedAt ? `<b>${Object.keys(PRICES.prices).length}</b> 款 · 更新 ${esc(PRICES.fetchedAt.slice(0, 16).replace('T', ' '))}` : '<span class="warn">未有</span>'} · 手動價 <b>${Object.keys(state.manualPrices).length}</b> 款</p>
           <div id="bot-box">${serverMode ? `
-            <div class="actions"><button data-bot="cards">更新咭表</button><button data-bot="cards-images">更新咭表 + 下載圖片</button><button data-bot="decks">更新 Deck list</button></div>
+            <div class="actions"><button data-bot="cards">更新咭表</button><button data-bot="cards-images">更新咭表 + 下載圖片</button><button data-bot="decks">更新 Deck list</button><button data-bot="prices">更新價錢</button></div>
             <pre id="bot-log" class="muted" style="max-height:260px;overflow:auto"></pre>` : noDataNotice('伺服器').replace('未有伺服器資料。', 'BOT 要喺電腦行。')}</div>
         </div>
         <div class="panel"><h2>設定</h2>
           <label><input type="checkbox" id="set-par"${settings().includeParallels ? ' checked' : ''}> 計 Deck 時連平行/異圖一齊計 (賣 Deck 時會先用普通版)</label>
+          <h3 style="margin-top:16px">價錢</h3>
+          <p class="muted" style="margin:0 0 6px">自動價 = 悠々亭日版售價 (JPY) × 匯率 × 係數。港版/亞洲中文版通常同日版行情唔同，可以用係數調整 (例如 0.8)。手動價永遠優先。</p>
+          <div class="toolbar">
+            <label>1 JPY = <input id="set-rate" type="number" step="0.0001" min="0" style="width:100px" placeholder="${esc(PRICES.jpyToHkd || DEFAULT_RATE)}"> HKD</label>
+            <label>係數 × <input id="set-factor" type="number" step="0.05" min="0" style="width:80px"></label>
+          </div>
+          <p class="muted" style="margin:0">匯率留空 = 用 BOT 最近攞到嘅匯率 (${esc(PRICES.jpyToHkd || DEFAULT_RATE + '，預設值')})。</p>
           <h3 style="margin-top:16px">備份</h3>
           <div class="actions"><button id="exp">匯出備份 (JSON)</button><label class="small"><input type="file" id="imp" accept=".json,application/json" hidden><span class="small" style="border:1px solid var(--line);border-radius:8px;padding:6px 12px;cursor:pointer">匯入備份</span></label>
             <button id="exp-csv">匯出咭庫 CSV</button></div>
@@ -634,10 +847,16 @@
         </div>
       </div>`;
     $('#set-par').addEventListener('change', e => { settings().includeParallels = e.target.checked; save(); });
+    $('#set-rate').value = settings().rate || '';
+    $('#set-rate').addEventListener('change', e => { settings().rate = e.target.value === '' ? '' : Number(e.target.value); save(); toast('已更新匯率'); });
+    $('#set-factor').value = settings().factor ?? 1;
+    $('#set-factor').addEventListener('change', e => { settings().factor = e.target.value === '' ? 1 : Number(e.target.value); save(); toast('已更新係數'); });
     $('#exp').addEventListener('click', () => download('opcg-backup-' + new Date().toISOString().slice(0, 10) + '.json', JSON.stringify(state, null, 1), 'application/json'));
     $('#exp-csv').addEventListener('click', () => {
-      const rows = [['id', 'name', 'rarity', 'set', 'count']].concat(Object.keys(state.owned).sort().map(id => {
-        const c = byId[id] || {}; return [id, c.name || '', c.rarity || '', c.set || E.setOf(id), state.owned[id]];
+      const price = pricer();
+      const rows = [['id', 'name', 'rarity', 'set', 'count', 'unit_hkd']].concat(Object.keys(state.owned).sort().map(id => {
+        const c = byId[id] || {}; const p = price(id);
+        return [id, c.name || '', c.rarity || '', c.set || E.setOf(id), state.owned[id], p ? p.hkd : ''];
       }));
       download('opcg-collection.csv', '﻿' + rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n'), 'text/csv');
     });
@@ -702,6 +921,6 @@
   load().then(() => {
     let tab = 'collection';
     try { tab = localStorage.getItem('opcg-tab') || tab; } catch (e) { /* ignore */ }
-    showTab(['collection', 'open', 'meta', 'mine', 'settings'].includes(tab) ? tab : 'collection');
+    showTab(['collection', 'open', 'meta', 'mine', 'value', 'settings'].includes(tab) ? tab : 'collection');
   });
 })();

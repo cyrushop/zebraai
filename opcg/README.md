@@ -10,7 +10,17 @@
 python3 opcg/serve.py
 ```
 
-打開 http://localhost:8765 → 「設定」→ 撳 **更新咭表 + 下載圖片** 同 **更新 Deck list**。
+打開 http://localhost:8765 → 「設定」→ 撳 **更新咭表 + 下載圖片**、**更新 Deck list** 同 **更新價錢**。
+
+### 用手機睇 / 搜尋
+
+部電腦同手機要連同一個 Wi-Fi：
+
+```bash
+python3 opcg/serve.py --lan --pin 4321
+```
+
+Terminal 會印出 `http://192.168.x.x:8765`，用手機打開，輸入 PIN。手機同電腦用同一份資料；如果兩部機差唔多同時改，後改嗰部會收到提示同載入最新版本，唔會互相覆蓋。手機版咭庫可以撳「篩選」打開篩選欄。
 
 或者直接喺 terminal 行 BOT：
 
@@ -31,8 +41,9 @@ python3 opcg/bot/scrape_decks.py
 | 咭庫 | 全部咭 (有圖)，按系列 / 顏色 / 類別 / 稀有度 / 有冇 篩選，+/− 改數量。撳圖睇效果同平行版本。 |
 | 開箱 | 揀預設系列 (例如 OP08)，打 `45` 再 Enter 就 +1 張 OP08-045；`45p1` = 平行版。可撤銷。亦可以一次過貼 `OP08-001 x2`。 |
 | Meta Decks | onepiecetopdecks 嘅比賽 Deck，按「我最夠咭」排序，顯示差幾多張、差邊啲。一撳加入我的 Deck。 |
-| 我的 Decks | 計劃中 → 砌好 (預留咭，其他 Deck 唔會再計呢啲咭) → 賣出 (從咭庫扣數，記錄售價同收入)。可以編輯、檢查規則 (1 領航、50 張、每款最多 4 張、顏色)，有合併補咭清單。 |
-| 設定 | 行 BOT、平行版計唔計入 Deck、匯出 / 匯入 JSON 備份、匯出 CSV。 |
+| 我的 Decks | 計劃中 → 砌好 (預留咭，其他 Deck 唔會再計呢啲咭) → 賣出 (從咭庫扣數，記錄售價同收入)。顯示 Deck 市值、補齊要幾錢、預計賺蝕；賣出時記低當時市值，計總賺蝕。可以編輯、檢查規則 (1 領航、50 張、每款最多 4 張、顏色)，有合併補咭清單。 |
+| 貴咭 | 單價 HK$50 (可改) 或以上嘅咭：單價、數量、總值、7 日升跌、悠々亭連結。可以逐張輸入手動價。顯示成個咭庫總值，可匯出 CSV。 |
+| 設定 | 行 BOT、匯率同價錢係數、平行版計唔計入 Deck、匯出 / 匯入 JSON 備份、匯出 CSV。 |
 
 ## BOT
 
@@ -40,15 +51,24 @@ python3 opcg/bot/scrape_decks.py
 |---|---|---|
 | `bot/scrape_cards.py` | https://asia-tc.onepiece-cardgame.com/cardlist/ (每個系列一頁) | `data/cards.json`, `data/cards.js`, `data/images/` |
 | `bot/scrape_decks.py` | https://onepiecetopdecks.com/deck-list/ 同佢連去嘅 deck-list 頁 | `data/decks.json`, `data/decks.js` |
+| `bot/scrape_prices.py` | https://yuyu-tei.jp/sell/opc/s/op08 等 (悠々亭日版單咭售價) + https://open.er-api.com 匯率 | `data/prices.json`, `data/prices.js` (保留 180 日價錢歷史) |
 
 常用選項：
 
 * `scrape_cards.py --list-series`：列出網站有咩系列
 * `scrape_cards.py --series OP08,OP09,EB02`：只更新某啲系列 (會同之前嘅結果合併)
 * `scrape_decks.py --max-pages 10` / `--url <頁面>`
-* 兩隻 BOT 都有 `--save-html`，網站改版搵唔到嘢時，將 `data/raw/` 入面嘅 HTML 用嚟修 parser。
+* `scrape_prices.py`：預設只讀你有嘅咭同你啲 Deck 用到嘅系列；`--sets all` 讀晒，`--sets OP08,OP09` 指定，`--rate 0.049` 自己定匯率
+* 三隻 BOT 都有 `--save-html`，網站改版搵唔到嘢時，將 `data/raw/` 入面嘅 HTML 用嚟修 parser。
 
 BOT 每個 request 之間等 1 秒。
+
+## 價錢點計
+
+* **自動價** = 悠々亭日版售價 (JPY) × 匯率 (JPY→HKD) × 係數。係數預設 1，你可以喺設定改，例如亞洲中文版行情低啲就設 0.8。
+* **手動價** (HK$) 永遠優先。喺「貴咭」或者咭嘅詳情入面輸入；清空就用返自動價。
+* 平行版：悠々亭同一個咭號有普通版同平行版，BOT 將普通版對應 `OP08-001`，平行版由平到貴對應 `_p1`、`_p2`。**呢個對應係估計**，貴咭請自己核對，唔啱就輸入手動價。
+* Deck 市值用普通版價錢計。
 
 ## 資料
 

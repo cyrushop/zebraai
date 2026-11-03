@@ -10,6 +10,7 @@ import unittest
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "bot"))
 import scrape_cards  # noqa: E402
 import scrape_decks  # noqa: E402
+import scrape_prices  # noqa: E402
 
 CARDLIST = """
 <html><body>
@@ -75,6 +76,38 @@ DECK_PAGE = """
 """
 
 
+YUYU = """
+<html><body>
+<div id="cardlist-SR" class="py-4 cards-list"><h3><span>SR</span></h3><div class="row">
+ <div class="col-md"><div class="card-product position-relative mt-4">
+   <a href="https://yuyu-tei.jp/sell/opc/card/op08/10031"><img class="card img-fluid" alt="OP08-106 SR ナミ" src="x.jpg"></a>
+   <span class="d-block border p-1 text-center my-2">OP08-106</span>
+   <a href="https://yuyu-tei.jp/sell/opc/card/op08/10031"><h4 class="text-primary fw-bold">ナミ</h4></a>
+   <div class="d-flex"><strong class="d-block text-end">320 円</strong><label>在庫 : 5 点</label></div>
+ </div></div>
+ <div class="col-md"><div class="card-product">
+   <a href="/sell/opc/card/op08/10040"><img alt="OP08-079 SR カイドウ"></a>
+   <span>OP08-079</span><h4>カイドウ</h4>
+   <div><del><strong>120 円</strong></del> <strong class="text-danger">80 円</strong><label>在庫 : 0 点</label></div>
+ </div></div>
+</div></div>
+<div id="cardlist-P-SR"><h3><span>P-SR</span></h3><div class="row">
+ <div class="col-md"><div class="card-product">
+   <a href="/sell/opc/card/op08/10200"><img alt="OP08-106 P-SR ナミ(パラレル)"></a>
+   <span>OP08-106</span><h4>ナミ(パラレル)</h4><strong>4,980 円</strong>
+ </div></div>
+ <div class="col-md"><div class="card-product">
+   <a href="/sell/opc/card/op08/10201"><img alt="OP08-106 SP ナミ(スーパーパラレル)"></a>
+   <span>OP08-106</span><h4>ナミ(スーパーパラレル)</h4><strong>129,800 円</strong>
+ </div></div>
+ <div class="col-md"><div class="card-product">
+   <span>ST01-012</span><h4>ルフィ</h4><strong>1,500 円</strong>
+ </div></div>
+</div></div>
+</body></html>
+"""
+
+
 class CardBot(unittest.TestCase):
     def test_series(self):
         s = scrape_cards.parse_series(CARDLIST)
@@ -125,6 +158,39 @@ class DeckBot(unittest.TestCase):
         self.assertEqual(t["name"], "Blue Doffy (text list)")
         self.assertEqual(sum(e["count"] for e in t["entries"]), 51)
         self.assertEqual(scrape_decks._leader(t["entries"]), "OP10-002")
+
+
+class PriceBot(unittest.TestCase):
+    def test_parse_and_map(self):
+        url = "https://yuyu-tei.jp/sell/opc/s/op08"
+        rows = scrape_prices.parse_shop(YUYU, url)
+        self.assertEqual(len(rows), 5)
+        nami = rows[0]
+        self.assertEqual((nami["cardNo"], nami["name"], nami["rarity"], nami["jpy"], nami["stock"]),
+                         ("OP08-106", "ナミ", "SR", 320, 5))
+        self.assertEqual(rows[1]["jpy"], 80, "struck-out old price is skipped")
+        self.assertEqual(rows[1]["url"], "https://yuyu-tei.jp/sell/opc/card/op08/10040")
+        ids = scrape_prices.map_ids(rows, "OP08")
+        self.assertEqual(ids["OP08-106"]["jpy"], 320)
+        self.assertEqual(ids["OP08-106_p1"]["jpy"], 4980)
+        self.assertEqual(ids["OP08-106_p2"]["jpy"], 129800)
+        # A reprint listed on another set's page (here in a parallel section) is kept but
+        # marked foreign, so the card's own set page wins when both are read.
+        self.assertEqual(ids["ST01-012_p1"]["jpy"], 1500)
+        self.assertTrue(ids["ST01-012_p1"].get("foreign"))
+
+    def test_merge_history(self):
+        old = {"prices": {"OP08-106": {"jpy": 300, "history": [["2026-10-01", 300], ["2026-11-03", 310]]}}}
+        new = {"OP08-106": {"jpy": 320, "stock": 1, "name": "ナミ", "rarity": "SR", "url": "u"}}
+        p = scrape_prices.merge(old, new, "2026-11-03")
+        self.assertEqual(p["OP08-106"]["history"], [["2026-10-01", 300], ["2026-11-03", 320]])
+        self.assertEqual(p["OP08-106"]["jpy"], 320)
+
+    def test_parallel_words(self):
+        self.assertTrue(scrape_prices.is_parallel("P-SEC", ""))
+        self.assertTrue(scrape_prices.is_parallel("SR", "ナミ(パラレル)"))
+        self.assertFalse(scrape_prices.is_parallel("SEC", "ゴール・D・ロジャー"))
+        self.assertFalse(scrape_prices.is_parallel("L", "ルフィ"))
 
 
 if __name__ == "__main__":

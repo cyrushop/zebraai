@@ -116,4 +116,32 @@ t('shoppingList adds up competing decks', () => {
   assert.deepStrictEqual(list, [{ id: 'OP08-002', need: 8, free: 5, missing: 3 }]);
 });
 
+t('prices: manual beats bot, JPY x rate x factor, change over 7 days', () => {
+  const price = E.makePricer({
+    manual: { 'OP08-002': { hkd: 30, at: '2026-11-01', history: [['2026-10-01', 20], ['2026-11-01', 30]] } },
+    bot: {
+      'OP08-002': { jpy: 1000, history: [['2026-11-03', 1000]] },
+      'OP08-003': { jpy: 2000, url: 'u', history: [['2026-10-20', 1000], ['2026-10-30', 1500], ['2026-11-03', 2000]] },
+    },
+    rate: 0.05, factor: 0.8,
+  });
+  assert.strictEqual(price('OP08-002').hkd, 30);
+  assert.strictEqual(price('OP08-002').source, 'manual');
+  assert.deepStrictEqual(price('OP08-002').change, { from: 20, to: 30, since: '2026-10-01' });
+  const p3 = price('OP08-003');
+  assert.strictEqual(p3.hkd, 80); assert.strictEqual(p3.source, 'bot');
+  assert.deepStrictEqual(p3.change, { from: 40, to: 80, since: '2026-10-20' });
+  assert.strictEqual(price('OP08-999'), null);
+  assert.strictEqual(E.makePricer({ bot: { a: { jpy: 1 } }, rate: 0 })('a'), null);
+});
+
+t('deck cost, missing cost, collection value', () => {
+  const price = E.makePricer({ bot: { 'OP08-001': { jpy: 200 }, 'OP08-002': { jpy: 100 }, 'OP08-002_p1': { jpy: 5000 } }, rate: 0.05 });
+  const entries = [{ id: 'OP08-001', count: 1 }, { id: 'OP08-002', count: 4 }, { id: 'OP08-003', count: 2 }];
+  assert.deepStrictEqual(E.deckCost(entries, price), { cost: 30, unknown: ['OP08-003'] });
+  const st = E.deckStatus(entries, { 'OP08-001': 1, 'OP08-002': 1 });
+  assert.deepStrictEqual(E.missingCost(st.rows, price), { cost: 15, unknown: 2 });
+  assert.deepStrictEqual(E.collectionValue({ 'OP08-002': 3, 'OP08-002_p1': 1, 'OP08-009': 2 }, price), { total: 265, priced: 4, unpriced: 2 });
+});
+
 console.log(`\n${passed} tests passed`);
