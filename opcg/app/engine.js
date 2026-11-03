@@ -193,23 +193,23 @@
     const issues = [];
     const leaders = entries.filter(e => cardsById[e.id] && normCategory(cardsById[e.id].category) === 'LEADER');
     const leaderId = leaderOf(entries, cardsById);
-    if (leaders.length === 0 && !leaderId) issues.push('未有領航 (Leader)');
-    if (leaders.length > 1 || (leaders.length === 1 && leaders[0].count > 1)) issues.push('領航只可以有 1 張');
+    if (leaders.length === 0 && !leaderId) issues.push('未有領航卡（Leader）');
+    if (leaders.length > 1 || (leaders.length === 1 && leaders[0].count > 1)) issues.push('領航卡只可有 1 張');
     const main = entries.filter(e => e.id !== leaderId);
     const total = main.reduce((s, e) => s + e.count, 0);
-    if (total !== 50) issues.push('主牌組要 50 張，而家 ' + total + ' 張');
-    for (const e of main) if (e.count > 4) issues.push(e.id + ' 超過 4 張 (' + e.count + ')');
+    if (total !== 50) issues.push('主牌組須為 50 張，現有 ' + total + ' 張');
+    for (const e of main) if (e.count > 4) issues.push(e.id + ' 超過 4 張（' + e.count + '）');
     const lc = leaderId && cardsById[leaderId] ? cardColors(cardsById[leaderId]) : [];
     if (lc.length) {
       for (const e of main) {
         const c = cardsById[e.id];
         if (!c) continue;
         const cc = cardColors(c);
-        if (cc.length && !cc.some(x => lc.includes(x))) issues.push(e.id + ' 顏色 (' + cc.join('/') + ') 唔夾領航');
+        if (cc.length && !cc.some(x => lc.includes(x))) issues.push(e.id + ' 的顏色（' + cc.join('/') + '）與領航卡不符');
       }
     }
     const unknown = entries.filter(e => !cardsById[e.id]).map(e => e.id);
-    if (unknown.length && Object.keys(cardsById).length) issues.push('咭表冇呢啲咭: ' + unknown.join(', '));
+    if (unknown.length && Object.keys(cardsById).length) issues.push('卡表中沒有以下卡：' + unknown.join(', '));
     return issues;
   }
 
@@ -353,7 +353,7 @@
    *   平行 / alt                  parallels    anything else name, number, type or effect text
    */
   function parseQuery(q) {
-    const out = { text: [], sets: [], rarities: [], colors: [], cats: [], cost: null, power: null, counter: null, owned: null, alt: null };
+    const out = { text: [], sets: [], rarities: [], colors: [], cats: [], cost: null, power: null, counter: null, owned: null, alt: null, fresh: null };
     for (const raw of String(q || '').split(/[\s,，、]+/)) {
       const t = raw.trim();
       if (!t) continue;
@@ -371,6 +371,7 @@
       else if (['有', 'have', 'owned'].includes(low)) out.owned = true;
       else if (['未有', 'missing', '!have', 'need'].includes(low)) out.owned = false;
       else if (['平行', 'alt', 'parallel'].includes(low)) out.alt = true;
+      else if (['新', 'new'].includes(low)) out.fresh = true;
       else out.text.push(low);
     }
     return out;
@@ -390,6 +391,7 @@
     if (q.owned === true && !(ownedCount > 0)) return false;
     if (q.owned === false && ownedCount > 0) return false;
     if (q.alt && card.id === baseId(card.id)) return false;
+    if (q.fresh && !card.isNew) return false;
     if (q.text.length) {
       const hay = [card.id, card.name, card.feature, card.text, card.trigger, card.attribute].join(' ').toLowerCase();
       if (!q.text.every(t => hay.includes(t))) return false;

@@ -143,7 +143,7 @@ def build_state(cards):
         luffy["entries"].append({"id": cid, "count": int(n)})
     smoker = {"id": "demo-smoker", "name": "紅綠 斯摩格", "status": "built", "price": 520, "createdAt": "2026-10-20T10:00:00Z",
               "entries": pick(cards, "OP10", "OP10-001")}
-    sold = {"id": "demo-sold", "name": "OP09 示範 Deck", "status": "sold", "price": 450, "soldPrice": 480, "costAtSale": 392.5,
+    sold = {"id": "demo-sold", "name": "OP09 示範牌組", "status": "sold", "price": 450, "soldPrice": 480, "costAtSale": 392.5,
             "soldAt": "2026-10-28T12:00:00Z", "createdAt": "2026-10-10T10:00:00Z",
             "entries": pick(cards, "OP09", "OP09-001")}
     log = [{"id": i, "at": 1793600000000 - k * 60000} for k, i in enumerate(
@@ -164,7 +164,7 @@ def main():
              "entries": [{"id": c, "count": int(n)} for n, c in re.findall(r"(\d+)n([A-Z]+\d*-\d{3})", RG_LUFFY)]}]
     for k, (code, lead) in enumerate([("OP10", "OP10-002"), ("OP09", "OP09-003"), ("OP08", "OP08-001"), ("EB02", "EB02-001")]):
         ents = pick(cards, code, lead, skip=k)
-        meta.append({"id": f"m-{code}", "name": f"示範 {code} Deck", "leader": lead, "author": "Sample", "date": f"2026-10-{20 + k}",
+        meta.append({"id": f"m-{code}", "name": f"示範 {code} 牌組", "leader": lead, "author": "Sample", "date": f"2026-10-{20 + k}",
                      "placement": ["1st", "Top 4", "3rd", "Top 8"][k], "event": "Sample Cup", "country": "JP", "url": "https://onepiecetopdecks.com/deck-list/", "entries": ents})
     read = lambda n: open(os.path.join(APP, n), encoding="utf-8").read()
     html = read("index.html")
@@ -173,14 +173,16 @@ def main():
     body = re.sub(r'<script src="[^"]+"></script>\s*', "", body)
     data = {
         "OPCG_DEMO": True,
-        "OPCG_CARDS": {"source": "sample", "scrapedAt": "2026-11-03T12:00", "series": series, "cards": cards},
+        "OPCG_CARDS": {"source": "sample", "scrapedAt": "2026-11-03T12:00", "series": series, "cards": cards,
+                       "lastUpdate": {"at": "2026-11-03T12:00:00+0000", "newSeries": [{"code": "OP13", "label": "示範系列【OP-13】"}],
+                                      "newCards": [c["id"] for c in cards if c["id"].startswith("OP13-")], "newImages": 40, "updatedImages": 3}},
         "OPCG_DECKS": {"source": "https://onepiecetopdecks.com/deck-list/", "scrapedAt": "2026-11-03T12:00", "decks": meta},
         "OPCG_PRICES": {"source": "sample", "fetchedAt": "2026-11-03T12:00", "currency": "JPY", "jpyToHkd": 0.049, "prices": prices},
         "OPCG_DEMO_STATE": state,
     }
     js_data = "\n".join(f"window.{k} = {json.dumps(v, ensure_ascii=False)};" for k, v in data.items())
     page = (
-        '<title>OPCG 咭庫</title>\n<meta name="theme-color" content="#c8102e">\n'
+        '<title>OPCG 卡庫</title>\n<meta name="theme-color" content="#c8102e">\n'
         f"<style>\n{read('style.css')}\n</style>\n{body}\n"
         f"<script>\n{js_data}\n</script>\n<script>\n{read('engine.js')}\n</script>\n<script>\n{read('app.js')}\n</script>\n"
     )

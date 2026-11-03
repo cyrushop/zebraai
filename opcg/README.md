@@ -1,47 +1,53 @@
-# OPCG 咭庫 (One Piece Card Game collection + deck seller)
+# OPCG 卡庫（One Piece Card Game 收藏及牌組銷售）
 
-記錄自己開箱得到嘅咭，對照比賽 Deck list 睇邊副夠咭砌，砌好預留咭，賣出後自動扣數。
+記錄開箱所得的卡，對照比賽牌組清單，找出哪副牌組已齊卡可以組建；組好後預留所需的卡，售出後自動從卡庫扣除。
 
-## Mac：一撳就用
+## Mac：按兩下即可使用
 
-1. 下載：https://github.com/cyrushop/zebraai/archive/refs/heads/claude/one-piece-card-tracker-0rpst3.zip ，雙擊解壓。
-2. 打開解壓後嘅 `opcg` 資料夾，雙擊 **`OPCG-Start.command`**。
-   * 第一次會問「抓晒所有系列嘅咭表？」，撳 Enter 就開始 (約 1–2 分鐘)。所有系列都會顯示，有冇庫存你自己喺 App 入面填。咭圖直接由官方網站顯示；想存落部機就喺「設定」撳「更新咭表 + 下載圖片」。
-   * 抓完自動開瀏覽器 http://localhost:8765 。
-   * 用完關咗個 Terminal 視窗就停。
-3. 想手機一齊用 (同一個 Wi-Fi)：雙擊 **`OPCG-Phone.command`**，第一次設定一個 PIN，然後用手機開佢顯示嘅網址。
+1. 下載：https://github.com/cyrushop/zebraai/archive/refs/heads/claude/one-piece-card-tracker-0rpst3.zip ，按兩下解壓。
+   （亦可在「終端機」執行以下指令，下載後的檔案不會觸發 macOS 的安全提示，並會直接開啟程式。再次執行即可更新，卡庫資料不會被覆蓋。）
 
-第一次雙擊，Mac 可能話「無法打開，因為來自未識別的開發者」：
-* macOS 14 或之前：喺 Finder 對住個檔 **右撳 → 打開 → 打開**。
-* macOS 15 (Sequoia) 或之後：撳「完成」，然後去 **系統設定 → 私隱與保安**，拉到最底撳「**仍要打開**」，再雙擊一次。
+   ```bash
+   cd ~ && curl -fL -o opcg.zip https://github.com/cyrushop/zebraai/archive/refs/heads/claude/one-piece-card-tracker-0rpst3.zip && unzip -q -o opcg.zip && chmod +x zebraai-*/opcg/*.command && open zebraai-*/opcg/OPCG-Start.command
+   ```
 
-如果「仍要打開」個掣冇出現：打開「終端機」，打 `xattr -dr com.apple.quarantine ` (後面有空格)，將成個解壓咗嘅資料夾拖入視窗，撳 Enter，再雙擊。呢個指令只係話 Mac 知呢個資料夾係你自己下載嘅。
+2. 開啟解壓後的 `opcg` 資料夾，按兩下 **`OPCG-Start.command`**。
+   * 首次使用時會詢問是否下載所有系列的卡表，按 Enter 即開始（約 1–2 分鐘）。所有系列都會顯示，庫存數量由你自行在程式內填寫。卡圖直接由官方網站顯示；如要把卡圖儲存至本機，可在「設定」按「檢查新系列及卡圖」。
+   * 完成後會自動以瀏覽器開啟 http://localhost:8765 。
+   * 使用完畢，關閉 Terminal 視窗即可停止。
+3. 如要同時以手機使用（同一個 Wi-Fi）：按兩下 **`OPCG-Phone.command`**，首次使用時設定 PIN，然後以手機開啟畫面上顯示的網址。
 
-雙擊冇反應或者話冇權限：打開「終端機」，打 `chmod +x ` (後面有空格)，將兩個 `.command` 檔拖入視窗，撳 Enter。
+首次按兩下時，Mac 可能顯示「無法打開，因為來自未識別的開發者」：
+* macOS 14 或更早版本：在 Finder 對檔案按右鍵 → **打開** → **打開**。
+* macOS 15（Sequoia）或更新版本：先按「完成」，再到 **系統設定 → 私隱與保安**，捲至最底按「**仍要打開**」，然後再按兩下檔案。
 
-冇 Python 嘅話，啟動檔會叫 Mac 安裝「Command Line Developer Tools」(入面有 Python 3)，裝完再雙擊。如果 BOT 話 `CERTIFICATE_VERIFY_FAILED`：去「應用程式 → Python 3.x」雙擊 `Install Certificates.command`。
+如沒有出現「仍要打開」按鈕：開啟「終端機」，輸入 `xattr -dr com.apple.quarantine `（末尾有空格），把整個解壓後的資料夾拖入視窗，按 Enter，然後再按兩下檔案。此指令只是告訴 Mac 此資料夾由你自行下載。
 
-## 快速開始
+按兩下沒有反應或顯示沒有權限：開啟「終端機」，輸入 `chmod +x `（末尾有空格），把兩個 `.command` 檔拖入視窗，按 Enter。
 
-需要 Python 3.9+ (唔使裝其他套件)。
+如電腦未安裝 Python，啟動檔會請 Mac 安裝「Command Line Developer Tools」（內含 Python 3），安裝後再按兩下即可。如 BOT 顯示 `CERTIFICATE_VERIFY_FAILED`：到「應用程式 → Python 3.x」按兩下 `Install Certificates.command`。
+
+## 其他電腦：快速開始
+
+需要 Python 3.9 或以上版本（無須安裝其他套件）。
 
 ```bash
 python3 opcg/serve.py
 ```
 
-打開 http://localhost:8765 → 「設定」→ 撳 **更新咭表 + 下載圖片**、**更新 Deck list** 同 **更新價錢**。
+開啟 http://localhost:8765 → 「設定」→ 按 **檢查新系列及卡圖**、**更新牌組清單** 及 **更新價格**。
 
-### 用手機睇 / 搜尋
+### 以手機查看及搜尋
 
-部電腦同手機要連同一個 Wi-Fi：
+電腦與手機須連接同一個 Wi-Fi：
 
 ```bash
 python3 opcg/serve.py --lan --pin 4321
 ```
 
-Terminal 會印出 `http://192.168.x.x:8765`，用手機打開，輸入 PIN。手機同電腦用同一份資料；如果兩部機差唔多同時改，後改嗰部會收到提示同載入最新版本，唔會互相覆蓋。手機版咭庫可以撳「篩選」打開篩選欄。
+Terminal 會顯示 `http://192.168.x.x:8765`，以手機開啟並輸入 PIN。手機與電腦共用同一份資料；如兩部裝置幾乎同時修改，較後儲存的一方會收到提示並載入最新版本，不會互相覆蓋。手機版卡庫可按「篩選」展開篩選欄。
 
-或者直接喺 terminal 行 BOT：
+亦可直接在 Terminal 執行 BOT：
 
 ```bash
 python3 opcg/bot/scrape_cards.py --images
@@ -51,86 +57,98 @@ python3 opcg/bot/scrape_cards.py --images
 python3 opcg/bot/scrape_decks.py
 ```
 
-冇開 `serve.py` 都可以直接開 `opcg/app/index.html`，不過資料就只存喺瀏覽器 (記得喺設定匯出備份)。
+不啟動 `serve.py` 亦可直接開啟 `opcg/app/index.html`，但資料只會儲存於瀏覽器（請記得在「設定」匯出備份）。
 
 ## 功能
 
-| 分頁 | 做咩 |
+| 分頁 | 用途 |
 |---|---|
-| 主頁 | 智能搜尋、我嘅咭 / 總值 / 系列收集 / Decks 摘要、我嘅系列進度圈、最近加入、我的 Decks、最貴嘅咭。 |
-| 咭庫 | 全部咭 (有圖)，智能搜尋 + 按系列 / 顏色 / 類別 / 稀有度 / 有冇 篩選，+/− 改數量。未有嘅咭會淡色顯示。 |
-| 系列 | 按 補充包 / 額外補充包 / 高級補充包 / 預組 / 推廣卡 分組，所有系列都顯示，每個一個完成度圈。入去睇每種稀有度有幾多 (例如 SR 4/10)、只睇缺咭、複製缺咭清單、可選連平行版一齊計。**批量輸入**：每張咭一格數字，撳 Enter / Tab / ↓ 去下一張、↑ 返上一張，打完即刻儲存，最快填晒一個系列嘅庫存。 |
-| 開箱 | 揀預設系列 (例如 OP08)，打 `45` 再 Enter 就 +1 張 OP08-045；`45p1` = 平行版。可撤銷。亦可以一次過貼 `OP08-001 x2`。 |
-| Meta Decks | onepiecetopdecks 嘅比賽 Deck，按「我最夠咭」排序，顯示差幾多張、差邊啲。一撳加入我的 Deck。 |
-| 我的 Decks | 計劃中 → 砌好 (預留咭，其他 Deck 唔會再計呢啲咭) → 賣出 (從咭庫扣數，記錄售價同收入)。顯示 Deck 市值、補齊要幾錢、預計賺蝕；賣出時記低當時市值，計總賺蝕。可以編輯、檢查規則 (1 領航、50 張、每款最多 4 張、顏色)，有合併補咭清單。 |
-| 貴咭 | 單價 HK$50 (可改) 或以上嘅咭：單價、數量、總值、7 日升跌、悠々亭連結。可以逐張輸入手動價。顯示成個咭庫總值，可匯出 CSV。 |
-| 設定 | 行 BOT、匯率同價錢係數、平行版計唔計入 Deck、匯出 / 匯入 JSON 備份、匯出 CSV。 |
+| 主頁 | 智能搜尋；我的卡、總值（可按眼睛圖示隱藏）、系列收集、牌組摘要；全部系列的進度圈（新系列標示「新」）；「檢查新系列及卡圖」按鈕；最近加入、我的牌組、最高價的卡。 |
+| 卡庫 | 所有卡（附圖），可用智能搜尋及按系列、顏色、類別、稀有度、擁有狀況篩選，以 +/− 修改數量。未擁有的卡以淡色顯示，新卡標示「新」。 |
+| 系列 | 按補充包、額外補充包、高級補充包、預組、推廣卡分類，所有系列均會顯示，每個系列附完成度圈。進入後可查看各稀有度的擁有數量（例如 SR 4/10）、只顯示缺卡、複製缺卡清單，並可選擇連同平行版一併計算。**批量輸入**：每張卡一個數字欄，按 Enter / Tab / ↓ 移至下一張，按 ↑ 返回上一張，輸入即時儲存，是填寫整個系列庫存最快的方法。 |
+| 開箱 | 選擇預設系列（例如 OP08），輸入 `45` 再按 Enter 即為 OP08-045 加一張；`45p1` 為平行版。可撤銷。亦可一次貼上多行，例如 `OP08-001 x2`。 |
+| 熱門牌組 | onepiecetopdecks 的比賽牌組，按「最齊卡優先」排序，顯示欠多少張及欠哪些卡，一按即可加入我的牌組。 |
+| 我的牌組 | 計劃中 → 已組好（預留卡，其他牌組不會再計算這些卡）→ 已售出（從卡庫扣除，記錄售價及收入）。顯示牌組市值、補齊所需金額及預計盈虧；售出時記錄當時市值以計算總盈虧。可編輯，並檢查規則（1 張領航卡、50 張、每款最多 4 張、顏色）。設有合併補卡清單。 |
+| 高價卡 | 單價 HK$50（可調整）或以上的卡：單價、數量、總值、7 日升跌、悠々亭連結。可逐張輸入手動價格。顯示整個卡庫的總值（可隱藏），可匯出 CSV。 |
+| 設定 | 執行 BOT、匯率及價格係數、牌組是否計入平行版、匯出／匯入 JSON 備份、匯出 CSV。 |
 
-### 揀 Deck 嚟砌
+### 檢查新系列及卡圖
 
-1. 喺 https://onepiecetopdecks.com/deck-list/ 揀咗想砌嘅 Deck。
-2. 複製佢個 deckgen 連結 (`.../deckgen/?dn=RG%20Luffy&...&dg=1nOP13-001a4nOP13-016...`)，或者「Decklist in text」(`1xOP13-001` …)。
-3. 貼落「我的 Decks」頂嘅匯入框 (或者直接貼落主頁搜尋框)。一次可以貼幾條連結，每行一條。
-4. Deck 名、名次、比賽、作者、日期自動讀入；即刻顯示你有幾多張、差邊幾張、補齊要幾錢。
-5. 撳「顯示中文效果」：每張咭下面顯示官方中文效果 (來自 asia-tc.onepiece-cardgame.com)，【登場時】【啟動主要】【每回合1次】等關鍵字會標色。
+在主頁或「設定」按 **檢查新系列及卡圖**（需以 `OPCG-Start.command` 或 `serve.py` 開啟本程式）：
 
-Meta Deck 好多時用到 OP01、ST、PRB、EB 等舊系列嘅咭，所以咭表 BOT 預設會讀晒所有系列。
+* 重新讀取官方卡表的所有系列，找出新系列及新卡；
+* 只下載新增的卡圖，以及官方網站已更換的卡圖（以圖片地址的版本號判斷）；
+* 完成後主頁會顯示「最近更新」摘要，新系列及新卡會標示「新」，在搜尋輸入 `新` 即可列出新卡。
+
+首次下載全部卡圖約需 30–60 分鐘，之後通常只需數分鐘。
+
+### 選擇牌組並組建
+
+1. 在 https://onepiecetopdecks.com/deck-list/ 選好想組建的牌組。
+2. 複製其 deckgen 連結（`.../deckgen/?dn=RG%20Luffy&...&dg=1nOP13-001a4nOP13-016...`）或「Decklist in text」（`1xOP13-001` …）。
+3. 貼到「我的牌組」頂部的匯入欄（或直接貼到主頁搜尋欄）。可一次貼上多條連結，每行一條。
+4. 牌組名稱、名次、比賽、作者及日期會自動讀入，並即時顯示已有多少張、欠哪些卡及補齊所需金額。
+5. 按「顯示中文效果」：每張卡下方會顯示官方中文效果（來自 asia-tc.onepiece-cardgame.com），【登場時】【啟動主要】【每回合1次】等關鍵字會以顏色標示。
+
+熱門牌組經常使用 OP01、ST、PRB、EB 等舊系列的卡，因此卡表 BOT 預設會讀取所有系列。
 
 ### 智能搜尋
 
-用空格或逗號分隔，可以混合使用：
+以空格或逗號分隔，可混合使用：
 
 | 寫法 | 意思 |
 |---|---|
 | `OP08` / `EB02` / `PRB01` | 系列 |
-| `c5`、`c3-5` | 費用 (領航就係生命) |
-| `p6000`、`p5000-7000` | 力量 |
-| `k1000` | 反擊 |
+| `c5`、`c3-5` | 費用（領航卡為生命值） |
+| `p6000`、`p5000-7000` | 力量值 |
+| `k1000` | 反擊值 |
 | `SR` / `SEC` / `L` … | 稀有度 |
-| `紅` / `red` … | 顏色 (寫兩個 = 雙色) |
+| `紅` / `red` … | 顏色（輸入兩個即為雙色） |
 | `領航` / `角色` / `事件` / `場地` | 類別 |
-| `有` / `未有` | 我有 / 我未有 |
-| `平行` | 只睇平行版 |
-| 其他字 | 名、咭號、特徵、效果 |
+| `有` / `未有` | 已擁有／未擁有 |
+| `平行` | 只顯示平行版 |
+| `新` | 最近一次更新的新卡 |
+| 其他字詞 | 名稱、卡號、特徵、效果 |
 
 例如：`路飛 OP08 c5 p6000`、`紅 事件 未有`、`草帽 SR 有`。
 
-### 咭頁
+### 卡的詳細頁
 
-撳任何咭圖：大圖、平行版切換、費用 / 力量 / 反擊 / 顏色 / 屬性、價錢同走勢線、手動價、每個版本嘅數量 +/−、效果文字 (【登場時】等關鍵字會標色)、用喺邊副 Deck。
+按任何卡圖：大圖、平行版切換、費用／力量值／反擊值／顏色／屬性、價格及走勢圖、手動價格、各版本數量 +/−、效果文字（【登場時】等關鍵字以顏色標示），以及用於哪副牌組。
 
 ### 手機
 
-闊度細過 640px 會用底部導航：主頁 · 系列 · ＋開箱 · Decks · 更多 (咭庫、貴咭、Meta Decks、設定)。
+畫面闊度小於 640px 時使用底部導覽列：主頁 · 系列 · ＋開箱 · 牌組 · 更多（卡庫、高價卡、熱門牌組、設定）。
 
 ## BOT
 
 | BOT | 來源 | 輸出 |
 |---|---|---|
-| `bot/scrape_cards.py` | https://asia-tc.onepiece-cardgame.com/cardlist/ (每個系列一頁) | `data/cards.json`, `data/cards.js`, `data/images/` |
-| `bot/scrape_decks.py` | https://onepiecetopdecks.com/deck-list/ 同佢連去嘅 deck-list 頁 | `data/decks.json`, `data/decks.js` |
-| `bot/scrape_prices.py` | https://yuyu-tei.jp/sell/opc/s/op08 等 (悠々亭日版單咭售價) + https://open.er-api.com 匯率 | `data/prices.json`, `data/prices.js` (保留 180 日價錢歷史) |
+| `bot/scrape_cards.py` | https://asia-tc.onepiece-cardgame.com/cardlist/（每個系列一頁） | `data/cards.json`、`data/cards.js`、`data/images/` |
+| `bot/scrape_decks.py` | https://onepiecetopdecks.com/deck-list/ 及其連結的牌組清單頁 | `data/decks.json`、`data/decks.js` |
+| `bot/scrape_prices.py` | https://yuyu-tei.jp/sell/opc/s/op08 等（悠々亭日版單卡售價）及 https://open.er-api.com 匯率 | `data/prices.json`、`data/prices.js`（保留 180 日價格歷史） |
 
 常用選項：
 
-* `scrape_cards.py --list-series`：列出網站有咩系列
-* `scrape_cards.py --series OP08,OP09,EB02`：只更新某啲系列 (會同之前嘅結果合併)
+* `scrape_cards.py --list-series`：列出網站上的所有系列
+* `scrape_cards.py --series OP08,OP09,EB02`：只更新指定系列（會與先前結果合併）
+* `scrape_cards.py --images`：下載新增或已更換的卡圖
 * `scrape_decks.py --max-pages 10` / `--url <頁面>`
-* `scrape_prices.py`：預設只讀你有嘅咭同你啲 Deck 用到嘅系列；`--sets all` 讀晒，`--sets OP08,OP09` 指定，`--rate 0.049` 自己定匯率
-* 三隻 BOT 都有 `--save-html`，網站改版搵唔到嘢時，將 `data/raw/` 入面嘅 HTML 用嚟修 parser。
+* `scrape_prices.py`：預設只讀取你擁有的卡及你的牌組所用到的系列；`--sets all` 讀取全部，`--sets OP08,OP09` 指定系列，`--rate 0.049` 自訂匯率
+* 三個 BOT 均有 `--save-html` 選項。如網站改版導致讀取失敗，可用 `data/raw/` 內的 HTML 修正解析程式。
 
-BOT 每個 request 之間等 1 秒。
+BOT 每次請求之間會等候 1 秒。
 
-## 價錢點計
+## 價格計算方法
 
-* **自動價** = 悠々亭日版售價 (JPY) × 匯率 (JPY→HKD) × 係數。係數預設 1，你可以喺設定改，例如亞洲中文版行情低啲就設 0.8。
-* **手動價** (HK$) 永遠優先。喺「貴咭」或者咭嘅詳情入面輸入；清空就用返自動價。
-* 平行版：悠々亭同一個咭號有普通版同平行版，BOT 將普通版對應 `OP08-001`，平行版由平到貴對應 `_p1`、`_p2`。**呢個對應係估計**，貴咭請自己核對，唔啱就輸入手動價。
-* Deck 市值用普通版價錢計。
+* **自動價格** = 悠々亭日版售價（JPY）× 匯率（JPY→HKD）× 係數。係數預設為 1，可在「設定」修改，例如亞洲中文版行情較低時可設為 0.8。
+* **手動價格**（HK$）永遠優先。在「高價卡」或卡的詳細頁輸入；清空即改回自動價格。
+* 平行版：悠々亭以同一卡號列出普通版及平行版，BOT 把普通版對應至 `OP08-001`，平行版按價格由低至高對應至 `_p1`、`_p2`。**此對應屬推測**，高價卡請自行核對，如有錯誤請輸入手動價格。
+* 牌組市值以普通版價格計算。
 
 ## 資料
 
-`opcg/data/` (咭表、圖片、你嘅咭庫 `collection.json`、每日備份) 已 git-ignore，**唔會**上傳到 GitHub。咭圖同咭文版權屬 Bandai，請自己留用。
+`opcg/data/`（卡表、卡圖、你的卡庫 `collection.json`、每日備份）已列入 git-ignore，**不會**上傳至 GitHub。卡圖及卡牌文字的版權屬 Bandai，請只作個人使用。
 
 ## 測試
 
@@ -142,4 +160,4 @@ node opcg/tests/engine.test.js
 python3 -I opcg/tests/test_bots.py
 ```
 
-測試只用自製嘅 HTML / 數據。
+測試只使用自製的 HTML 及數據。

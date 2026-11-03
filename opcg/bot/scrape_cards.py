@@ -160,28 +160,43 @@ def pick_series(all_series, wanted):
 
 
 def download_images(cards, delay):
+    """Download images that are missing, or whose address on the site changed
+    (the site adds a version like ?250101 when it replaces an image).
+    images/manifest.json remembers which address each local file came from."""
     img_dir = os.path.join(DATA, "images")
     os.makedirs(img_dir, exist_ok=True)
-    done = 0
-    for i, c in enumerate(cards):
-        if not c.get("image"):
-            continue
+    manifest_path = os.path.join(img_dir, "manifest.json")
+    try:
+        with open(manifest_path, encoding="utf-8") as f:
+            manifest = json.load(f)
+    except (OSError, ValueError):
+        manifest = {}
+    new = changed = 0
+    todo = [c for c in cards if c.get("image")]
+    for i, c in enumerate(todo):
         fname = image_name(c)
         path = os.path.join(img_dir, fname)
-        c["localImage"] = "../data/images/" + fname
-        if os.path.exists(path) and os.path.getsize(path) > 0:
+        have = os.path.exists(path) and os.path.getsize(path) > 0
+        if have and manifest.get(c["id"], c["image"]) == c["image"]:
+            manifest.setdefault(c["id"], c["image"])
             continue
         try:
             data = net.get(c["image"], delay=delay, binary=True, referer=BASE)
             with open(path, "wb") as f:
                 f.write(data)
-            done += 1
+            manifest[c["id"]] = c["image"]
+            changed += have
+            new += not have
         except Exception as e:
             print(f"  ! image {c['id']}: {e}", file=sys.stderr)
-            c.pop("localImage", None)
-        if (i + 1) % 50 == 0:
-            print(f"  images {i + 1}/{len(cards)}")
-    print(f"Downloaded {done} new images to {img_dir}")
+        if (new + changed) and (new + changed) % 50 == 0:
+            print(f"  images: {new} new, {changed} updated ({i + 1}/{len(todo)} checked)")
+            with open(manifest_path, "w", encoding="utf-8") as f:
+                json.dump(manifest, f)
+    with open(manifest_path, "w", encoding="utf-8") as f:
+        json.dump(manifest, f)
+    print(f"Images: {new} new, {changed} updated, in {img_dir}")
+    return new, changed
 
 
 def image_name(card):
@@ -214,12 +229,13 @@ def merge_existing(cards, series):
     return kept + cards, kept_series + series
 
 
-def write_output(cards, series):
+def write_output(cards, series, last_update=None):
     os.makedirs(DATA, exist_ok=True)
     payload = {
         "source": BASE,
         "scrapedAt": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         "series": series,
+        "lastUpdate": last_update or {},
         "cards": cards,
     }
     with open(os.path.join(DATA, "cards.json"), "w", encoding="utf-8") as f:
@@ -281,15 +297,41 @@ def main(argv=None):
                 order.append(c["id"])
         print(f"  {len(cards)} cards")
 
+    old = _load_existing()
+    old_ids = {c["id"] for c in old.get("cards", [])}
+    old_series = {x["value"] for x in old.get("series", [])}
+
     cards = [by_id[i] for i in order]
-    if args.images:
-        download_images(cards, args.delay / 4)
     series = chosen
     if not args.fresh:
         cards, series = merge_existing(cards, chosen)
+    images = download_images(cards, args.delay / 4) if args.images else None
     attach_local_images(cards)
-    write_output(cards, series)
+
+    new_series = [x for x in chosen if x["value"] not in old_series] if old_ids else []
+    new_ids = [c["id"] for c in cards if c["id"] not in old_ids] if old_ids else []
+    summary = {
+        "at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+        "newSeries": [{"code": x["code"], "label": x["label"]} for x in new_series],
+        "newCards": new_ids[:2000],
+        "newImages": images[0] if images else 0,
+        "updatedImages": images[1] if images else 0,
+    }
+    write_output(cards, series, summary)
+    print("\n更新結果：")
+    print("  新系列：" + ("、".join(x["label"] for x in new_series) if new_series else "沒有"))
+    print(f"  新卡：{len(new_ids)} 張" if old_ids else f"  卡表：{len(cards)} 張（第一次下載）")
+    if images:
+        print(f"  卡圖：新下載 {images[0]} 張，更新 {images[1]} 張")
     return 0
+
+
+def _load_existing():
+    try:
+        with open(os.path.join(DATA, "cards.json"), encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
 
 
 if __name__ == "__main__":

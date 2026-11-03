@@ -31,15 +31,16 @@ STATE = os.path.join(DATA, "collection.json")
 BOTS = {
     "cards": [os.path.join(ROOT, "bot", "scrape_cards.py")],
     "cards-images": [os.path.join(ROOT, "bot", "scrape_cards.py"), "--images"],
+    "update": [os.path.join(ROOT, "bot", "scrape_cards.py"), "--images"],  # new series, new cards, new/changed images
     "decks": [os.path.join(ROOT, "bot", "scrape_decks.py")],
     "prices": [os.path.join(ROOT, "bot", "scrape_prices.py")],
 }
 PIN = None  # set by --pin
 
 LOGIN = """<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>OPCG 咭庫</title><body style="font:16px system-ui;display:grid;place-items:center;min-height:90vh;margin:0">
+<title>OPCG 卡庫</title><body style="font:16px system-ui;display:grid;place-items:center;min-height:90vh;margin:0">
 <form method="post" action="/login"><p>輸入 PIN</p><input name="pin" type="password" inputmode="numeric" autofocus
-style="font-size:20px;padding:8px"> <button style="font-size:18px;padding:8px 14px">入去</button>%s</form></body>"""
+style="font-size:20px;padding:8px"> <button style="font-size:18px;padding:8px 14px">進入</button>%s</form></body>"""
 
 state_lock = threading.Lock()
 jobs = {}  # name -> {"running", "log", "code", "started"}
@@ -168,7 +169,7 @@ class Handler(SimpleHTTPRequestHandler):
             pin = (parse_qs(self.rfile.read(n).decode("utf-8")).get("pin") or [""])[0]
             if not hmac.compare_digest(pin, PIN):
                 time.sleep(1)
-                return self._login_page("<p style='color:#c0392b'>PIN 唔啱</p>")
+                return self._login_page("<p style='color:#c0392b'>PIN 不正確</p>")
             self.send_response(303)
             self.send_header("Set-Cookie", f"opcg_pin={PIN}; Path=/; Max-Age=31536000; SameSite=Strict; HttpOnly")
             self.send_header("Location", "/app/")

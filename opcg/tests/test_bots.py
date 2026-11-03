@@ -203,5 +203,56 @@ class PriceBot(unittest.TestCase):
         self.assertFalse(scrape_prices.is_parallel("L", "ルフィ"))
 
 
+class CardUpdate(unittest.TestCase):
+    """The update button: new series, new cards and replaced images are found; nothing else is downloaded again."""
+
+    def run_bot(self, pages):
+        import tempfile, json as _json
+        calls = []
+
+        def fake_get(url, delay=1.0, binary=False, retries=3, referer=None):
+            calls.append(url)
+            if binary:
+                return b"PNG:" + url.encode()
+            return pages[url.split("?series=")[1] if "?series=" in url else ""]
+        scrape_cards.net.get = fake_get
+        scrape_cards.main(["--images", "--delay", "0"])
+        with open(os.path.join(scrape_cards.DATA, "cards.json"), encoding="utf-8") as f:
+            return _json.load(f), [u for u in calls if "/images/" in u]
+
+    def card(self, cid, img):
+        return (f'<dl class="modalCol" id="{cid}"><dt><div class="infoCol"><span>{cid}</span> | <span>C</span> | <span>CHARACTER</span></div>'
+                f'<div class="cardName">n</div></dt><dd><div class="frontCol"><img data-src="../images/cardlist/card/{img}"></div></dd></dl>')
+
+    def test_update_flow(self):
+        import tempfile
+        saved_get, saved_data = scrape_cards.net.get, scrape_cards.DATA
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                scrape_cards.DATA = tmp
+                sel = lambda opts: '<select name="series">' + "".join(f'<option value="{v}">【{c}】</option>' for v, c in opts) + "</select>"
+                pages = {"": sel([("1", "OP-01")]), "1": self.card("OP01-001", "OP01-001.png?1") + self.card("OP01-002", "OP01-002.png?1")}
+                data, imgs = self.run_bot(pages)
+                self.assertEqual(len(imgs), 2)
+                self.assertEqual(data["lastUpdate"]["newSeries"], [])  # first download: nothing is "new"
+
+                # Same site again: nothing downloaded.
+                data, imgs = self.run_bot(pages)
+                self.assertEqual(imgs, [])
+
+                # A new series appears and one image is replaced (new ?version).
+                pages = {"": sel([("1", "OP-01"), ("2", "OP-02")]),
+                         "1": self.card("OP01-001", "OP01-001.png?2") + self.card("OP01-002", "OP01-002.png?1"),
+                         "2": self.card("OP02-001", "OP02-001.png?1")}
+                data, imgs = self.run_bot(pages)
+                self.assertEqual(sorted(u.rsplit("/", 1)[1] for u in imgs), ["OP01-001.png?2", "OP02-001.png?1"])
+                self.assertEqual([x["code"] for x in data["lastUpdate"]["newSeries"]], ["OP02"])
+                self.assertEqual(data["lastUpdate"]["newCards"], ["OP02-001"])
+                self.assertEqual((data["lastUpdate"]["newImages"], data["lastUpdate"]["updatedImages"]), (1, 1))
+                self.assertTrue(all(c.get("localImage") for c in data["cards"]))
+        finally:
+            scrape_cards.net.get, scrape_cards.DATA = saved_get, saved_data
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

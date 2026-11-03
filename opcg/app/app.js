@@ -13,6 +13,11 @@
   const DEFAULT_RATE = 0.049; // JPY -> HKD (mid-Aug 2026); the price bot refreshes it
   const byId = {};
   for (const c of CARDS) byId[c.id] = c;
+  // What the last update found (shown for 14 days).
+  const LAST_UPDATE = (window.OPCG_CARDS && window.OPCG_CARDS.lastUpdate) || {};
+  const UPDATE_RECENT = LAST_UPDATE.at && (Date.now() - new Date(LAST_UPDATE.at).getTime()) < 14 * 864e5;
+  const NEW_SERIES = new Set(UPDATE_RECENT ? (LAST_UPDATE.newSeries || []).map(x => x.code) : []);
+  for (const id of (UPDATE_RECENT ? LAST_UPDATE.newCards || [] : [])) if (byId[id]) byId[id].isNew = true;
   const variantsOf = {};
   for (const c of CARDS) (variantsOf[E.baseId(c.id)] = variantsOf[E.baseId(c.id)] || []).push(c.id);
 
@@ -75,13 +80,13 @@
         // The file on the computer is the master copy; the browser copy is only used if the file is empty.
         state = normalise(srv || local);
         if (!srv) state.rev = 0;
-        setSaveLabel('已連接本機伺服器 · 資料存喺 opcg/data/collection.json');
+        setSaveLabel('已連接本機伺服器 · 資料儲存於 opcg/data/collection.json');
         return;
       } catch (e) { /* not running serve.py: fall back to the browser */ }
     }
     serverOk = false;
     state = normalise(local || (DEMO ? window.OPCG_DEMO_STATE : null));
-    setSaveLabel(DEMO ? '示範版 · 改動只存喺你部機' : '資料存喺瀏覽器 (記得喺設定匯出備份)');
+    setSaveLabel(DEMO ? '示範版 · 修改只儲存於本機' : '資料儲存於瀏覽器（請記得在「設定」匯出備份）');
   }
   let saving = false, dirty = false, serverOk = serverMode;
   function save() {
@@ -103,18 +108,18 @@
         state = normalise(j.state);
         try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
         dirty = false;
-        toast('另一部機啱啱改咗資料，已載入最新版本，請再做一次最後嗰個改動');
+        toast('另一部裝置剛修改了資料，已載入最新版本，請重新進行最後一項修改');
         render();
       } else if (r.ok && j.ok) {
         state.rev = j.rev;
         try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { /* ignore */ }
         setSaveLabel('已儲存 ' + new Date().toLocaleTimeString());
       } else {
-        setSaveLabel('儲存失敗 (伺服器)');
+        setSaveLabel('儲存失敗（伺服器）');
         dirty = true;
       }
     } catch (e) {
-      setSaveLabel('儲存失敗：伺服器未開？資料仍喺瀏覽器');
+      setSaveLabel('儲存失敗：伺服器未啟動？資料仍保存在瀏覽器');
       dirty = true;
     } finally {
       saving = false;
@@ -170,6 +175,15 @@
   function rate() { return Number(settings().rate) || PRICES.jpyToHkd || DEFAULT_RATE; }
   function pricer() {
     return E.makePricer({ manual: state.manualPrices, bot: PRICES.prices, rate: rate(), factor: Number(settings().factor) || 1 });
+  }
+  /** A collection-level total; masked when the viewer chose to hide totals. */
+  function total(n) {
+    return settings().hideTotal ? '<span class="masked" title="已隱藏">HK$ ••••</span>' : hk(n);
+  }
+  function eyeButton() {
+    const hidden = !!settings().hideTotal;
+    return `<button class="eye" data-hide="1" aria-pressed="${hidden}" title="${hidden ? '顯示總值' : '隱藏總值'}" aria-label="${hidden ? '顯示總值' : '隱藏總值'}">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>${hidden ? '<path d="M4 4l16 16"/>' : ''}</svg></button>`;
   }
   function hk(n) {
     if (n == null || n === '' || isNaN(n)) return '—';
@@ -230,7 +244,7 @@
   }
   /** Small price-trend line from [[date, value], ...]. */
   function sparkline(history, w, h) {
-    if (!history || history.length < 2) return '<span class="muted" style="font-size:12px">未有足夠歷史畫走勢 (BOT 每次更新會加一點)</span>';
+    if (!history || history.length < 2) return '<span class="muted" style="font-size:12px">歷史資料不足，未能繪製走勢（BOT 每次更新會新增一點）</span>';
     w = w || 260; h = h || 56;
     const vals = history.map(x => Number(x[1]));
     const min = Math.min(...vals), max = Math.max(...vals), span = max - min || 1;
@@ -272,9 +286,9 @@
   function barClass(p) { return p >= 0.999 ? '' : p >= 0.8 ? 'mid' : 'low'; }
   function uid() { return 'd' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
   function noDataNotice(what) {
-    return `<div class="notice"><b>未有${what}資料。</b> 喺電腦行 BOT：
+    return `<div class="notice"><b>未有${what}資料。</b> 請在電腦執行 BOT：
       <pre>python3 opcg/bot/scrape_cards.py --images\npython3 opcg/bot/scrape_decks.py</pre>
-      或者行 <code>python3 opcg/serve.py</code>，打開 http://localhost:8765，喺「設定」撳「更新」。</div>`;
+      或執行 <code>python3 opcg/serve.py</code>，開啟 http://localhost:8765，在「設定」按「更新」。</div>`;
   }
 
   // ------------------------------------------------------------- tabs
@@ -304,7 +318,7 @@
       mine: renderMine, value: renderValue, settings: renderSettings })[current]();
   }
 
-  const SEARCH_HINT = '搜尋語法：<code>OP08</code> 系列 · <code>c5</code> 費用 (<code>c3-5</code>) · <code>p6000</code> 力量 · <code>k1000</code> 反擊 · <code>SR</code> 稀有度 · <code>紅</code> 顏色 · <code>領航</code>/<code>事件</code> · <code>有</code>/<code>未有</code> · <code>平行</code> · 其他字 = 名 / 特徵 / 效果';
+  const SEARCH_HINT = '搜尋語法：<code>OP08</code> 系列 · <code>c5</code> 費用 (<code>c3-5</code>) · <code>p6000</code> 力量 · <code>k1000</code> 反擊 · <code>SR</code> 稀有度 · <code>紅</code> 顏色 · <code>領航</code>/<code>事件</code> · <code>有</code>/<code>未有</code> · <code>平行</code> · <code>新</code> 最近更新的新卡 · 其他字詞 = 名稱 / 特徵 / 效果';
   function openCollection(q) {
     cf.q = q || ''; cf.set = ''; cf.color = ''; cf.cat = ''; cf.rarity = ''; cf.owned = ''; cf.limit = 120;
     const el = $('#tab-collection');
@@ -343,7 +357,7 @@
     if (!el.dataset.ready) {
       const opt = (v, l) => `<option value="${esc(v)}">${esc(l)}</option>`;
       el.innerHTML = `
-        ${CARDS.length ? '' : noDataNotice('咭表')}
+        ${CARDS.length ? '' : noDataNotice('卡表')}
         <div class="toolbar">
           <input type="search" id="cf-q" placeholder="例如：路飛 OP08 c5 p6000 紅 SR 有">
           <button class="filter-toggle" id="cf-ft">篩選</button>
@@ -352,8 +366,8 @@
           <select id="cf-color"><option value="">全部顏色</option>${COLORS.map(c => opt(c, c)).join('')}</select>
           <select id="cf-cat"><option value="">全部類別</option>${Object.entries(CATS).map(([k, v]) => opt(k, v)).join('')}</select>
           <select id="cf-rarity"><option value="">全部稀有度</option>${RARITIES.map(r => opt(r, r)).join('')}</select>
-          <select id="cf-owned"><option value="">全部</option><option value="have">我有嘅</option><option value="none">未有</option><option value="spare">多過 4 張</option><option value="reserved">已預留畀 Deck</option></select>
-          <select id="cf-sort"><option value="id">按編號</option><option value="owned">按數量</option><option value="cost">按費用</option><option value="price">按價錢</option></select>
+          <select id="cf-owned"><option value="">全部</option><option value="have">已擁有</option><option value="none">未擁有</option><option value="spare">多於 4 張</option><option value="reserved">已預留給牌組</option></select>
+          <select id="cf-sort"><option value="id">按編號</option><option value="owned">按數量</option><option value="cost">按費用</option><option value="price">按價格</option></select>
           </div>
         </div>
         <div class="muted hint">${SEARCH_HINT}</div>
@@ -379,7 +393,7 @@
     const distinct = Object.keys(state.owned).length;
     $('#cf-stats').innerHTML = `<span>總共 <b>${totalCopies}</b> 張 · <b>${distinct}</b> 款</span>
       <span>符合篩選 <b>${list.length}</b> 款</span>
-      <span>預留畀已砌 Deck <b>${Object.values(reserved).reduce((s, n) => s + n, 0)}</b> 張</span>`;
+      <span>預留給已組建牌組 <b>${Object.values(reserved).reduce((s, n) => s + n, 0)}</b> 張</span>`;
     const price = pricer();
     $('#cf-grid').innerHTML = list.slice(0, cf.limit).map(c => tileHtml(c, reserved, price)).join('');
     $('#cf-more').style.display = list.length > cf.limit ? '' : 'none';
@@ -389,9 +403,9 @@
     const p = (price || pricer())(c.id);
     const r = c.id === E.baseId(c.id) ? reserved[c.id] || 0 : 0;
     return `<div class="tile${n ? ' has' : ''}" data-id="${esc(c.id)}">
-      <div class="img" data-act="detail">${imgTag(c.id)}${n ? `<span class="own-badge">×${n}</span>` : ''}${c.id !== E.baseId(c.id) ? '<span class="alt-badge">平行</span>' : ''}</div>
+      <div class="img" data-act="detail">${imgTag(c.id)}${n ? `<span class="own-badge">×${n}</span>` : ''}${c.id !== E.baseId(c.id) ? '<span class="alt-badge">平行</span>' : ''}${c.isNew ? '<span class="new-badge">新</span>' : ''}</div>
       <div class="meta">${esc(c.id)} <span class="muted">${esc(c.rarity || '')}</span> ${dots(c)}</div>
-      <div class="meta name" title="${esc(c.name)}">${esc(c.name || (c.unknown ? '(咭表冇資料)' : ''))}</div>
+      <div class="meta name" title="${esc(c.name)}">${esc(c.name || (c.unknown ? '（卡表沒有資料）' : ''))}</div>
       <div class="sub">${p ? `<b class="price">${hk(p.hkd)}</b> ${changeHtml(p.change)} ` : ''}${r ? `預留 ${r} · 可用 ${Math.max(0, n - r)}` : ''}</div>
       <div class="qty"><button data-act="dec" aria-label="減一">−</button><span class="n${n ? '' : ' zero'}">${n}</span><button data-act="inc" aria-label="加一">+</button></div>
     </div>`;
@@ -437,8 +451,8 @@
           ${tile('顏色', c.color, c.color ? dots(c) + ' ' + esc(c.color) : '')}${tile('屬性', c.attribute)}${tile('擴張記號', c.block)}
         </div>
         <div class="box">
-          <div class="box-head"><span>價錢${id === base ? '' : ' (呢個平行版)'}</span>
-            <span>${p ? `<b class="big price">${hk(p.hkd)}</b> ${changeHtml(p.change)}` : '<span class="muted">未有價</span>'}</span></div>
+          <div class="box-head"><span>價格${id === base ? '' : '（此平行版）'}</span>
+            <span>${p ? `<b class="big price">${hk(p.hkd)}</b> ${changeHtml(p.change)}` : '<span class="muted">未有價格</span>'}</span></div>
           ${p ? `<div class="muted small">${p.source === 'manual' ? `手動價 · ${esc(p.at || '')}` : `悠々亭 ¥${Number(p.jpy).toLocaleString()} × ${rate()}${Number(settings().factor) !== 1 ? ' × ' + esc(settings().factor) : ''} · ${esc(p.at || '')}${p.stock === 0 ? ' · 缺貨' : ''}`}</div>
             ${sparkline(p.history)}` : ''}
           <div class="toolbar" style="margin:8px 0 0">
@@ -455,8 +469,8 @@
         </div>
         ${c.text || c.trigger ? `<div class="box effect">${effectHtml(c.text)}${c.trigger ? `<div style="margin-top:6px">${triggerHtml(c.trigger)}</div>` : ''}</div>` : ''}
         ${c.getInfo ? `<div class="muted small">獲取方法：${esc(c.getInfo)}</div>` : ''}
-        ${!c.text && !CARDS.length ? '<div class="notice small">未有官方中文效果：先行咭表 BOT (asia-tc.onepiece-cardgame.com)。</div>' : ''}
-        ${usedIn.length ? `<div class="box"><div class="box-head"><span>用喺我的 Decks</span></div>${usedIn.map(d => `<div class="own-row"><span class="grow">${esc(d.name)}</span><span class="muted small">${d.entries.find(e => e.id === base).count} 張 · ${statusLabel(d.status)}</span></div>`).join('')}</div>` : ''}
+        ${!c.text && !CARDS.length ? '<div class="notice small">未有官方中文效果：請先執行卡表 BOT（asia-tc.onepiece-cardgame.com）。</div>' : ''}
+        ${usedIn.length ? `<div class="box"><div class="box-head"><span>用於我的牌組</span></div>${usedIn.map(d => `<div class="own-row"><span class="grow">${esc(d.name)}</span><span class="muted small">${d.entries.find(e => e.id === base).count} 張 · ${statusLabel(d.status)}</span></div>`).join('')}</div>` : ''}
       </div></div>`;
     $('#modal-body').onchange = e => {
       const m = e.target.closest('[data-mp]');
@@ -479,6 +493,45 @@
     if (!dlg.open) dlg.showModal();
   }
 
+  function updateNoticeHtml() {
+    if (!UPDATE_RECENT) return '';
+    const ns = LAST_UPDATE.newSeries || [], nc = (LAST_UPDATE.newCards || []).length;
+    const imgs = (LAST_UPDATE.newImages || 0) + (LAST_UPDATE.updatedImages || 0);
+    if (!ns.length && !nc && !imgs) return '';
+    return `<div class="notice update-notice"><b>最近更新（${esc(String(LAST_UPDATE.at).slice(0, 10))}）</b>：
+      ${ns.length ? `新系列 ${ns.map(x => `<button class="chip link" data-set="${esc(x.code)}">${esc(x.code || x.label)}</button>`).join(' ')}；` : ''}
+      ${nc ? `新卡 <button class="chip link" data-fresh="1">${nc} 張 ›</button>；` : ''}
+      ${imgs ? `卡圖新增 ${LAST_UPDATE.newImages || 0} 張、更新 ${LAST_UPDATE.updatedImages || 0} 張` : ''}</div>`;
+  }
+  /** Run the card bot in update mode from the home page and show its progress there. */
+  async function runUpdate(btn) {
+    const box = $('#h-update');
+    btn.disabled = true;
+    box.hidden = false;
+    box.textContent = '正在連接官方網站…';
+    try {
+      await fetch('/api/bot/update', { method: 'POST' });
+    } catch (e) { box.textContent = '無法連接本機伺服器。請用 OPCG-Start.command 開啟本程式。'; btn.disabled = false; return; }
+    const tick = async () => {
+      let job;
+      try { job = ((await (await fetch('/api/bot', { cache: 'no-store' })).json()).jobs || {}).update; } catch (e) { job = null; }
+      if (!job) { setTimeout(tick, 1500); return; }
+      const lines = (job.log || '').trim().split('\n').filter(Boolean);
+      box.textContent = lines.slice(-1)[0] || '處理中…';
+      if (job.running) { setTimeout(tick, 1500); return; }
+      if (job.code === 0) {
+        const res = lines.slice(lines.findIndex(l => l.startsWith('更新結果'))).join('　');
+        box.textContent = res || '更新完成';
+        toast('更新完成，正在重新載入…');
+        setTimeout(() => location.reload(), 1800);
+      } else {
+        box.textContent = '更新失敗：' + (lines.slice(-1)[0] || '') + '　詳情見「設定」中的記錄。';
+        btn.disabled = false;
+      }
+    };
+    tick();
+  }
+
   // =============================================================== HOME
   function renderHome() {
     const el = $('#tab-home');
@@ -495,39 +548,47 @@
     const top = Object.keys(state.owned).map(id => ({ id, p: price(id) })).filter(x => x.p).sort((a, b) => b.p.hkd - a.p.hkd).slice(0, 12);
     const counts = st => state.decks.filter(d => d.status === st).length;
     el.innerHTML = `
-      ${DEMO ? '<div class="demo-banner"><b>示範版</b>：咭圖、咭名、效果、價錢同 Deck 係示範資料 (斯摩格 OP10-001 同 RG Luffy 咭表除外)。你喺度改嘅嘢只存喺你部機。真版本要喺電腦行 <code>python3 opcg/serve.py</code>。</div>' : (CARDS.length ? '' : noDataNotice('咭表'))}
+      ${DEMO ? '<div class="demo-banner"><b>示範版</b>：卡圖、卡名、效果、價格及牌組均為示範資料（斯摩格 OP10-001 及 RG Luffy 卡表除外）。在此所作的修改只儲存於本機。正式版本請在電腦執行 <code>python3 opcg/serve.py</code>。</div>' : (CARDS.length ? '' : noDataNotice('卡表'))}
       <div class="hero-search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
         <input type="search" id="h-q" placeholder="路飛 OP08, c5, p6000…" autocomplete="off" enterkeyhint="search"></div>
       <div class="muted hint">${SEARCH_HINT}</div>
       <div id="h-results"></div>
       <div class="kpis">
-        <button class="kpi" data-go="collection"><span>我嘅咭</span><b>${totalCopies.toLocaleString()}</b><small>${Object.keys(state.owned).length} 款</small></button>
-        <button class="kpi" data-go="value"><span>總值</span><b class="price">${hk(value.total)}</b><small>${value.unpriced ? value.unpriced + ' 張未有價' : '全部有價'}</small></button>
-        <button class="kpi" data-go="sets"><span>系列收集</span><b>${allTotal ? Math.round(started.reduce((t, x) => t + x.have, 0) / allTotal * 100) : 0}%</b><small>${started.length}/${mySets.length} 個系列有咭</small></button>
-        <button class="kpi" data-go="mine"><span>Decks</span><b>${counts('plan')} / ${counts('built')} / ${counts('sold')}</b><small>計劃 / 砌好 / 已賣</small></button>
+        <div class="kpi" role="button" tabindex="0" data-go="collection"><span>我的卡</span><b>${totalCopies.toLocaleString()}</b><small>${Object.keys(state.owned).length} 款</small></div>
+        <div class="kpi" role="button" tabindex="0" data-go="value"><span>總值 ${eyeButton()}</span><b class="price">${total(value.total)}</b><small>${value.unpriced ? value.unpriced + ' 張未有價格' : '全部已有價格'}</small></div>
+        <div class="kpi" role="button" tabindex="0" data-go="sets"><span>系列收集</span><b>${allTotal ? Math.round(started.reduce((t, x) => t + x.have, 0) / allTotal * 100) : 0}%</b><small>${started.length}/${mySets.length} 個系列已有卡</small></div>
+        <div class="kpi" role="button" tabindex="0" data-go="mine"><span>牌組</span><b>${counts('plan')} / ${counts('built')} / ${counts('sold')}</b><small>計劃中 / 已組好 / 已售出</small></div>
       </div>
-      <section class="home-sec"><div class="sec-head"><h2>全部系列 <span class="count">${mySets.length}</span></h2><button class="see" data-go="sets">按類別睇 ›</button></div>
-        ${homeSets.length ? `<div class="hscroll">${homeSets.map(x => `<button class="setcard${x.have ? '' : ' empty'}" data-set="${esc(x.code)}" title="${esc(SERIES_LABEL[x.code] || x.code)}">${ring(x.pct, 54, Math.round(x.pct * 100) + '%')}
-          <b>${esc(x.code)}</b><small>${x.have}/${x.total}</small></button>`).join('')}</div>` : '<p class="muted">未有咭表。行咭表 BOT 之後，所有系列都會喺度出現。</p>'}</section>
+      ${updateNoticeHtml()}
+      <section class="home-sec"><div class="sec-head"><h2>全部系列 <span class="count">${mySets.length}</span></h2>
+        <div class="actions">${serverOk ? '<button class="see" data-update="1">檢查新系列及卡圖</button>' : ''}<button class="see" data-go="sets">按類別查看 ›</button></div></div>
+        <div id="h-update" class="muted small" hidden></div>
+        ${homeSets.length ? `<div class="hscroll">${homeSets.map(x => `<button class="setcard${x.have ? '' : ' empty'}" data-set="${esc(x.code)}" title="${esc(SERIES_LABEL[x.code] || x.code)}">${NEW_SERIES.has(x.code) ? '<span class="new-badge">新</span>' : ''}${ring(x.pct, 54, Math.round(x.pct * 100) + '%')}
+          <b>${esc(x.code)}</b><small>${x.have}/${x.total}</small></button>`).join('')}</div>` : '<p class="muted">未有卡表。執行卡表 BOT 後，所有系列都會在此顯示。</p>'}</section>
       ${recent.length ? `<section class="home-sec"><div class="sec-head"><h2>最近加入</h2><button class="see" data-go="open">開箱 ›</button></div>
         <div class="hscroll">${recent.map(id => `<button class="mini" data-detail="${esc(id)}"><div class="thumb">${imgTag(id)}</div><small>${esc(id)}</small></button>`).join('')}</div></section>` : ''}
-      <section class="home-sec"><div class="sec-head"><h2>我的 Decks <span class="count">${decks.length}</span></h2><button class="see" data-go="mine">全部 ›</button></div>
+      <section class="home-sec"><div class="sec-head"><h2>我的牌組 <span class="count">${decks.length}</span></h2><button class="see" data-go="mine">全部 ›</button></div>
         ${decks.length ? `<div class="hscroll">${decks.map(d => {
           const lead = E.leaderOf(d.entries, byId);
           const st = E.deckStatus(d.entries, available(d.id));
           return `<button class="deckcard" data-deck="${esc(d.id)}"><div class="grow"><b>${esc(d.name)}</b><small>${st.have}/${st.need} · ${statusLabel(d.status)}</small>
             <div class="bar ${barClass(st.pct)}"><i style="width:${(st.pct * 100).toFixed(0)}%"></i></div></div><div class="thumb">${imgTag(lead || '?')}</div></button>`;
-        }).join('')}</div>` : '<p class="muted">未有 Deck。去「Meta Decks」揀一副。</p>'}</section>
-      ${top.length ? `<section class="home-sec"><div class="sec-head"><h2>最貴嘅咭</h2><button class="see" data-go="value">貴咭 ›</button></div>
+        }).join('')}</div>` : '<p class="muted">未有牌組。請到「熱門牌組」選擇一副。</p>'}</section>
+      ${top.length ? `<section class="home-sec"><div class="sec-head"><h2>最高價的卡</h2><button class="see" data-go="value">高價卡 ›</button></div>
         <div class="hscroll">${top.map(x => `<button class="mini" data-detail="${esc(x.id)}"><div class="thumb">${imgTag(x.id)}</div><small class="price">${hk(x.p.hkd)}</small></button>`).join('')}</div></section>` : ''}`;
     const input = $('#h-q');
     let timer;
     input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(() => homeResults(input.value), 120); });
+    el.onkeydown = e => {
+      const k = e.target.closest('.kpi');
+      if (k && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); showTab(k.dataset.go); }
+    };
     input.addEventListener('keydown', e => {
       if (e.key !== 'Enter' || !input.value.trim()) return;
       if (/[?&]dg=/i.test(input.value)) importDecks(input.value); else openCollection(input.value);
     });
     el.onclick = e => {
+      if (e.target.closest('[data-hide]')) return; // the eye button is handled globally
       const go = e.target.closest('[data-go]');
       if (go) return showTab(go.dataset.go);
       const st = e.target.closest('[data-set]');
@@ -536,21 +597,25 @@
       if (dk) { mineOpen[dk.dataset.deck] = true; return showTab('mine'); }
       const all = e.target.closest('[data-all]');
       if (all) openCollection(input.value);
+      const up = e.target.closest('[data-update]');
+      if (up) runUpdate(up);
+      const fresh = e.target.closest('[data-fresh]');
+      if (fresh) openCollection('新');
     };
   }
   function homeResults(text) {
     const box = $('#h-results');
     if (!text.trim()) { box.innerHTML = ''; return; }
     if (/[?&]dg=|^\s*\d+\s*x\s*(OP|ST|EB|PRB)/im.test(text)) {
-      box.innerHTML = `<div class="panel"><h3>識別到 Deck</h3>${importPreview(text)}
-        <div class="actions" style="margin-top:8px"><button class="primary" data-import="1">匯入去「我的 Decks」</button></div></div>`;
+      box.innerHTML = `<div class="panel"><h3>已識別牌組</h3>${importPreview(text)}
+        <div class="actions" style="margin-top:8px"><button class="primary" data-import="1">匯入至「我的牌組」</button></div></div>`;
       box.querySelector('[data-import]').onclick = () => importDecks(text);
       return;
     }
     const q = E.parseQuery(text);
     const hits = CARDS.filter(c => E.matchCard(c, q, ownedOf(c.id)));
     const price = pricer();
-    box.innerHTML = `<div class="sec-head"><h2>${hits.length} 個結果</h2>${hits.length > 24 ? `<button class="see" data-all="1">睇晒 ›</button>` : ''}</div>
+    box.innerHTML = `<div class="sec-head"><h2>${hits.length} 個結果</h2>${hits.length > 24 ? `<button class="see" data-all="1">查看全部 ›</button>` : ''}</div>
       <div class="hscroll wrap">${hits.slice(0, 24).map(c => { const n = ownedOf(c.id), p = price(c.id); return `<button class="mini" data-detail="${esc(c.id)}">
         <div class="thumb">${imgTag(c.id)}${n ? `<span class="own-badge">×${n}</span>` : ''}</div><small>${esc(c.id)}</small>${p ? `<small class="price">${hk(p.hkd)}</small>` : ''}</button>`; }).join('')}</div>`;
   }
@@ -560,7 +625,7 @@
   try { sv.mode = localStorage.getItem('opcg-setmode') || 'grid'; } catch (e) { /* ignore */ }
   function renderSets() {
     const el = $('#tab-sets');
-    if (!CARDS.length) { el.innerHTML = noDataNotice('咭表'); return; }
+    if (!CARDS.length) { el.innerHTML = noDataNotice('卡表'); return; }
     return sv.set ? renderSetPage(el) : renderSetIndex(el);
   }
   function renderSetIndex(el) {
@@ -570,13 +635,13 @@
     if (!names.includes(sv.group)) sv.group = names[0];
     el.innerHTML = `
       <div class="subtabs">${names.map(g => `<button data-group="${esc(g)}" class="${g === sv.group ? 'on' : ''}">${esc(g)}</button>`).join('')}</div>
-      <label class="muted small"><input type="checkbox" id="sv-par"${sv.parallels ? ' checked' : ''}> 連平行版一齊計</label>
+      <label class="muted small"><input type="checkbox" id="sv-par"${sv.parallels ? ' checked' : ''}> 連同平行版一併計算</label>
       ${names.filter(g => g === sv.group).map(g => {
         const prog = groups[g].map(code => E.setProgress(CARDS, state.owned, code, sv.parallels)).filter(x => x.total);
         const tot = prog.reduce((t, x) => t + x.total, 0), have = prog.reduce((t, x) => t + x.have, 0);
         return `<div class="panel"><div class="group-head">${ring(tot ? have / tot : 0, 46, Math.round(tot ? have / tot * 100 : 0) + '%')}<h2>${esc(g)}</h2>
           <span class="muted">${have}/${tot} 款</span></div>
-          <div class="setgrid">${prog.map(x => `<button class="setdot" data-set="${esc(x.code)}" title="${esc(SERIES_LABEL[x.code] || x.code)}">
+          <div class="setgrid">${prog.map(x => `<button class="setdot" data-set="${esc(x.code)}" title="${esc(SERIES_LABEL[x.code] || x.code)}">${NEW_SERIES.has(x.code) ? '<span class="new-badge">新</span>' : ''}
             ${ring(x.pct, 58, x.code.replace(/^(OP|EB|PRB|ST)/, '$1 '))}<small>${x.have}/${x.total}</small></button>`).join('')}</div></div>`;
       }).join('')}`;
     el.onclick = e => {
@@ -605,7 +670,7 @@
         <button class="back" data-back="1" aria-label="返回">‹</button>
         ${ring(x.pct, 64, Math.round(x.pct * 100) + '%')}
         <div class="grow"><h2>${esc(sv.set)}</h2><div class="muted">${esc(SERIES_LABEL[sv.set] || E.setGroup(sv.set))}</div>
-          <div class="small">${x.have}/${x.total} 款 · ${x.copies} 張 · 值 <b class="price">${hk(value.total)}</b></div></div>
+          <div class="small">${x.have}/${x.total} 款 · ${x.copies} 張 · 總值 <b class="price">${total(value.total)}</b> ${eyeButton()}</div></div>
       </div>
       <div class="rarity-row">${rars.map(r => `<div class="rar"><b>${x.byRarity[r].have}/${x.byRarity[r].total}</b><span>${esc(r)}</span></div>`).join('')}</div>`;
   }
@@ -626,13 +691,13 @@
       <div id="sp-summary">${setSummaryHtml()}</div>
       <div class="toolbar">
         <div class="seg" role="group" aria-label="顯示方式">
-          <button data-mode="grid" class="${batch ? '' : 'on'}">咭圖</button><button data-mode="batch" class="${batch ? 'on' : ''}">批量輸入</button></div>
+          <button data-mode="grid" class="${batch ? '' : 'on'}">卡圖</button><button data-mode="batch" class="${batch ? 'on' : ''}">批量輸入</button></div>
         <label class="small"><input type="checkbox" id="sp-par"${sv.parallels ? ' checked' : ''}> 包括平行版</label>
-        <select id="sp-show"><option value="">全部</option><option value="have">我有嘅</option><option value="none">未有 (缺咭)</option></select>
-        <select id="sp-sort"><option value="id">按編號</option><option value="price">按價錢</option></select>
-        <button class="small" id="sp-copy">複製缺咭清單</button>
+        <select id="sp-show"><option value="">全部</option><option value="have">已擁有</option><option value="none">未擁有（缺卡）</option></select>
+        <select id="sp-sort"><option value="id">按編號</option><option value="price">按價格</option></select>
+        <button class="small" id="sp-copy">複製缺卡清單</button>
       </div>
-      ${batch ? `<p class="muted small batch-help">打數量，撳 <kbd>Enter</kbd> / <kbd>Tab</kbd> / <kbd>↓</kbd> 去下一張，<kbd>↑</kbd> 返上一張。留空 = 0。每打一個數即刻儲存。</p>
+      ${batch ? `<p class="muted small batch-help">輸入數量後按 <kbd>Enter</kbd> / <kbd>Tab</kbd> / <kbd>↓</kbd> 移至下一張，按 <kbd>↑</kbd> 返回上一張。留空即為 0。每次輸入均即時儲存。</p>
         <div class="batch" id="sp-batch">${setCards().map(batchRowHtml).join('')}</div>`
         : '<div class="grid" id="sp-grid"></div>'}`;
     $('#sp-show').value = sv.show; $('#sp-sort').value = sv.sort;
@@ -700,18 +765,18 @@
         <div class="panel quick">
           <h2>開箱快速輸入</h2>
           <div class="toolbar">
-            <label>預設系列 <select id="q-set"><option value="">(冇)</option>${SETS.map(s => `<option${s === set ? ' selected' : ''}>${esc(s)}</option>`).join('')}</select></label>
-            <span class="muted">輸入咭號後撳 Enter：<code>OP08-001</code>、<code>08-001</code>、或者只打 <code>1</code> / <code>001p1</code>（用預設系列）</span>
+            <label>預設系列 <select id="q-set"><option value="">（無）</option>${SETS.map(s => `<option${s === set ? ' selected' : ''}>${esc(s)}</option>`).join('')}</select></label>
+            <span class="muted">輸入卡號後按 Enter：<code>OP08-001</code>、<code>08-001</code>，或只輸入 <code>1</code> / <code>001p1</code>（用預設系列）</span>
           </div>
           <input id="q-input" autocomplete="off" inputmode="text" placeholder="例如 045 或 OP09-118">
           <div id="q-preview" class="muted" style="min-height:22px;margin-top:6px"></div>
           <ul class="log" id="q-log"></ul>
         </div>
         <div class="panel">
-          <h2>一次過加入</h2>
-          <p class="muted">每行一款：<code>OP08-001 x2</code>、<code>3 OP09-045</code>、<code>OP08-118_p1</code>。平行/異圖會分開記。</p>
+          <h2>一次加入多張</h2>
+          <p class="muted">每行一款：<code>OP08-001 x2</code>、<code>3 OP09-045</code>、<code>OP08-118_p1</code>。平行版／異圖會分開記錄。</p>
           <textarea id="bulk" placeholder="OP08-001 x2&#10;OP08-045 x3"></textarea>
-          <div class="actions" style="margin-top:8px"><button class="primary" id="bulk-add">加入咭庫</button><button id="bulk-sub">從咭庫減去</button></div>
+          <div class="actions" style="margin-top:8px"><button class="primary" id="bulk-add">加入卡庫</button><button id="bulk-sub">從卡庫扣除</button></div>
         </div>
       </div>`;
     const input = $('#q-input');
@@ -719,13 +784,13 @@
     setSel.addEventListener('change', () => { settings().quickSet = setSel.value; save(); });
     const preview = () => {
       const id = E.quickId(input.value, setSel.value);
-      $('#q-preview').innerHTML = id ? `${esc(id)} ${esc(cardName(id))} <span class="${byId[id] ? 'ok' : 'warn'}">${byId[id] ? '' : (CARDS.length ? '(咭表搵唔到，照樣可以加)' : '')}</span> · 而家有 ${ownedOf(id)} 張` : '';
+      $('#q-preview').innerHTML = id ? `${esc(id)} ${esc(cardName(id))} <span class="${byId[id] ? 'ok' : 'warn'}">${byId[id] ? '' : (CARDS.length ? '（卡表中找不到，仍可加入）' : '')}</span> · 現有 ${ownedOf(id)} 張` : '';
     };
     input.addEventListener('input', preview);
     input.addEventListener('keydown', e => {
       if (e.key !== 'Enter') return;
       const id = E.quickId(input.value, setSel.value);
-      if (!id) { toast('睇唔明呢個咭號'); return; }
+      if (!id) { toast('無法辨識此卡號'); return; }
       setOwned(id, ownedOf(id) + 1);
       state.openLog.unshift({ id, at: Date.now() });
       state.openLog = state.openLog.slice(0, 200);
@@ -744,7 +809,7 @@
     const bulk = sign => {
       const { entries, unknown } = E.parseDeckText($('#bulk').value, { keepVariants: true });
       for (const e of entries) setOwned(e.id, ownedOf(e.id) + sign * e.count);
-      toast(`${sign > 0 ? '加入' : '減去'} ${entries.reduce((s, e) => s + e.count, 0)} 張` + (unknown.length ? `，${unknown.length} 行睇唔明` : ''));
+      toast(`${sign > 0 ? '加入' : '減去'} ${entries.reduce((s, e) => s + e.count, 0)} 張` + (unknown.length ? `，${unknown.length} 行無法辨識` : ''));
       if (!unknown.length) $('#bulk').value = ''; else $('#bulk').value = unknown.join('\n');
     };
     $('#bulk-add').addEventListener('click', () => bulk(1));
@@ -755,8 +820,8 @@
   function drawLog() {
     const today = new Date().toDateString();
     const todayCount = state.openLog.filter(x => new Date(x.at).toDateString() === today).length;
-    $('#q-log').innerHTML = `<li class="muted">今日入咗 ${todayCount} 張</li>` + state.openLog.slice(0, 60).map((x, i) =>
-      `<li><div class="thumb">${imgTag(x.id)}</div><div class="grow"><b>${esc(x.id)}</b> ${esc(cardName(x.id))}<br><span class="muted">而家 ${ownedOf(x.id)} 張 · ${new Date(x.at).toLocaleTimeString()}</span></div><button class="small" data-undo="${i}">撤銷</button></li>`).join('');
+    $('#q-log').innerHTML = `<li class="muted">今日已加入 ${todayCount} 張</li>` + state.openLog.slice(0, 60).map((x, i) =>
+      `<li><div class="thumb">${imgTag(x.id)}</div><div class="grow"><b>${esc(x.id)}</b> ${esc(cardName(x.id))}<br><span class="muted">現有 ${ownedOf(x.id)} 張 · ${new Date(x.at).toLocaleTimeString()}</span></div><button class="small" data-undo="${i}">撤銷</button></li>`).join('');
   }
 
   // ============================================================== META
@@ -764,19 +829,19 @@
   function renderMeta() {
     const el = $('#tab-meta');
     if (!META.length) {
-      el.innerHTML = noDataNotice('Deck list') + importPanelHtml();
+      el.innerHTML = noDataNotice('熱門牌組') + importPanelHtml();
       bindImport($('#tab-meta'));
       return;
     }
     const src = window.OPCG_DECKS;
     el.innerHTML = `
       <div class="toolbar">
-        <input type="search" id="mf-q" placeholder="搜尋 Deck / 領航 / 作者 / 比賽">
+        <input type="search" id="mf-q" placeholder="搜尋 牌組 / 領航 / 作者 / 比賽">
         <select id="mf-color"><option value="">全部顏色</option>${COLORS.map(c => `<option>${esc(c)}</option>`).join('')}</select>
         ${fxButton()}
-        <select id="mf-sort"><option value="pct">我最夠咭先</option><option value="missing">差最少張先</option><option value="fill">補咭最平先</option><option value="value">市值最高先</option><option value="date">最新先</option></select>
+        <select id="mf-sort"><option value="pct">最齊卡優先</option><option value="missing">缺卡最少優先</option><option value="fill">補卡最便宜優先</option><option value="value">市值最高優先</option><option value="date">最新優先</option></select>
       </div>
-      <div class="stats"><span>${META.length} 副 Deck · 來源 <a href="${esc(src.source)}" target="_blank" rel="noopener">${esc(src.source)}</a> · 更新 ${esc((src.scrapedAt || '').slice(0, 10))}</span></div>
+      <div class="stats"><span>${META.length} 副牌組 · 來源 <a href="${esc(src.source)}" target="_blank" rel="noopener">${esc(src.source)}</a> · 更新 ${esc((src.scrapedAt || '').slice(0, 10))}</span></div>
       <div class="decks" id="mf-list"></div>
       <button class="more" id="mf-more">顯示更多</button>
       ${importPanelHtml(false)}`;
@@ -791,7 +856,7 @@
       if (!b) return;
       const d = META.find(x => x.id === b.dataset.id);
       if (b.dataset.act === 'toggle') { mf.open[d.id] = !mf.open[d.id]; drawMeta(); }
-      if (b.dataset.act === 'copy') addMyDeck(d.name || 'Meta deck', d.entries, { from: d.url, meta: d.id, author: d.author, date: d.date,
+      if (b.dataset.act === 'copy') addMyDeck(d.name || '熱門牌組', d.entries, { from: d.url, meta: d.id, author: d.author, date: d.date,
         placement: d.placement, event: d.event, eventType: d.eventType, country: d.country });
       if (b.dataset.act === 'text') copyText(E.deckToText(d.entries, byId));
     });
@@ -818,7 +883,7 @@
     if (mf.sort === 'date') list.sort((a, b) => String(b.date).localeCompare(String(a.date)));
     if (mf.sort === 'fill') list.sort((a, b) => a.fill.cost - b.fill.cost || a.st.missing - b.st.missing);
     if (mf.sort === 'value') list.sort((a, b) => b.cost.cost - a.cost.cost);
-    $('#mf-list').innerHTML = list.slice(0, mf.limit).map(d => metaDeckHtml(d)).join('') || '<p class="muted">冇符合嘅 Deck</p>';
+    $('#mf-list').innerHTML = list.slice(0, mf.limit).map(d => metaDeckHtml(d)).join('') || '<p class="muted">沒有符合的牌組</p>';
     $('#mf-more').style.display = list.length > mf.limit ? '' : 'none';
   }
   function metaDeckHtml(d) {
@@ -830,19 +895,19 @@
           <div class="muted">${esc(d.lead)} ${esc(leadCard ? leadCard.name : '')} ${dots(leadCard)}</div>
           <div class="muted" style="font-size:12px">${esc(info || d.context || d.page)}</div></div></div>
       <div class="bar ${barClass(d.st.pct)}"><i style="width:${(d.st.pct * 100).toFixed(0)}%"></i></div>
-      <div>${d.st.have}/${d.st.need} 張 · ${d.st.missing ? `<span class="bad">差 ${d.st.missing} 張</span>` : '<span class="ok">夠晒咭，可以砌！</span>'}</div>
+      <div>${d.st.have}/${d.st.need} 張 · ${d.st.missing ? `<span class="bad">欠 ${d.st.missing} 張</span>` : '<span class="ok">卡已齊，可以組建！</span>'}</div>
       ${costLine(d.cost, d.st.missing ? d.fill : null)}
       ${mf.open[d.id] ? rowsHtml(d.st.rows) : ''}
-      <div class="actions"><button class="small" data-act="toggle" data-id="${esc(d.id)}">${mf.open[d.id] ? '收埋' : '睇咭表'}</button>
-        <button class="small primary" data-act="copy" data-id="${esc(d.id)}">加入我的 Deck</button>
+      <div class="actions"><button class="small" data-act="toggle" data-id="${esc(d.id)}">${mf.open[d.id] ? '收起' : '查看卡表'}</button>
+        <button class="small primary" data-act="copy" data-id="${esc(d.id)}">加入我的牌組</button>
         <button class="small" data-act="text" data-id="${esc(d.id)}">複製文字</button>
         <a class="small muted" href="${esc(d.url)}" target="_blank" rel="noopener">來源</a></div>
     </div>`;
   }
   function costLine(cost, fill) {
-    if (cost.cost === 0 && cost.unknown.length) return '<div class="muted small">未有價錢</div>';
-    const unk = cost.unknown.length ? ` <span class="muted">(${cost.unknown.length} 款未有價)</span>` : '';
-    return `<div class="muted" style="font-size:13px">市值 <b class="price">${hk(cost.cost)}</b>${unk}${fill ? ` · 補齊要 <b class="price">${hk(fill.cost)}</b>${fill.unknown ? ` +${fill.unknown} 張未有價` : ''}` : ''}</div>`;
+    if (cost.cost === 0 && cost.unknown.length) return '<div class="muted small">未有價格</div>';
+    const unk = cost.unknown.length ? ` <span class="muted">（${cost.unknown.length} 款未有價格）</span>` : '';
+    return `<div class="muted" style="font-size:13px">市值 <b class="price">${hk(cost.cost)}</b>${unk}${fill ? ` · 補齊要 <b class="price">${hk(fill.cost)}</b>${fill.unknown ? ` +${fill.unknown} 張未有價格` : ''}` : ''}</div>`;
   }
   function rowsHtml(rows, editable) {
     const price = pricer();
@@ -857,7 +922,7 @@
       <div class="grow"><b>${esc(r.id)}</b> ${esc(cardName(r.id))} <span class="muted small">${esc(costPower(byId[r.id]))}</span>
         ${fx ? `<div class="row-fx">${byId[r.id] && byId[r.id].text ? effectHtml(byId[r.id].text) : '<span class="muted">未有效果資料</span>'}${byId[r.id] && byId[r.id].trigger ? `<div>${triggerHtml(byId[r.id].trigger)}</div>` : ''}</div>` : ''}</div>
       <span class="muted rowprice">${(p => p ? hk(p.hkd) : '')(price(r.id))}</span>
-      <span class="muted" title="可用 (扣除其他已砌 Deck)">有 ${r.free}</span>
+      <span class="muted" title="可用（已扣除其他已組建牌組）">有 ${r.free}</span>
       ${editable ? `<span class="cnt"><button class="small" data-e="${esc(r.id)}" data-n="-1">−</button><b class="need">${r.need}</b><button class="small" data-e="${esc(r.id)}" data-n="1">+</button></span>`
         : `<b class="need">×${r.need}</b>`}
     </div>`).join('')}</div>`;
@@ -867,29 +932,31 @@
     if (t) return showDetail(t.dataset.detail);
     const fx = e.target.closest('[data-fx]');
     if (fx) { settings().showEffects = !settings().showEffects; save(); render(); }
+    const hide = e.target.closest('[data-hide]');
+    if (hide) { e.stopPropagation(); settings().hideTotal = !settings().hideTotal; save(); render(); }
   });
   function fxButton() {
-    return `<button class="small${settings().showEffects ? ' primary' : ''}" data-fx="1">${settings().showEffects ? '收埋中文效果' : '顯示中文效果'}</button>`;
+    return `<button class="small${settings().showEffects ? ' primary' : ''}" data-fx="1">${settings().showEffects ? '隱藏中文效果' : '顯示中文效果'}</button>`;
   }
   function deckInfo(d) {
     const bits = [d.placement, d.event, d.eventType && d.eventType !== d.event ? d.eventType : '', d.country, d.author && 'by ' + d.author, d.date].filter(Boolean);
     const link = d.from || d.url;
-    return bits.length || link ? `<div class="muted small">${esc(bits.join(' · '))}${link && /^https?:/.test(link) ? ` · <a href="${esc(link)}" target="_blank" rel="noopener">原 Deck ›</a>` : ''}</div>` : '';
+    return bits.length || link ? `<div class="muted small">${esc(bits.join(' · '))}${link && /^https?:/.test(link) ? ` · <a href="${esc(link)}" target="_blank" rel="noopener">原牌組 ›</a>` : ''}</div>` : '';
   }
   function importPanelHtml(open) {
-    return `<details class="panel import"${open ? ' open' : ''}><summary><b>＋ 貼上 Deck 連結或 Deck list</b></summary>
-      <p class="muted small">喺 onepiecetopdecks 揀咗想砌嘅 Deck，複製個 <b>deckgen 連結</b> (可以一次貼幾條，每行一條) 或者「Decklist in text」(<code>4xOP08-002</code>) 貼落嚟。Deck 名、作者、名次、比賽、日期會自動讀入。</p>
-      <textarea class="imp-text" aria-label="Deck 連結或 Deck list" placeholder="https://onepiecetopdecks.com/deck-list/.../deckgen/?dn=...&amp;dg=1nOP13-001a4nOP13-016...&#10;或者&#10;1xOP13-001&#10;4xOP13-016&#10;..."></textarea>
+    return `<details class="panel import"${open ? ' open' : ''}><summary><b>＋ 貼上牌組連結或牌組清單</b></summary>
+      <p class="muted small">在 onepiecetopdecks 選好想組建的牌組後，複製其 <b>deckgen 連結</b>（可一次貼上多條，每行一條）或「Decklist in text」（<code>4xOP08-002</code>）並貼上。牌組名稱、作者、名次、比賽及日期會自動讀入。</p>
+      <textarea class="imp-text" aria-label="牌組連結或牌組清單" placeholder="https://onepiecetopdecks.com/deck-list/.../deckgen/?dn=...&amp;dg=1nOP13-001a4nOP13-016...&#10;或&#10;1xOP13-001&#10;4xOP13-016&#10;..."></textarea>
       <div class="imp-preview muted small"></div>
-      <div class="actions" style="margin-top:8px"><input class="imp-name" placeholder="Deck 名 (可留空)" aria-label="Deck 名" style="flex:1;min-width:0"><button class="primary imp-go">匯入</button></div></details>`;
+      <div class="actions" style="margin-top:8px"><input class="imp-name" placeholder="牌組名稱（可留空）" aria-label="牌組名稱" style="flex:1;min-width:0"><button class="primary imp-go">匯入</button></div></details>`;
   }
   function importDecks(text, nameOverride) {
     const found = E.parseDeckImports(text).filter(d => d.entries.length);
-    if (!found.length) { toast('搵唔到咭號'); return 0; }
+    if (!found.length) { toast('找不到卡號'); return 0; }
     const ids = [];
     for (const d of found) {
       const lead = E.leaderOf(d.entries, byId);
-      const name = (found.length === 1 && nameOverride) || d.meta.name || cardName(lead) || lead || '新 Deck';
+      const name = (found.length === 1 && nameOverride) || d.meta.name || cardName(lead) || lead || '新牌組';
       const meta = Object.assign({}, d.meta); delete meta.name;
       if (meta.url) { meta.from = meta.url; delete meta.url; }
       const deck = Object.assign({ id: uid(), name, entries: d.entries, status: 'plan', price: '', createdAt: new Date().toISOString() }, meta);
@@ -900,7 +967,7 @@
     mineImportOpen = false;
     save();
     const skipped = found.reduce((t, d) => t + d.unknown.filter(u => !/^decklist/i.test(u)).length, 0);
-    toast(`已匯入 ${ids.length} 副 Deck` + (skipped ? `，${skipped} 行睇唔明已略過` : ''));
+    toast(`已匯入 ${ids.length} 副牌組` + (skipped ? `，${skipped} 行無法辨識，已略過` : ''));
     if (current !== 'mine') showTab('mine'); else render();
     return ids.length;
   }
@@ -910,7 +977,7 @@
     return found.map(d => {
       const st = E.deckStatus(d.entries, avail);
       const lead = E.leaderOf(d.entries, byId);
-      return `<div>${esc(d.meta.name || cardName(lead) || lead)} · ${esc(lead)} · ${st.need} 張 · 我有 ${st.have} · <span class="${st.missing ? 'bad' : 'ok'}">差 ${st.missing}</span></div>`;
+      return `<div>${esc(d.meta.name || cardName(lead) || lead)} · ${esc(lead)} · ${st.need} 張 · 已有 ${st.have} · <span class="${st.missing ? 'bad' : 'ok'}">欠 ${st.missing}</span></div>`;
     }).join('');
   }
   function bindImport(root) {
@@ -921,7 +988,7 @@
   }
 
   // ================================================================ MINE
-  const STATUS = { plan: '計劃中', built: '已砌好 (預留咭)', sold: '已賣出' };
+  const STATUS = { plan: '計劃中', built: '已組好（已預留卡）', sold: '已售出' };
   const statusLabel = s => STATUS[s] || s;
   const mineOpen = {};
   let mineFilter = 'active';
@@ -931,7 +998,7 @@
     state.decks.unshift(d);
     mineOpen[d.id] = true;
     save();
-    toast('已加入「我的 Decks」');
+    toast('已加入「我的牌組」');
     if (current !== 'mine') showTab('mine'); else render();
   }
   function renderMine() {
@@ -943,20 +1010,20 @@
     const shop = E.shoppingList(plan, available());
     el.innerHTML = `
       <div class="toolbar">
-        <button id="new-deck">＋ 空白 Deck</button>
+        <button id="new-deck">＋ 空白牌組</button>
         ${fxButton()}
-        <select id="mine-filter"><option value="active">計劃中 + 已砌好</option><option value="plan">計劃中</option><option value="built">已砌好</option><option value="sold">已賣出</option><option value="all">全部</option></select>
+        <select id="mine-filter"><option value="active">計劃中 + 已組好</option><option value="plan">計劃中</option><option value="built">已組好</option><option value="sold">已售出</option><option value="all">全部</option></select>
       </div>
       ${importPanelHtml(!state.decks.length || mineImportOpen)}
-      <div class="stats"><span>計劃中 <b>${plan.length}</b></span><span>已砌好 <b>${state.decks.filter(d => d.status === 'built').length}</b></span>
-        <span>已賣出 <b>${sold.length}</b> 副 · 收入 <b>${hk(income)}</b> · 對比市值 <b class="${profit >= 0 ? 'ok' : 'bad'}">${profit >= 0 ? '+' : ''}${hk(profit)}</b></span></div>
+      <div class="stats"><span>計劃中 <b>${plan.length}</b></span><span>已組好 <b>${state.decks.filter(d => d.status === 'built').length}</b></span>
+        <span>已售出 <b>${sold.length}</b> 副 · 收入 <b>${hk(income)}</b> · 相對市值 <b class="${profit >= 0 ? 'ok' : 'bad'}">${profit >= 0 ? '+' : ''}${hk(profit)}</b></span></div>
       <div class="decks" id="mine-list"></div>
-      ${plan.length ? `<div class="panel" style="margin-top:16px"><h3>補咭清單 (全部「計劃中」Deck 一齊計)</h3>
-        ${shop.length ? `<table class="list"><tr><th>咭</th><th>需要</th><th>可用</th><th>仲差</th></tr>${shop.map(r => `<tr><td><b>${esc(r.id)}</b> ${esc(cardName(r.id))}</td><td>${r.need}</td><td>${r.free}</td><td class="bad">${r.missing}</td></tr>`).join('')}</table>
-        <div class="actions" style="margin-top:8px"><button class="small" id="copy-shop">複製清單</button></div>` : '<p class="ok">全部計劃中 Deck 都夠咭！</p>'}</div>` : ''}`;
+      ${plan.length ? `<div class="panel" style="margin-top:16px"><h3>補卡清單（所有「計劃中」牌組合併計算）</h3>
+        ${shop.length ? `<table class="list"><tr><th>卡</th><th>需要</th><th>可用</th><th>尚欠</th></tr>${shop.map(r => `<tr><td><b>${esc(r.id)}</b> ${esc(cardName(r.id))}</td><td>${r.need}</td><td>${r.free}</td><td class="bad">${r.missing}</td></tr>`).join('')}</table>
+        <div class="actions" style="margin-top:8px"><button class="small" id="copy-shop">複製清單</button></div>` : '<p class="ok">所有計劃中的牌組均已齊卡！</p>'}</div>` : ''}`;
     $('#mine-filter').value = mineFilter;
     $('#mine-filter').addEventListener('change', e => { mineFilter = e.target.value; drawMine(); });
-    $('#new-deck').addEventListener('click', () => addMyDeck('新 Deck', [], {}));
+    $('#new-deck').addEventListener('click', () => addMyDeck('新牌組', [], {}));
     const cs = $('#copy-shop');
     if (cs) cs.addEventListener('click', () => copyText(shop.map(r => `${r.missing}x${r.id} ${cardName(r.id)}`).join('\n')));
     $('#mine-list').addEventListener('click', onMineClick);
@@ -968,7 +1035,7 @@
   }
   function drawMine() {
     const list = state.decks.filter(d => mineFilter === 'all' || d.status === mineFilter || (mineFilter === 'active' && d.status !== 'sold'));
-    $('#mine-list').innerHTML = list.map(myDeckHtml).join('') || '<p class="muted">未有 Deck。去「Meta Decks」揀一副，或者撳「新 Deck」。</p>';
+    $('#mine-list').innerHTML = list.map(myDeckHtml).join('') || '<p class="muted">未有牌組。請到「熱門牌組」選擇一副，或按「空白牌組」。</p>';
   }
   function myDeckHtml(d) {
     const avail = available(d.id);
@@ -989,30 +1056,30 @@
           <div class="muted">${esc(lead)} ${esc(cardName(lead))} ${dots(byId[lead])}</div>
           ${deckInfo(d)}
           <span class="badge ${d.status}">${statusLabel(d.status)}</span>
-          ${sold ? `<span class="muted"> ${esc((d.soldAt || '').slice(0, 10))} · 賣 ${hk(d.soldPrice)}</span>` : ''}
+          ${sold ? `<span class="muted"> ${esc((d.soldAt || '').slice(0, 10))} · 售價 ${hk(d.soldPrice)}</span>` : ''}
         </div></div>
       <div class="money">
-        ${!sold && cost.unknown.length === d.entries.length ? '<span>市值 <span class="muted">未有價錢 (行價錢 BOT 或者輸入手動價)</span></span>' : `
-        <span>市值${sold ? ' (賣出時)' : ''} <b class="price">${hk(base)}</b>${!sold && cost.unknown.length ? ` <span class="muted">(${cost.unknown.length} 款未有價)</span>` : ''}</span>
+        ${!sold && cost.unknown.length === d.entries.length ? '<span>市值 <span class="muted">未有價格（請執行價格 BOT 或輸入手動價格）</span></span>' : `
+        <span>市值${sold ? '（售出時）' : ''} <b class="price">${hk(base)}</b>${!sold && cost.unknown.length ? ` <span class="muted">（${cost.unknown.length} 款未有價格）</span>` : ''}</span>
         ${!sold && st.missing ? `<span>補齊要 <b class="price">${hk(E.missingCost(st.rows, price).cost)}</b></span>` : ''}`}
-        ${profit != null ? `<span>${sold ? '賺蝕' : '預計賺蝕'} <b class="${profit >= 0 ? 'ok' : 'bad'}">${profit >= 0 ? '+' : ''}${hk(profit)}</b></span>` : ''}
+        ${profit != null ? `<span>${sold ? '盈虧' : '預計盈虧'} <b class="${profit >= 0 ? 'ok' : 'bad'}">${profit >= 0 ? '+' : ''}${hk(profit)}</b></span>` : ''}
       </div>
       ${sold ? '' : `<div class="bar ${barClass(st.pct)}"><i style="width:${(st.pct * 100).toFixed(0)}%"></i></div>
-      <div>${st.have}/${st.need} 張 · ${st.missing ? `<span class="bad">差 ${st.missing} 張</span>` : '<span class="ok">夠晒咭</span>'}</div>`}
+      <div>${st.have}/${st.need} 張 · ${st.missing ? `<span class="bad">欠 ${st.missing} 張</span>` : '<span class="ok">卡已齊</span>'}</div>`}
       ${issues.length && !sold ? `<ul class="issues">${issues.map(i => `<li>${esc(i)}</li>`).join('')}</ul>` : ''}
       ${open ? `
         ${!sold ? `<div class="toolbar" style="margin:0"><label>售價 HK$ <input data-f="price" type="number" min="0" step="1" value="${esc(d.price)}" style="width:110px"></label>
-          <button class="small" data-act="askmarket">用市值做售價</button></div>` : ''}
+          <button class="small" data-act="askmarket">以市值作售價</button></div>` : ''}
         ${rowsHtml(st.rows, !sold)}
-        ${!sold ? `<div class="picker"><input data-f="search" placeholder="加咭：打編號或名" style="width:100%"><div class="results"></div></div>` : ''}
-        <textarea data-f="notes" placeholder="備註 (買家、交收…)" style="min-height:50px">${esc(d.notes || '')}</textarea>` : ''}
+        ${!sold ? `<div class="picker"><input data-f="search" placeholder="加卡：輸入卡號或名稱" style="width:100%"><div class="results"></div></div>` : ''}
+        <textarea data-f="notes" placeholder="備註（買家、交收…）" style="min-height:50px">${esc(d.notes || '')}</textarea>` : ''}
       <div class="actions">
-        <button class="small" data-act="toggle">${open ? '收埋' : '打開 / 編輯'}</button>
-        ${d.status === 'plan' ? '<button class="small primary" data-act="build">砌好 (預留咭)</button>' : ''}
-        ${d.status === 'built' ? '<button class="small" data-act="unbuild">拆返</button>' : ''}
-        ${!sold ? '<button class="small primary" data-act="sell">賣出</button>' : '<button class="small" data-act="unsell">撤銷賣出</button>'}
+        <button class="small" data-act="toggle">${open ? '收起' : '開啟／編輯'}</button>
+        ${d.status === 'plan' ? '<button class="small primary" data-act="build">組好（預留卡）</button>' : ''}
+        ${d.status === 'built' ? '<button class="small" data-act="unbuild">拆散</button>' : ''}
+        ${!sold ? '<button class="small primary" data-act="sell">售出</button>' : '<button class="small" data-act="unsell">撤銷售出</button>'}
         <button class="small" data-act="text">複製文字</button>
-        <button class="small" data-act="dup">複製一副</button>
+        <button class="small" data-act="dup">複製此牌組</button>
         <button class="small" data-act="del">刪除</button>
       </div></div>`;
   }
@@ -1047,33 +1114,33 @@
     if (act === 'toggle') { mineOpen[d.id] = !mineOpen[d.id]; redrawDeck(d); }
     if (act === 'build') {
       const st = E.deckStatus(d.entries, available(d.id));
-      if (st.missing && !(await ask(`仲差 ${st.missing} 張，照樣標記做「已砌好」？`))) return;
+      if (st.missing && !(await ask(`尚欠 ${st.missing} 張，仍要標記為「已組好」嗎？`))) return;
       d.status = 'built'; d.builtAt = new Date().toISOString(); save(); renderMine();
     }
     if (act === 'unbuild') { d.status = 'plan'; save(); renderMine(); }
     if (act === 'askmarket') { d.price = Math.ceil(E.deckCost(d.entries, pricer()).cost); save(); redrawDeck(d); }
     if (act === 'sell') {
-      const price = await ask('賣咗幾錢 (HK$)？可以留空。', { input: true, value: d.price || '', type: 'number', ok: '賣出' });
+      const price = await ask('售出價格（HK$）？可留空。', { input: true, value: d.price || '', type: 'number', ok: '售出' });
       if (price === null) return;
       const before = Object.assign({}, state.owned);
       const res = E.sellDeck(state.owned, d.entries, settings().includeParallels);
-      if (res.shortfall.length && !(await ask('咭庫唔夠呢啲咭：\n' + res.shortfall.map(s => `${s.id} 差 ${s.count}`).join('\n') + '\n照樣賣出？(有幾多扣幾多)'))) return;
+      if (res.shortfall.length && !(await ask('卡庫中以下卡數量不足：\n' + res.shortfall.map(s => `${s.id} 欠 ${s.count}`).join('\n') + '\n仍要售出嗎？（按現有數量扣除）'))) return;
       state.owned = res.owned;
       d.removed = {};
       for (const id of Object.keys(before)) { const diff = before[id] - (res.owned[id] || 0); if (diff) d.removed[id] = diff; }
       d.costAtSale = E.deckCost(d.entries, pricer()).cost;
       d.status = 'sold'; d.soldAt = new Date().toISOString(); d.soldPrice = price === '' ? '' : Number(price);
-      save(); renderMine(); toast('已從咭庫扣除');
+      save(); renderMine(); toast('已從卡庫扣除');
     }
     if (act === 'unsell') {
-      if (!(await ask('撤銷賣出：將賣出時扣除嘅咭加返入咭庫？'))) return;
+      if (!(await ask('撤銷售出：把售出時扣除的卡加回卡庫？'))) return;
       for (const [id, n] of Object.entries(d.removed || {})) state.owned[id] = (state.owned[id] || 0) + n;
       d.status = 'plan'; delete d.removed; delete d.soldAt; delete d.costAtSale; save(); renderMine();
     }
     if (act === 'text') copyText(E.deckToText(d.entries, byId));
     if (act === 'dup') addMyDeck(d.name + ' (2)', d.entries, { notes: '' });
     if (act === 'del') {
-      if (!(await ask(`刪除「${d.name}」？咭庫數量唔會變。`, { ok: '刪除', danger: true }))) return;
+      if (!(await ask(`刪除「${d.name}」？卡庫數量不會改變。`, { ok: '刪除', danger: true }))) return;
       state.decks = state.decks.filter(x => x !== d); save(); renderMine();
     }
   }
@@ -1134,18 +1201,18 @@
     const v = E.collectionValue(state.owned, price);
     const hasBot = Object.keys(PRICES.prices || {}).length > 0;
     el.innerHTML = `
-      ${hasBot ? '' : `<div class="notice"><b>未有自動價錢。</b> 行價錢 BOT（悠々亭日版售價 × 匯率）：<pre>python3 opcg/bot/scrape_prices.py</pre>或者喺「設定」撳「更新價錢」。冇 BOT 都可以喺下面或者咭嘅詳情入面自己輸入價錢。</div>`}
+      ${hasBot ? '' : `<div class="notice"><b>未有自動價格。</b> 請執行價格 BOT（悠々亭日版售價 × 匯率）：<pre>python3 opcg/bot/scrape_prices.py</pre>或在「設定」按「更新價格」。即使沒有 BOT，亦可在下方或卡的詳細頁自行輸入價格。</div>`}
       <div class="stats">
-        <span>咭庫總值 <b class="price">${hk(v.total)}</b></span>
-        <span>有價 <b>${v.priced}</b> 張 · 未有價 <b>${v.unpriced}</b> 張</span>
+        <span>卡庫總值 <b class="price">${total(v.total)}</b> ${eyeButton()}</span>
+        <span>有價格 <b>${v.priced}</b> 張 · 未有價格 <b>${v.unpriced}</b> 張</span>
         <span id="vf-sum"></span>
-        <span>價錢 ${PRICES.fetchedAt ? '更新 ' + esc(PRICES.fetchedAt.slice(0, 10)) : '未更新'} · 1 JPY = ${rate()} HKD${Number(settings().factor) !== 1 ? ' · 係數 ×' + esc(settings().factor) : ''}</span>
+        <span>價格 ${PRICES.fetchedAt ? '更新於 ' + esc(PRICES.fetchedAt.slice(0, 10)) : '未更新'} · 1 JPY = ${rate()} HKD${Number(settings().factor) !== 1 ? ' · 係數 ×' + esc(settings().factor) : ''}</span>
       </div>
       <div class="toolbar">
-        <input type="search" id="vf-q" placeholder="搜尋 編號 / 名">
+        <input type="search" id="vf-q" placeholder="搜尋 卡號 / 名稱">
         <label>HK$ <input id="vf-min" type="number" min="0" step="10" style="width:90px"> 或以上</label>
-        <select id="vf-scope"><option value="mine">我有嘅</option><option value="all">全部有價嘅咭</option></select>
-        <select id="vf-sort"><option value="total">總值高先</option><option value="unit">單價高先</option><option value="up">升得多先</option><option value="down">跌得多先</option><option value="id">按編號</option></select>
+        <select id="vf-scope"><option value="mine">已擁有</option><option value="all">所有有價格的卡</option></select>
+        <select id="vf-sort"><option value="total">總值最高優先</option><option value="unit">單價最高優先</option><option value="up">升幅最大優先</option><option value="down">跌幅最大優先</option><option value="id">按編號</option></select>
         <button id="vf-csv" class="small">匯出 CSV</button>
       </div>
       <div class="vlist" id="vf-list"></div>
@@ -1179,18 +1246,18 @@
   function drawValue() {
     const rows = valueRows();
     const sum = rows.reduce((s, r) => s + r.total, 0);
-    $('#vf-sum').innerHTML = `呢度 <b>${rows.length}</b> 款 · 總值 <b class="price">${hk(sum)}</b>`;
+    $('#vf-sum').innerHTML = `此處 <b>${rows.length}</b> 款 · 總值 <b class="price">${total(sum)}</b>`;
     $('#vf-list').innerHTML = rows.slice(0, vf.limit).map(r => `<div class="vrow">
       <div class="thumb" data-detail="${esc(r.id)}">${imgTag(r.id)}</div>
       <div class="grow">
         <div><b>${esc(r.id)}</b> <span class="muted">${esc(r.c.rarity || '')}</span> ${esc(r.c.name || '')}${r.id !== E.baseId(r.id) ? ' <span class="badge">平行</span>' : ''}</div>
-        <div class="muted" style="font-size:12px">${r.p.source === 'manual' ? `手動 (${esc(r.p.at || '')}) <button class="small" data-clear="${esc(r.id)}">用返自動價</button>` : `悠々亭 ¥${Number(r.p.jpy).toLocaleString()}${r.p.stock === 0 ? ' · 缺貨' : ''} · ${esc(r.p.at || '')}`}
+        <div class="muted" style="font-size:12px">${r.p.source === 'manual' ? `手動（${esc(r.p.at || '')}）<button class="small" data-clear="${esc(r.id)}">改回自動價格</button>` : `悠々亭 ¥${Number(r.p.jpy).toLocaleString()}${r.p.stock === 0 ? ' · 缺貨' : ''} · ${esc(r.p.at || '')}`}
           · <a href="${esc(shopUrl(r.id))}" target="_blank" rel="noopener">悠々亭</a>${r.reserved ? ` · 預留 ${r.reserved}` : ''}</div>
       </div>
       <div class="vnum"><div class="muted">單價</div><b class="price">${hk(r.p.hkd)}</b> ${changeHtml(r.p.change)}</div>
       <div class="vnum"><div class="muted">× ${r.n}</div><b class="price">${hk(r.total)}</b></div>
       <div class="vnum"><input data-mp="${esc(r.id)}" type="number" min="0" step="1" placeholder="改價" aria-label="手動價 HK$" style="width:84px"></div>
-    </div>`).join('') || '<p class="muted">冇符合嘅咭。試吓降低價錢門檻，或者揀「全部有價嘅咭」。</p>';
+    </div>`).join('') || '<p class="muted">沒有符合的卡。請降低價格門檻，或選擇「所有有價格的卡」。</p>';
     $('#vf-more').style.display = rows.length > vf.limit ? '' : 'none';
   }
 
@@ -1201,29 +1268,30 @@
     el.innerHTML = `
       <div class="cols">
         <div class="panel"><h2>資料</h2>
-          <p>咭表：${cs ? `<b>${CARDS.length}</b> 張 · ${esc((cs.series || []).length)} 個系列 · 更新 ${esc((cs.scrapedAt || '').slice(0, 16).replace('T', ' '))}` : '<span class="warn">未有</span>'}</p>
-          <p>Meta Decks：${ds ? `<b>${META.length}</b> 副 · 更新 ${esc((ds.scrapedAt || '').slice(0, 16).replace('T', ' '))}` : '<span class="warn">未有</span>'}</p>
-          <p>價錢：${PRICES.fetchedAt ? `<b>${Object.keys(PRICES.prices).length}</b> 款 · 更新 ${esc(PRICES.fetchedAt.slice(0, 16).replace('T', ' '))}` : '<span class="warn">未有</span>'} · 手動價 <b>${Object.keys(state.manualPrices).length}</b> 款</p>
+          <p>卡表：${cs ? `<b>${CARDS.length}</b> 張 · ${esc((cs.series || []).length)} 個系列 · 更新 ${esc((cs.scrapedAt || '').slice(0, 16).replace('T', ' '))}` : '<span class="warn">未有</span>'}</p>
+          <p>熱門牌組：${ds ? `<b>${META.length}</b> 副 · 更新 ${esc((ds.scrapedAt || '').slice(0, 16).replace('T', ' '))}` : '<span class="warn">未有</span>'}</p>
+          <p>價格：${PRICES.fetchedAt ? `<b>${Object.keys(PRICES.prices).length}</b> 款 · 更新 ${esc(PRICES.fetchedAt.slice(0, 16).replace('T', ' '))}` : '<span class="warn">未有</span>'} · 手動價 <b>${Object.keys(state.manualPrices).length}</b> 款</p>
           <div id="bot-box">${serverOk ? `
-            <div class="actions"><button data-bot="cards">更新咭表</button><button data-bot="cards-images">更新咭表 + 下載圖片</button><button data-bot="decks">更新 Deck list</button><button data-bot="prices">更新價錢</button></div>
-            <pre id="bot-log" class="muted" style="max-height:260px;overflow:auto"></pre>` : noDataNotice('伺服器').replace('未有伺服器資料。', 'BOT 要喺電腦行。')}</div>
+            <div class="actions"><button class="primary" data-bot="update">檢查新系列及卡圖</button><button data-bot="cards">只更新卡表（不下載卡圖）</button><button data-bot="decks">更新牌組清單</button><button data-bot="prices">更新價格</button></div>
+            <p class="muted small">「檢查新系列及卡圖」會重新讀取官方卡表，找出新系列及新卡，並只下載新增或已更換的卡圖。第一次下載全部卡圖約需 30–60 分鐘，之後通常只需數分鐘。</p>
+            <pre id="bot-log" class="muted" style="max-height:260px;overflow:auto"></pre>` : noDataNotice('伺服器').replace('未有伺服器資料。', 'BOT 需要在電腦上執行。')}</div>
         </div>
         <div class="panel"><h2>設定</h2>
-          <label><input type="checkbox" id="set-par"${settings().includeParallels ? ' checked' : ''}> 計 Deck 時連平行/異圖一齊計 (賣 Deck 時會先用普通版)</label>
-          <h3 style="margin-top:16px">價錢</h3>
-          <p class="muted" style="margin:0 0 6px">自動價 = 悠々亭日版售價 (JPY) × 匯率 × 係數。港版/亞洲中文版通常同日版行情唔同，可以用係數調整 (例如 0.8)。手動價永遠優先。</p>
+          <label><input type="checkbox" id="set-par"${settings().includeParallels ? ' checked' : ''}> 計算牌組時一併計入平行版／異圖（售出牌組時會先使用普通版）</label>
+          <h3 style="margin-top:16px">價格</h3>
+          <p class="muted" style="margin:0 0 6px">自動價格 = 悠々亭日版售價（JPY）× 匯率 × 係數。港版／亞洲中文版的行情通常與日版不同，可用係數調整（例如 0.8）。手動價格永遠優先。</p>
           <div class="toolbar">
             <label>1 JPY = <input id="set-rate" type="number" step="0.0001" min="0" style="width:100px" placeholder="${esc(PRICES.jpyToHkd || DEFAULT_RATE)}"> HKD</label>
             <label>係數 × <input id="set-factor" type="number" step="0.05" min="0" style="width:80px"></label>
           </div>
-          <p class="muted" style="margin:0">匯率留空 = 用 BOT 最近攞到嘅匯率 (${esc(PRICES.jpyToHkd || DEFAULT_RATE + '，預設值')})。</p>
+          <p class="muted" style="margin:0">匯率留空即使用 BOT 最近取得的匯率（${esc(PRICES.jpyToHkd || DEFAULT_RATE + '，預設值')}）。</p>
           <h3 style="margin-top:16px">備份</h3>
-          <div class="actions"><button id="exp">匯出備份 (JSON)</button><label class="small"><input type="file" id="imp" accept=".json,application/json" hidden><span class="small" style="border:1px solid var(--line);border-radius:8px;padding:6px 12px;cursor:pointer">匯入備份</span></label>
-            <button id="exp-csv">匯出咭庫 CSV</button></div>
+          <div class="actions"><button id="exp">匯出備份（JSON）</button><label class="small"><input type="file" id="imp" accept=".json,application/json" hidden><span class="small" style="border:1px solid var(--line);border-radius:8px;padding:6px 12px;cursor:pointer">匯入備份</span></label>
+            <button id="exp-csv">匯出卡庫 CSV</button></div>
           <h3 style="margin-top:16px">外觀</h3>
           <select id="theme"><option value="">跟系統</option><option value="light">淺色</option><option value="dark">深色</option></select>
           <h3 style="margin-top:16px">清除</h3>
-          <button id="wipe" class="small">清除所有咭庫同 Deck 資料</button>
+          <button id="wipe" class="small">清除所有卡庫及牌組資料</button>
         </div>
       </div>`;
     $('#set-par').addEventListener('change', e => { settings().includeParallels = e.target.checked; save(); });
@@ -1245,9 +1313,9 @@
       try {
         const s = JSON.parse(await f.text());
         if (!s || typeof s.owned !== 'object') throw new Error('not a backup');
-        if (!(await ask('用呢個備份取代而家嘅資料？', { ok: '取代' }))) return;
+        if (!(await ask('以此備份取代現有資料？', { ok: '取代' }))) return;
         state = normalise(s); save(); toast('已匯入備份'); renderSettings();
-      } catch (err) { toast('唔係有效嘅備份檔'); }
+      } catch (err) { toast('這不是有效的備份檔'); }
     });
     const theme = $('#theme');
     theme.value = document.documentElement.dataset.theme || '';
@@ -1256,7 +1324,7 @@
       try { localStorage.setItem('opcg-theme', theme.value); } catch (e) { /* ignore */ }
     });
     $('#wipe').addEventListener('click', async () => {
-      if (!(await ask('真係要清除所有咭庫同 Deck？建議先匯出備份。', { ok: '清除', danger: true }))) return;
+      if (!(await ask('確定要清除所有卡庫及牌組資料？建議先匯出備份。', { ok: '清除', danger: true }))) return;
       state = blankState(); save(); toast('已清除'); renderSettings();
     });
     if (serverOk) {
@@ -1280,12 +1348,12 @@
     log.scrollTop = log.scrollHeight;
     $$('[data-bot]').forEach(b => { b.disabled = Object.values(jobs).some(x => x.running); });
     if (job.running) pollBot.t = setTimeout(() => pollBot(key), 1500);
-    else if (name && job.code === 0) { toast('完成，重新載入…'); setTimeout(() => location.reload(), 1200); }
-    else if (name && job.code) toast('BOT 失敗，睇記錄');
+    else if (name && job.code === 0) { toast('完成，正在重新載入…'); setTimeout(() => location.reload(), 1200); }
+    else if (name && job.code) toast('BOT 執行失敗，請查看記錄');
   }
 
   function download(name, text, type) {
-    if (DEMO) { toast('示範版唔可以下載檔案；喺你部電腦嘅版本就得'); return; }
+    if (DEMO) { toast('示範版不能下載檔案；請使用電腦上的正式版本'); return; }
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([text], { type }));
     a.download = name; a.click();
@@ -1294,7 +1362,7 @@
   function copyText(text) {
     (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject())
       .then(() => toast('已複製'))
-      .catch(() => { $('#modal-body').innerHTML = `<h3>複製呢段文字</h3><textarea style="min-height:300px">${esc(text)}</textarea>`; $('#modal').showModal(); });
+      .catch(() => { $('#modal-body').innerHTML = `<h3>請複製以下文字</h3><textarea style="min-height:300px">${esc(text)}</textarea>`; $('#modal').showModal(); });
   }
 
   // ---------------------------------------------------------------- boot
