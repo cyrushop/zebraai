@@ -1,0 +1,231 @@
+/* OPCG collection engine: pure functions, no DOM. Used by app.js and the tests. */
+(function (root) {
+  'use strict';
+
+  const CARD_RE = /((?:OP|ST|EB|PRB)\d{2}|P)-(\d{3})(?:_?([pr]\d+))?/i;
+
+  /** 'op08-001_P1' -> 'OP08-001_p1'. Returns '' when no card number is found. */
+  function normId(s) {
+    const m = CARD_RE.exec(String(s || ''));
+    if (!m) return '';
+    return m[1].toUpperCase() + '-' + m[2] + (m[3] ? '_' + m[3].toLowerCase() : '');
+  }
+
+  /** Card number without the parallel / reprint suffix. */
+  function baseId(id) {
+    return String(id || '').split('_')[0];
+  }
+
+  /** Card id from the quick-add box: "OP08-001", "08-001" (OP set), "001" or "1" with a default set, "001p1". */
+  function quickId(input, defaultSet) {
+    let s = String(input || '').trim().toUpperCase().replace(/\s+/g, '');
+    if (!s) return '';
+    const full = normId(s);
+    if (full) return full;
+    let m = /^(\d{2})-(\d{1,3})(?:_?(P\d+|R\d+))?$/.exec(s);
+    if (m) return 'OP' + m[1] + '-' + m[2].padStart(3, '0') + (m[3] ? '_' + m[3].toLowerCase() : '');
+    m = /^(\d{1,3})(?:_?(P\d+|R\d+))?$/.exec(s);
+    if (m && defaultSet) return defaultSet.toUpperCase() + '-' + m[1].padStart(3, '0') + (m[2] ? '_' + m[2].toLowerCase() : '');
+    return '';
+  }
+
+  /**
+   * Parse a pasted deck list. Accepts "4xOP08-002", "4 x OP08-002", "4 OP08-002",
+   * "OP08-002 x4", "OP08-002 4", a bare card number (count 1), and the
+   * onepiecetopdecks deck-builder code "1nOP08-001a4nOP08-002" (also inside a URL).
+   * Parallels are folded into the base card number unless opts.keepVariants.
+   */
+  function parseDeckText(text, opts) {
+    const keepVariants = !!(opts && opts.keepVariants);
+    const src = String(text || '');
+    const order = [];
+    const counts = {};
+    const unknown = [];
+    const add = (id, n) => {
+      const b = keepVariants ? normId(id) : baseId(normId(id));
+      if (!b || !(n > 0)) return;
+      if (!(b in counts)) { counts[b] = 0; order.push(b); }
+      counts[b] += n;
+    };
+
+    const dg = /(?:^|[?&\s])dg=([^&\s]+)/i.exec(src);
+    const dgBody = dg ? decodeURIComponent(dg[1]) : (/^\s*(\d+n[A-Z0-9\-_]+a?)+\s*$/i.test(src) ? src : '');
+    if (dgBody) {
+      const re = /(\d+)n((?:(?:OP|ST|EB|PRB)\d{2}|P)-\d{3}(?:_[pr]\d+)?)/gi;
+      let m;
+      while ((m = re.exec(dgBody))) add(m[2], parseInt(m[1], 10));
+      return { entries: order.map(id => ({ id, count: counts[id] })), unknown };
+    }
+
+    for (const raw of src.split(/\r?\n|;/)) {
+      const line = raw.trim();
+      if (!line || /^(\/\/|#)/.test(line)) continue;
+      const m = CARD_RE.exec(line);
+      if (!m) { unknown.push(line); continue; }
+      const before = line.slice(0, m.index);
+      const after = line.slice(m.index + m[0].length);
+      let n = 1;
+      let c = /(\d{1,2})\s*[x×*]?\s*$/i.exec(before);
+      if (c) n = parseInt(c[1], 10);
+      else if ((c = /^\s*[x×*]\s*(\d{1,2})\b/i.exec(after)) || (c = /^\s+(\d{1,2})\s*$/.exec(after))) n = parseInt(c[1], 10);
+      add(m[0], n);
+    }
+    return { entries: order.map(id => ({ id, count: counts[id] })), unknown };
+  }
+
+  /** Entries -> "1xOP08-001" lines (leader first when known). */
+  function deckToText(entries, cardsById) {
+    const lead = leaderOf(entries, cardsById);
+    const sorted = entries.slice().sort((a, b) =>
+      (a.id === lead ? -1 : b.id === lead ? 1 : a.id.localeCompare(b.id)));
+    return sorted.map(e => e.count + 'x' + e.id).join('\n');
+  }
+
+  function toDg(entries, cardsById) {
+    return deckToText(entries, cardsById).split('\n').map(l => l.replace('x', 'n')).join('a');
+  }
+
+  const CATEGORY_WORDS = [
+    ['LEADER', ['LEADER', '領航', '領袖', '隊長']],
+    ['CHARACTER', ['CHARACTER', '角色']],
+    ['EVENT', ['EVENT', '事件']],
+    ['STAGE', ['STAGE', '場地', '舞台']],
+  ];
+  function normCategory(raw) {
+    const up = String(raw || '').toUpperCase();
+    for (const [key, words] of CATEGORY_WORDS) if (words.some(w => up.includes(w))) return key;
+    return up;
+  }
+
+  /** The leader of a deck: a card whose category is LEADER, else the first count-1 entry. */
+  function leaderOf(entries, cardsById) {
+    if (!entries || !entries.length) return '';
+    if (cardsById) {
+      const l = entries.find(e => cardsById[e.id] && normCategory(cardsById[e.id].category) === 'LEADER');
+      if (l) return l.id;
+    }
+    return entries[0].count === 1 ? entries[0].id : '';
+  }
+
+  /** Copies owned per base card number. Parallels count only when includeParallels is on. */
+  function ownedTotals(owned, includeParallels) {
+    const out = {};
+    for (const [id, n] of Object.entries(owned || {})) {
+      if (!(n > 0)) continue;
+      const b = baseId(id);
+      if (id !== b && !includeParallels) continue;
+      out[b] = (out[b] || 0) + n;
+    }
+    return out;
+  }
+
+  /** Copies held by decks marked "built" (not yet sold), per base card number. */
+  function reservedTotals(decks, excludeId) {
+    const out = {};
+    for (const d of decks || []) {
+      if (d.status !== 'built' || d.id === excludeId) continue;
+      for (const e of d.entries) out[e.id] = (out[e.id] || 0) + e.count;
+    }
+    return out;
+  }
+
+  /** Free copies per base card = owned - reserved by built decks (other than excludeId). */
+  function availableTotals(state, excludeId) {
+    const owned = ownedTotals(state.owned, state.settings && state.settings.includeParallels);
+    const reserved = reservedTotals(state.decks, excludeId);
+    const out = {};
+    for (const id of new Set([...Object.keys(owned), ...Object.keys(reserved)])) {
+      out[id] = (owned[id] || 0) - (reserved[id] || 0);
+    }
+    return out;
+  }
+
+  /** How much of a deck the free cards cover. */
+  function deckStatus(entries, available) {
+    let need = 0, have = 0;
+    const rows = entries.map(e => {
+      const free = Math.max(0, available[e.id] || 0);
+      const h = Math.min(e.count, free);
+      need += e.count; have += h;
+      return { id: e.id, need: e.count, have: h, missing: e.count - h, free };
+    });
+    return { rows, need, have, missing: need - have, pct: need ? have / need : 0 };
+  }
+
+  /** Rule check: 1 leader, 50 cards, max 4 per card number, colours match the leader. */
+  function validateDeck(entries, cardsById) {
+    const issues = [];
+    const leaders = entries.filter(e => cardsById[e.id] && normCategory(cardsById[e.id].category) === 'LEADER');
+    const leaderId = leaderOf(entries, cardsById);
+    if (leaders.length === 0 && !leaderId) issues.push('未有領航 (Leader)');
+    if (leaders.length > 1 || (leaders.length === 1 && leaders[0].count > 1)) issues.push('領航只可以有 1 張');
+    const main = entries.filter(e => e.id !== leaderId);
+    const total = main.reduce((s, e) => s + e.count, 0);
+    if (total !== 50) issues.push('主牌組要 50 張，而家 ' + total + ' 張');
+    for (const e of main) if (e.count > 4) issues.push(e.id + ' 超過 4 張 (' + e.count + ')');
+    const lc = leaderId && cardsById[leaderId] ? cardColors(cardsById[leaderId]) : [];
+    if (lc.length) {
+      for (const e of main) {
+        const c = cardsById[e.id];
+        if (!c) continue;
+        const cc = cardColors(c);
+        if (cc.length && !cc.some(x => lc.includes(x))) issues.push(e.id + ' 顏色 (' + cc.join('/') + ') 唔夾領航');
+      }
+    }
+    const unknown = entries.filter(e => !cardsById[e.id]).map(e => e.id);
+    if (unknown.length && Object.keys(cardsById).length) issues.push('咭表冇呢啲咭: ' + unknown.join(', '));
+    return issues;
+  }
+
+  function cardColors(card) {
+    if (Array.isArray(card.colors) && card.colors.length) return card.colors;
+    return String(card.color || '').split(/[\/／、,\s]+/).filter(Boolean);
+  }
+
+  /**
+   * Remove a sold deck's cards from the collection. Base cards go first; parallels
+   * are only used when includeParallels is on. Returns the new owned map and any
+   * cards that were short.
+   */
+  function sellDeck(owned, entries, includeParallels) {
+    const next = Object.assign({}, owned);
+    const shortfall = [];
+    for (const e of entries) {
+      let left = e.count;
+      const ids = [e.id].concat(includeParallels
+        ? Object.keys(next).filter(k => k !== e.id && baseId(k) === e.id).sort() : []);
+      for (const id of ids) {
+        const take = Math.min(left, next[id] || 0);
+        if (take > 0) {
+          next[id] -= take; left -= take;
+          if (!next[id]) delete next[id];
+        }
+        if (!left) break;
+      }
+      if (left) shortfall.push({ id: e.id, count: left });
+    }
+    return { owned: next, shortfall };
+  }
+
+  /** Cards still to buy / pull to finish several decks together (they compete for the same free copies). */
+  function shoppingList(deckList, available) {
+    const need = {};
+    for (const d of deckList) for (const e of d.entries) need[e.id] = (need[e.id] || 0) + e.count;
+    return Object.keys(need).sort()
+      .map(id => ({ id, need: need[id], free: Math.max(0, available[id] || 0), missing: need[id] - Math.max(0, available[id] || 0) }))
+      .filter(r => r.missing > 0);
+  }
+
+  /** Set code of a card: 'OP08-001' -> 'OP08', 'P-001' -> 'P'. */
+  function setOf(id) {
+    return String(id || '').split('-')[0].toUpperCase();
+  }
+
+  const api = {
+    normId, baseId, quickId, parseDeckText, deckToText, toDg, normCategory, leaderOf,
+    ownedTotals, reservedTotals, availableTotals, deckStatus, validateDeck, cardColors,
+    sellDeck, shoppingList, setOf,
+  };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  else root.OPCGEngine = api;
+})(typeof self !== 'undefined' ? self : this);

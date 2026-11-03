@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-HK">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OPCG 咭庫</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <h1>OPCG 咭庫</h1>
+  <nav id="tabs">
+    <button data-tab="collection" class="on">咭庫</button>
+    <button data-tab="open">開箱</button>
+    <button data-tab="meta">Meta Decks</button>
+    <button data-tab="mine">我的 Decks</button>
+    <button data-tab="settings">設定</button>
+  </nav>
+  <span id="save-state" class="muted"></span>
+</header>
+
+<main>
+  <section id="tab-collection" class="tab on"></section>
+  <section id="tab-open" class="tab"></section>
+  <section id="tab-meta" class="tab"></section>
+  <section id="tab-mine" class="tab"></section>
+  <section id="tab-settings" class="tab"></section>
+</main>
+
+<dialog id="modal"><div id="modal-body"></div><form method="dialog"><button class="close" aria-label="關閉">×</button></form></dialog>
+<div id="toast" role="status"></div>
+
+<script src="engine.js"></script>
+<!-- Bot output (opcg/data). If missing, the app still works from card numbers only. -->
+<script src="../data/cards.js"></script>
+<script src="../data/decks.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
