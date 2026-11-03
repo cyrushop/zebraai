@@ -52,6 +52,11 @@
 </div>
 
 <dialog id="modal"><div id="modal-body"></div><form method="dialog"><button class="close" aria-label="關閉">×</button></form></dialog>
+<dialog id="ask" aria-labelledby="ask-msg"><form method="dialog" class="ask-body" onsubmit="return false">
+  <p id="ask-msg"></p>
+  <input id="ask-input" hidden aria-label="輸入">
+  <div class="actions"><button type="button" id="ask-cancel">取消</button><button type="button" class="primary" id="ask-ok">確定</button></div>
+</form></dialog>
 <div id="toast" role="status"></div>
 
 <script src="engine.js"></script>

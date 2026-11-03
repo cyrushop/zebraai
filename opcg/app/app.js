@@ -34,7 +34,8 @@
 
   // ----------------------------------------------------------- state
   const LS_KEY = 'opcg-state-v1';
-  const serverMode = location.protocol.startsWith('http');
+  const DEMO = !!window.OPCG_DEMO;
+  const serverMode = location.protocol.startsWith('http') && !DEMO;
   let state = blankState();
   let saveTimer = null;
 
@@ -79,8 +80,8 @@
       } catch (e) { /* not running serve.py: fall back to the browser */ }
     }
     serverOk = false;
-    state = normalise(local);
-    setSaveLabel('資料存喺瀏覽器 (記得喺設定匯出備份)');
+    state = normalise(local || (DEMO ? window.OPCG_DEMO_STATE : null));
+    setSaveLabel(DEMO ? '示範版 · 改動只存喺你部機' : '資料存喺瀏覽器 (記得喺設定匯出備份)');
   }
   let saving = false, dirty = false, serverOk = serverMode;
   function save() {
@@ -130,6 +131,27 @@
   });
   function setSaveLabel(t) { $('#save-state').textContent = t; }
 
+  /** In-page confirm / prompt. Resolves true/false, or the typed text / null when opts.input. */
+  function ask(message, opts) {
+    opts = opts || {};
+    const dlg = $('#ask');
+    $('#ask-msg').textContent = message;
+    const input = $('#ask-input');
+    input.hidden = !opts.input;
+    input.value = opts.value == null ? '' : opts.value;
+    input.type = opts.type || 'text';
+    $('#ask-ok').textContent = opts.ok || '確定';
+    $('#ask-ok').classList.toggle('danger', !!opts.danger);
+    return new Promise(resolve => {
+      const done = v => { dlg.close(); resolve(v); };
+      $('#ask-ok').onclick = () => done(opts.input ? input.value : true);
+      $('#ask-cancel').onclick = () => done(opts.input ? null : false);
+      dlg.oncancel = e => { e.preventDefault(); done(opts.input ? null : false); };
+      input.onkeydown = e => { if (e.key === 'Enter') done(input.value); };
+      dlg.showModal();
+      setTimeout(() => (opts.input ? input : $('#ask-ok')).focus(), 0);
+    });
+  }
   function toast(msg) {
     const t = $('#toast');
     t.textContent = msg; t.classList.add('on');
@@ -472,7 +494,7 @@
     const top = Object.keys(state.owned).map(id => ({ id, p: price(id) })).filter(x => x.p).sort((a, b) => b.p.hkd - a.p.hkd).slice(0, 12);
     const counts = st => state.decks.filter(d => d.status === st).length;
     el.innerHTML = `
-      ${CARDS.length ? '' : noDataNotice('咭表')}
+      ${DEMO ? '<div class="demo-banner"><b>示範版</b>：咭圖、咭名、效果、價錢同 Deck 係示範資料 (斯摩格 OP10-001 同 RG Luffy 咭表除外)。你喺度改嘅嘢只存喺你部機。真版本要喺電腦行 <code>python3 opcg/serve.py</code>。</div>' : (CARDS.length ? '' : noDataNotice('咭表'))}
       <div class="hero-search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
         <input type="search" id="h-q" placeholder="路飛 OP08, c5, p6000…" autocomplete="off" enterkeyhint="search"></div>
       <div class="muted hint">${SEARCH_HINT}</div>
@@ -946,7 +968,7 @@
     const box = $(`.deck[data-id="${CSS.escape(d.id)}"]`, $('#mine-list'));
     if (box) box.outerHTML = myDeckHtml(d);
   }
-  function onMineClick(e) {
+  async function onMineClick(e) {
     const d = deckOf(e.target);
     if (!d) return;
     const edit = e.target.closest('[data-e]');
@@ -972,17 +994,17 @@
     if (act === 'toggle') { mineOpen[d.id] = !mineOpen[d.id]; redrawDeck(d); }
     if (act === 'build') {
       const st = E.deckStatus(d.entries, available(d.id));
-      if (st.missing && !confirm(`仲差 ${st.missing} 張，照樣標記做「已砌好」？`)) return;
+      if (st.missing && !(await ask(`仲差 ${st.missing} 張，照樣標記做「已砌好」？`))) return;
       d.status = 'built'; d.builtAt = new Date().toISOString(); save(); renderMine();
     }
     if (act === 'unbuild') { d.status = 'plan'; save(); renderMine(); }
     if (act === 'askmarket') { d.price = Math.ceil(E.deckCost(d.entries, pricer()).cost); save(); redrawDeck(d); }
     if (act === 'sell') {
-      const price = prompt('賣咗幾錢 (HK$)？(可留空)', d.price || '');
+      const price = await ask('賣咗幾錢 (HK$)？可以留空。', { input: true, value: d.price || '', type: 'number', ok: '賣出' });
       if (price === null) return;
       const before = Object.assign({}, state.owned);
       const res = E.sellDeck(state.owned, d.entries, settings().includeParallels);
-      if (res.shortfall.length && !confirm('咭庫唔夠呢啲咭：\n' + res.shortfall.map(s => `${s.id} 差 ${s.count}`).join('\n') + '\n照樣賣出？(有幾多扣幾多)')) return;
+      if (res.shortfall.length && !(await ask('咭庫唔夠呢啲咭：\n' + res.shortfall.map(s => `${s.id} 差 ${s.count}`).join('\n') + '\n照樣賣出？(有幾多扣幾多)'))) return;
       state.owned = res.owned;
       d.removed = {};
       for (const id of Object.keys(before)) { const diff = before[id] - (res.owned[id] || 0); if (diff) d.removed[id] = diff; }
@@ -991,14 +1013,14 @@
       save(); renderMine(); toast('已從咭庫扣除');
     }
     if (act === 'unsell') {
-      if (!confirm('撤銷賣出：將賣出時扣除嘅咭加返入咭庫？')) return;
+      if (!(await ask('撤銷賣出：將賣出時扣除嘅咭加返入咭庫？'))) return;
       for (const [id, n] of Object.entries(d.removed || {})) state.owned[id] = (state.owned[id] || 0) + n;
       d.status = 'plan'; delete d.removed; delete d.soldAt; delete d.costAtSale; save(); renderMine();
     }
     if (act === 'text') copyText(E.deckToText(d.entries, byId));
     if (act === 'dup') addMyDeck(d.name + ' (2)', d.entries, { notes: '' });
     if (act === 'del') {
-      if (!confirm(`刪除「${d.name}」？(唔會改動咭庫數量)`)) return;
+      if (!(await ask(`刪除「${d.name}」？咭庫數量唔會變。`, { ok: '刪除', danger: true }))) return;
       state.decks = state.decks.filter(x => x !== d); save(); renderMine();
     }
   }
@@ -1129,7 +1151,7 @@
           <p>咭表：${cs ? `<b>${CARDS.length}</b> 張 · ${esc((cs.series || []).length)} 個系列 · 更新 ${esc((cs.scrapedAt || '').slice(0, 16).replace('T', ' '))}` : '<span class="warn">未有</span>'}</p>
           <p>Meta Decks：${ds ? `<b>${META.length}</b> 副 · 更新 ${esc((ds.scrapedAt || '').slice(0, 16).replace('T', ' '))}` : '<span class="warn">未有</span>'}</p>
           <p>價錢：${PRICES.fetchedAt ? `<b>${Object.keys(PRICES.prices).length}</b> 款 · 更新 ${esc(PRICES.fetchedAt.slice(0, 16).replace('T', ' '))}` : '<span class="warn">未有</span>'} · 手動價 <b>${Object.keys(state.manualPrices).length}</b> 款</p>
-          <div id="bot-box">${serverMode ? `
+          <div id="bot-box">${serverOk ? `
             <div class="actions"><button data-bot="cards">更新咭表</button><button data-bot="cards-images">更新咭表 + 下載圖片</button><button data-bot="decks">更新 Deck list</button><button data-bot="prices">更新價錢</button></div>
             <pre id="bot-log" class="muted" style="max-height:260px;overflow:auto"></pre>` : noDataNotice('伺服器').replace('未有伺服器資料。', 'BOT 要喺電腦行。')}</div>
         </div>
@@ -1170,7 +1192,7 @@
       try {
         const s = JSON.parse(await f.text());
         if (!s || typeof s.owned !== 'object') throw new Error('not a backup');
-        if (!confirm('用呢個備份取代而家嘅資料？')) return;
+        if (!(await ask('用呢個備份取代而家嘅資料？', { ok: '取代' }))) return;
         state = normalise(s); save(); toast('已匯入備份'); renderSettings();
       } catch (err) { toast('唔係有效嘅備份檔'); }
     });
@@ -1180,11 +1202,11 @@
       if (theme.value) document.documentElement.dataset.theme = theme.value; else delete document.documentElement.dataset.theme;
       try { localStorage.setItem('opcg-theme', theme.value); } catch (e) { /* ignore */ }
     });
-    $('#wipe').addEventListener('click', () => {
-      if (!confirm('真係要清除所有咭庫同 Deck？(建議先匯出備份)')) return;
+    $('#wipe').addEventListener('click', async () => {
+      if (!(await ask('真係要清除所有咭庫同 Deck？建議先匯出備份。', { ok: '清除', danger: true }))) return;
       state = blankState(); save(); toast('已清除'); renderSettings();
     });
-    if (serverMode) {
+    if (serverOk) {
       $$('[data-bot]').forEach(b => b.addEventListener('click', async () => {
         await fetch('/api/bot/' + b.dataset.bot, { method: 'POST' });
         pollBot(b.dataset.bot);
@@ -1210,6 +1232,7 @@
   }
 
   function download(name, text, type) {
+    if (DEMO) { toast('示範版唔可以下載檔案；喺你部電腦嘅版本就得'); return; }
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([text], { type }));
     a.download = name; a.click();
