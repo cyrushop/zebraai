@@ -66,7 +66,11 @@ def cell(v):
 def tables_from_html(path):
     from bs4 import BeautifulSoup
 
-    raw = open(path, "rb").read().decode("cp1252", errors="replace")
+    data = open(path, "rb").read()
+    try:  # SFDC .xls exports are UTF-8 (e.g. reports with Chinese text) or Windows-1252
+        raw = data.decode("utf-8")
+    except UnicodeDecodeError:
+        raw = data.decode("cp1252", errors="replace")
     soup = BeautifulSoup(raw, "lxml")
     for table in soup.find_all("table"):
         rows = []

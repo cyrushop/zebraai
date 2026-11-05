@@ -26,7 +26,9 @@
         var wb = root.XLSX.read(buf, { type: 'array' });
         return root.XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: '' });
       }
-      var text = new TextDecoder('utf-8').decode(buf);
+      // SFDC .xls exports are UTF-8 (reports with Chinese text say so in a meta tag) or Windows-1252
+      var text;
+      try { text = new TextDecoder('utf-8', { fatal: true }).decode(buf); } catch (e) { text = new TextDecoder('windows-1252').decode(buf); }
       if (/^\s*</.test(text)) {
         var t = new DOMParser().parseFromString(text, 'text/html').querySelector('table');
         if (!t) throw new Error('檔案裡找不到表格');
