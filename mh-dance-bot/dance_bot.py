@@ -156,6 +156,43 @@ def tap(x: float, y: float, hold: float):
     Q.CGEventPost(Q.kCGHIDEventTap, ev)
 
 
+# macOS virtual key codes usable as the pause/resume hotkey. A lone modifier tap
+# types nothing, so it is harmless to the game even though the key is not swallowed.
+HOTKEYS = {
+    "right_option": 61, "left_option": 58, "right_command": 54, "right_shift": 60,
+    "right_control": 62, "f6": 97, "f7": 98, "f8": 100, "f9": 101, "f10": 109,
+}
+
+
+class Hotkey:
+    """Polls the global key state; pressed() is True once per key press."""
+
+    def __init__(self, name: str):
+        self.Q = _quartz()
+        self.code = HOTKEYS[name]
+        self.was_down = False
+
+    @staticmethod
+    def ensure_permission() -> bool:
+        Q = _quartz()
+        pre = getattr(Q, "CGPreflightListenEventAccess", None)
+        if pre is None or pre():
+            return True
+        getattr(Q, "CGRequestListenEventAccess", lambda: None)()
+        return False
+
+    def pressed(self) -> bool:
+        down = bool(self.Q.CGEventSourceKeyState(self.Q.kCGEventSourceStateHIDSystemState, self.code))
+        edge = down and not self.was_down
+        self.was_down = down
+        return edge
+
+
+def play_sound(name: str, enabled: bool):
+    if enabled:
+        os.system(f"afplay /System/Library/Sounds/{name}.aiff >/dev/null 2>&1 &")
+
+
 class Grabber:
     def __init__(self):
         import mss
@@ -267,8 +304,20 @@ def cmd_run(args):
         if win is None:
             sys.exit("iPhone Mirroring window not found. Open it first (or re-run calibrate).")
 
+    hotkey = None
+    if args.hotkey != "none":
+        if not Hotkey.ensure_permission():
+            print("! Hotkey needs 'Input Monitoring' permission for your Terminal:\n"
+                  "  System Settings > Privacy & Security > Input Monitoring, enable it,\n"
+                  "  then quit and reopen the Terminal. Running without the hotkey for now.")
+        else:
+            hotkey = Hotkey(args.hotkey)
+
+    paused = args.start_paused
     print("Running" + (" (dry run, no taps)" if args.dry_run else "") +
           ". Stop: mouse to top-left screen corner, or Ctrl+C.")
+    if hotkey:
+        print(f"Pause / resume: press {args.hotkey}." + ("  Starting PAUSED." if paused else ""))
     if not args.dry_run:
         os.system('osascript -e \'tell application id "%s" to activate\' >/dev/null 2>&1' % BUNDLE_ID)
         time.sleep(0.4)
@@ -277,12 +326,29 @@ def cmd_run(args):
     candidate, stable = None, 0
     blocked_until = 0.0
     rounds = 0
+
+    def check_controls() -> str:
+        """'stop' on fail-safe; toggles pause on hotkey. Returns 'stop', 'paused' or 'run'."""
+        nonlocal paused
+        mx, my = mouse_pos()
+        if mx <= 3 and my <= 3:
+            return "stop"
+        if hotkey and hotkey.pressed():
+            paused = not paused
+            print(f"[{time.strftime('%H:%M:%S')}] " + ("PAUSED" if paused else "RESUMED"), flush=True)
+            play_sound("Funk" if paused else "Tink", not args.no_sound)
+        return "paused" if paused else "run"
+
     try:
         while True:
-            mx, my = mouse_pos()
-            if mx <= 3 and my <= 3:
+            state = check_controls()
+            if state == "stop":
                 print("\nFail-safe corner hit - stopped.")
                 return
+            if state == "paused":
+                candidate, stable, last_played = None, 0, None
+                time.sleep(args.poll)
+                continue
             now = time.time()
             if not cfg.get("absolute") and now - win_checked > 1.0:
                 win = find_window(args.app_name) or win
@@ -311,6 +377,8 @@ def cmd_run(args):
                     cv2.imwrite(str(DEBUG_DIR / f"seq_{int(now * 1000)}.png"), annotate(roi, seq_b, boxes))
                 if not args.dry_run:
                     for d in seq:
+                        if check_controls() != "run":  # pause/stop takes effect mid-sequence
+                            break
                         bx, by = to_screen(cfg, win, *cfg["buttons"][d])
                         tap(bx, by, args.hold)
                         time.sleep(args.interval)
@@ -344,6 +412,10 @@ def main():
     r.add_argument("--repeat-after", type=float, default=2.5,
                    help="replay an identical sequence still on screen after N s (default 2.5)")
     r.add_argument("--max-rounds", type=int, default=0, help="stop after N sequences (0 = no limit)")
+    r.add_argument("--hotkey", default="right_option", choices=sorted(HOTKEYS) + ["none"],
+                   help="key that toggles pause/resume (default right_option)")
+    r.add_argument("--start-paused", action="store_true", help="start paused; press the hotkey to begin")
+    r.add_argument("--no-sound", action="store_true", help="no sound on pause/resume")
 
     t = sub.add_parser("test", help="run detection on a screenshot file")
     t.add_argument("image")

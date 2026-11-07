@@ -20,6 +20,7 @@ pip install -r requirements.txt
 macOS「系統設定 → 私隱與安全性」，將你用嘅 Terminal（Terminal / iTerm）加入：
 - **輔助使用 (Accessibility)**：撳掣用
 - **螢幕錄影 (Screen Recording)**：讀畫面用
+- **輸入監控 (Input Monitoring)**：熱鍵暫停／繼續用（第一次 run 會彈出要求）
 
 加完要完全關閉再開返 Terminal。
 
@@ -52,7 +53,17 @@ python3 dance_bot.py run --dry-run
 python3 dance_bot.py run
 ```
 
-**停止**：滑鼠推去螢幕最左上角，或者喺 Terminal 撳 Ctrl+C。
+**暫停／繼續**：撳一下**右邊 Option (⌥) 鍵**（暫停有 Funk 聲，繼續有 Tink 聲）。打緊一組都會即刻停手。
+
+**完全停止**：滑鼠推去螢幕最左上角，或者喺 Terminal 撳 Ctrl+C。
+
+想開定 bot 先、轉去遊戲先開始：
+
+```bash
+python3 dance_bot.py run --start-paused
+```
+
+然後喺遊戲入面撳右 Option 開始。
 
 ### 可調參數
 
@@ -64,6 +75,9 @@ python3 dance_bot.py run
 | `--stable-frames` | 2 | 同一組要連續見到幾多次先撳（防箭咀未出齊） |
 | `--repeat-after` | 2.5 | 同一組仍喺畫面多久之後再撳一次 |
 | `--debug` | 關 | 每組識別結果存去 `debug/` |
+| `--hotkey` | right_option | 暫停鍵：right_option / left_option / right_command / right_shift / right_control / f6–f10 / none |
+| `--start-paused` | 關 | 一開始就暫停 |
+| `--no-sound` | 關 | 暫停／繼續唔出聲 |
 
 ### 離線測試
 
