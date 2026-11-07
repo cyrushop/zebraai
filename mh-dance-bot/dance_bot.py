@@ -280,8 +280,19 @@ def cmd_calibrate(args):
     ]
     pts = {}
     for key, text in steps:
-        input(f"  -> {text}  [Enter]")
-        x, y = mouse_pos()
+        while True:
+            typed = input(f"  -> {text}  [Enter]")
+            x, y = mouse_pos()
+            if typed.strip():
+                print("     (only press Enter here - do not type anything) try again")
+                continue
+            if win is not None and not (win[0] <= x <= win[0] + win[2] and win[1] <= y <= win[1] + win[3]):
+                print(f"     ({x:.0f}, {y:.0f}) is OUTSIDE the iPhone Mirroring window - hover over the game and try again")
+                continue
+            if key == "roi1" and (x - pts["roi0"][0] < 30 or y - pts["roi0"][1] < 8):
+                print("     must be clearly BELOW and to the RIGHT of the top-left corner - try again")
+                continue
+            break
         pts[key] = (x, y)
         print(f"     recorded ({x:.0f}, {y:.0f})")
 
@@ -570,7 +581,10 @@ def main():
     t.add_argument("--out", help="write an annotated crop here")
 
     args = ap.parse_args()
-    {"calibrate": cmd_calibrate, "run": cmd_run, "test": cmd_test, "windows": cmd_windows}[args.cmd](args)
+    try:
+        {"calibrate": cmd_calibrate, "run": cmd_run, "test": cmd_test, "windows": cmd_windows}[args.cmd](args)
+    except (KeyboardInterrupt, EOFError):
+        print("\nCancelled.")
 
 
 if __name__ == "__main__":
