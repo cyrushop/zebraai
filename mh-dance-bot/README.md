@@ -104,6 +104,16 @@ python3 dance_bot.py run --start-paused
 | `--no-sound` | 關 | 暫停／繼續唔出聲 |
 | `--no-menubar` | 關 | 唔顯示選單列狀態燈 |
 
+### 搵唔到 iPhone Mirroring 視窗
+
+先開 iPhone Mirroring，再試：
+
+```bash
+python3 dance_bot.py windows
+```
+
+會列出所有視窗同 bot 會用邊個。如果 iPhone Mirroring 個名唔同，可以加 `--app-name "個名"`，例如 `python3 dance_bot.py --app-name "iPhone 鏡像輸出" calibrate`。
+
 ### 離線測試
 
 ```bash

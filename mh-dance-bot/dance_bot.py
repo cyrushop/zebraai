@@ -112,33 +112,56 @@ def _quartz():
         sys.exit("pyobjc is missing: pip3 install -r requirements.txt (this part only runs on macOS)")
 
 
-def find_window(app_name: str | None = None):
-    """Return (x, y, w, h) in screen points of the iPhone Mirroring window, or None."""
-    Q = _quartz()
+def _mirroring_pids() -> set:
     pids = set()
     try:
-        from AppKit import NSRunningApplication
-        for app in NSRunningApplication.runningApplicationsWithBundleIdentifier_(BUNDLE_ID):
-            pids.add(int(app.processIdentifier()))
+        from AppKit import NSWorkspace
+        for app in NSWorkspace.sharedWorkspace().runningApplications():
+            bid = str(app.bundleIdentifier() or "")
+            if bid == BUNDLE_ID or "ScreenContinuity" in bid:
+                pids.add(int(app.processIdentifier()))
     except Exception:
         pass
-    names = (app_name,) if app_name else WINDOW_OWNER_NAMES
+    return pids
+
+
+def list_windows():
+    """All visible windows as dicts (owner, pid, layer, rect)."""
+    Q = _quartz()
     infos = Q.CGWindowListCopyWindowInfo(
         Q.kCGWindowListOptionOnScreenOnly | Q.kCGWindowListExcludeDesktopElements, Q.kCGNullWindowID)
-    best = None
+    out = []
     for w in infos or []:
-        if w.get("kCGWindowLayer", 0) != 0:
+        b = w.get("kCGWindowBounds") or {}
+        out.append({
+            "owner": str(w.get("kCGWindowOwnerName", "")),
+            "pid": int(w.get("kCGWindowOwnerPID", -1)),
+            "layer": int(w.get("kCGWindowLayer", 0)),
+            "rect": (float(b.get("X", 0)), float(b.get("Y", 0)), float(b.get("Width", 0)), float(b.get("Height", 0))),
+        })
+    return out
+
+
+def find_window(app_name: str | None = None):
+    """Return (x, y, w, h) in screen points of the iPhone Mirroring window, or None.
+
+    Matches the iPhone Mirroring process (bundle id), a known localized name,
+    or any window owner whose name contains "iPhone".
+    """
+    pids = _mirroring_pids()
+    best = None
+    for w in list_windows():
+        owner, rect = w["owner"], w["rect"]
+        if app_name:
+            match = owner == app_name
+        else:
+            match = w["pid"] in pids or owner in WINDOW_OWNER_NAMES or "iphone" in owner.lower()
+        if not match or rect[2] < 100 or rect[3] < 100:
             continue
-        owner = w.get("kCGWindowOwnerName", "")
-        if int(w.get("kCGWindowOwnerPID", -1)) not in pids and owner not in names:
-            continue
-        b = w["kCGWindowBounds"]
-        rect = (float(b["X"]), float(b["Y"]), float(b["Width"]), float(b["Height"]))
-        if rect[2] < 100 or rect[3] < 100:
-            continue
-        if best is None or rect[2] * rect[3] > best[2] * best[3]:
-            best = rect
-    return best
+        key = (w["layer"] == 0, rect[2] * rect[3])  # prefer normal windows, then the biggest
+        if best is None or key > best[0]:
+            best = (key, rect)
+    return best[1] if best else None
 
 
 def mouse_pos():
@@ -233,10 +256,15 @@ def roi_rect(cfg, win):
 
 def cmd_calibrate(args):
     win = find_window(args.app_name)
-    if win is None:
-        print("! iPhone Mirroring window not found - saving ABSOLUTE screen coordinates.")
-        print("  (Then do not move the window after calibrating.)")
-    else:
+    while win is None:
+        print("! iPhone Mirroring window not found.")
+        print("  Open iPhone Mirroring (and the game) so its window is visible on this screen.")
+        ans = input("  Press Enter to look again, or type A + Enter to use absolute screen coordinates: ")
+        if ans.strip().lower() == "a":
+            print("  Using ABSOLUTE coordinates - do not move the iPhone Mirroring window afterwards.")
+            break
+        win = find_window(args.app_name)
+    if win is not None:
         print(f"iPhone Mirroring window: x={win[0]:.0f} y={win[1]:.0f} w={win[2]:.0f} h={win[3]:.0f}")
     print("\nOpen the dance mini-game so the arrow bar and the 4 buttons are visible.")
     print("For each step: keep THIS terminal focused, hover the mouse over the point, press Enter.\n")
@@ -278,6 +306,19 @@ def cmd_calibrate(args):
     cv2.imwrite(str(DEBUG_DIR / "calibration_roi.png"), annotate(roi, seq, boxes))
     print(f"Arrows visible now: {fmt(seq)}")
     print(f"Check {DEBUG_DIR / 'calibration_roi.png'} - it should show only the arrow row.")
+
+
+def cmd_windows(args):
+    pids = _mirroring_pids()
+    print(f"iPhone Mirroring process ids: {sorted(pids) or 'none (app not running?)'}")
+    found = find_window(args.app_name)
+    print(f"Window the bot would use: {found or 'NONE'}\n")
+    print(f"{'owner':32} {'pid':>6} {'layer':>5}  x, y, w, h")
+    for w in list_windows():
+        if w["rect"][2] >= 50 and w["rect"][3] >= 50:
+            mark = " <-- iPhone Mirroring" if w["pid"] in pids else ""
+            x, y, ww, hh = w["rect"]
+            print(f"{w['owner'][:32]:32} {w['pid']:>6} {w['layer']:>5}  {x:.0f}, {y:.0f}, {ww:.0f}, {hh:.0f}{mark}")
 
 
 def cmd_test(args):
@@ -504,6 +545,7 @@ def main():
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("calibrate", help="mark the arrow bar and the 4 buttons")
+    sub.add_parser("windows", help="list visible windows (diagnose 'window not found')")
 
     r = sub.add_parser("run", help="play")
     r.add_argument("--dry-run", action="store_true", help="detect and print only, no taps")
@@ -528,7 +570,7 @@ def main():
     t.add_argument("--out", help="write an annotated crop here")
 
     args = ap.parse_args()
-    {"calibrate": cmd_calibrate, "run": cmd_run, "test": cmd_test}[args.cmd](args)
+    {"calibrate": cmd_calibrate, "run": cmd_run, "test": cmd_test, "windows": cmd_windows}[args.cmd](args)
 
 
 if __name__ == "__main__":
