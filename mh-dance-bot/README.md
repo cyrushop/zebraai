@@ -12,7 +12,13 @@
 ## 最快方法：雙擊 `start.command`
 
 第一次雙擊會自動安裝套件 → 校準 → 以「暫停」狀態開始（去遊戲撳右 Option 開始）。
-macOS 話「無法打開／來自未識別開發者」：喺 Finder **右鍵 → 打開 → 打開**，之後就可以正常雙擊。
+macOS 話「Not Opened / Apple could not verify」：撳 **Done**（唔好撳 Move to Bin），然後揀以下其中一個方法：
+
+- **最簡單**：開「終端機 (Terminal)」，打 `bash `（後面有個空格），將 `start.command` 由 Finder 拖入 Terminal 視窗，撳 Enter。
+- **或者**：系統設定 → 私隱與安全性 → 拉到最底「保安」 → 撳 `start.command` 旁邊嘅 **仍要打開 (Open Anyway)** → 輸入密碼。之後雙擊就得。
+- **或者**一次過解除下載標記：`xattr -dr com.apple.quarantine ~/Downloads/mh-dance-bot`
+
+（macOS 15 Sequoia 起，「右鍵 → 打開」已經唔再可以略過呢個檢查。）
 之後重新校準：刪除 `config.json` 再雙擊。
 
 下面係手動步驟。
