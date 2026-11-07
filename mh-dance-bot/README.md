@@ -9,6 +9,14 @@
 | 橙 | ↑ |
 | 紫 | ↓ |
 
+## 最快方法：雙擊 `start.command`
+
+第一次雙擊會自動安裝套件 → 校準 → 以「暫停」狀態開始（去遊戲撳右 Option 開始）。
+macOS 話「無法打開／來自未識別開發者」：喺 Finder **右鍵 → 打開 → 打開**，之後就可以正常雙擊。
+之後重新校準：刪除 `config.json` 再雙擊。
+
+下面係手動步驟。
+
 ## 安裝（一次）
 
 ```bash
@@ -55,7 +63,17 @@ python3 dance_bot.py run
 
 **暫停／繼續**：撳一下**右邊 Option (⌥) 鍵**（暫停有 Funk 聲，繼續有 Tink 聲）。打緊一組都會即刻停手。
 
-**完全停止**：滑鼠推去螢幕最左上角，或者喺 Terminal 撳 Ctrl+C。
+**選單列狀態燈**：螢幕頂部選單列會顯示
+
+| 顯示 | 意思 |
+|---|---|
+| 🟢 MH 運行 | 正在自動撳 |
+| ⏸ MH 暫停 | 暫停中 |
+| 👀 MH 試行 | `--dry-run`，只睇唔撳 |
+
+撳落去可以睇已打幾多組、上一組係咩，亦可以「暫停／繼續」或者「停止 Bot」。唔想要就加 `--no-menubar`。
+
+**完全停止**：選單列「停止 Bot」、滑鼠推去螢幕最左上角，或者喺 Terminal 撳 Ctrl+C。
 
 想開定 bot 先、轉去遊戲先開始：
 
@@ -78,6 +96,7 @@ python3 dance_bot.py run --start-paused
 | `--hotkey` | right_option | 暫停鍵：right_option / left_option / right_command / right_shift / right_control / f6–f10 / none |
 | `--start-paused` | 關 | 一開始就暫停 |
 | `--no-sound` | 關 | 暫停／繼續唔出聲 |
+| `--no-menubar` | 關 | 唔顯示選單列狀態燈 |
 
 ### 離線測試
 

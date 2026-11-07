@@ -22,7 +22,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import signal
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -291,61 +293,61 @@ def cmd_test(args):
         cv2.imwrite(args.out, annotate(img, seq, boxes))
 
 
-def cmd_run(args):
-    cfg = load_config()
-    colors = cfg["colors"]
-    grab = Grabber()
-    if args.debug:
-        DEBUG_DIR.mkdir(exist_ok=True)
+class BotState:
+    """Shared between the bot thread, the hotkey and the menu bar."""
 
+    def __init__(self, paused: bool, dry_run: bool, sound: bool):
+        self.lock = threading.Lock()
+        self.paused = paused
+        self.dry_run = dry_run
+        self.sound = sound
+        self.stop = False
+        self.stop_reason = ""
+        self.last_seq = ""
+        self.rounds = 0
+
+    def toggle(self):
+        with self.lock:
+            self.paused = not self.paused
+            paused = self.paused
+        print(f"[{time.strftime('%H:%M:%S')}] " + ("PAUSED" if paused else "RESUMED"), flush=True)
+        play_sound("Funk" if paused else "Tink", self.sound)
+
+    def request_stop(self, reason: str):
+        with self.lock:
+            if not self.stop:
+                self.stop, self.stop_reason = True, reason
+
+
+def bot_loop(args, cfg, state: BotState, hotkey):
+    colors = cfg["colors"]
+    grab = Grabber()  # created in this thread
     win, win_checked = None, 0.0
     if not cfg.get("absolute"):
         win = find_window(args.app_name)
-        if win is None:
-            sys.exit("iPhone Mirroring window not found. Open it first (or re-run calibrate).")
-
-    hotkey = None
-    if args.hotkey != "none":
-        if not Hotkey.ensure_permission():
-            print("! Hotkey needs 'Input Monitoring' permission for your Terminal:\n"
-                  "  System Settings > Privacy & Security > Input Monitoring, enable it,\n"
-                  "  then quit and reopen the Terminal. Running without the hotkey for now.")
-        else:
-            hotkey = Hotkey(args.hotkey)
-
-    paused = args.start_paused
-    print("Running" + (" (dry run, no taps)" if args.dry_run else "") +
-          ". Stop: mouse to top-left screen corner, or Ctrl+C.")
-    if hotkey:
-        print(f"Pause / resume: press {args.hotkey}." + ("  Starting PAUSED." if paused else ""))
-    if not args.dry_run:
-        os.system('osascript -e \'tell application id "%s" to activate\' >/dev/null 2>&1' % BUNDLE_ID)
-        time.sleep(0.4)
 
     last_played, last_played_at = None, 0.0
     candidate, stable = None, 0
     blocked_until = 0.0
-    rounds = 0
 
     def check_controls() -> str:
-        """'stop' on fail-safe; toggles pause on hotkey. Returns 'stop', 'paused' or 'run'."""
-        nonlocal paused
+        """Returns 'stop', 'paused' or 'run'."""
+        if state.stop:
+            return "stop"
         mx, my = mouse_pos()
         if mx <= 3 and my <= 3:
+            state.request_stop("fail-safe corner")
             return "stop"
         if hotkey and hotkey.pressed():
-            paused = not paused
-            print(f"[{time.strftime('%H:%M:%S')}] " + ("PAUSED" if paused else "RESUMED"), flush=True)
-            play_sound("Funk" if paused else "Tink", not args.no_sound)
-        return "paused" if paused else "run"
+            state.toggle()
+        return "paused" if state.paused else "run"
 
     try:
         while True:
-            state = check_controls()
-            if state == "stop":
-                print("\nFail-safe corner hit - stopped.")
+            ctl = check_controls()
+            if ctl == "stop":
                 return
-            if state == "paused":
+            if ctl == "paused":
                 candidate, stable, last_played = None, 0, None
                 time.sleep(args.poll)
                 continue
@@ -385,13 +387,115 @@ def cmd_run(args):
                 last_played, last_played_at = seq, time.time()
                 blocked_until = last_played_at + args.cooldown
                 candidate, stable = None, 0
-                rounds += 1
-                if args.max_rounds and rounds >= args.max_rounds:
-                    print("max rounds reached.")
+                state.last_seq = fmt(seq)
+                state.rounds += 1
+                if args.max_rounds and state.rounds >= args.max_rounds:
+                    state.request_stop("max rounds reached")
                     return
             time.sleep(args.poll)
-    except KeyboardInterrupt:
-        print("\nStopped.")
+    except Exception as e:  # surface errors instead of dying silently in the thread
+        state.request_stop(f"error: {e!r}")
+        raise
+
+
+def run_menubar(state: BotState, worker: threading.Thread):
+    """Menu bar status light on the main thread; returns when the bot stops."""
+    from AppKit import (NSApplication, NSApplicationActivationPolicyAccessory, NSMenu,
+                        NSMenuItem, NSStatusBar, NSVariableStatusItemLength)
+    from Foundation import NSObject, NSTimer
+    from PyObjCTools import AppHelper
+
+    class Controller(NSObject):
+        def setup(self):
+            self.item = NSStatusBar.systemStatusBar().statusItemWithLength_(NSVariableStatusItemLength)
+            menu = NSMenu.alloc().init()
+            self.info = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("", None, "")
+            self.info.setEnabled_(False)
+            menu.addItem_(self.info)
+            menu.addItem_(NSMenuItem.separatorItem())
+            self.toggle_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("", "toggle:", "")
+            self.toggle_item.setTarget_(self)
+            menu.addItem_(self.toggle_item)
+            quit_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("停止 Bot", "quit:", "")
+            quit_item.setTarget_(self)
+            menu.addItem_(quit_item)
+            self.item.setMenu_(menu)
+            self.refresh_(None)
+            NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
+                0.2, self, "refresh:", None, True)
+            return self
+
+        def refresh_(self, _timer):
+            if state.stop or not worker.is_alive():
+                AppHelper.stopEventLoop()
+                return
+            if state.paused:
+                title = "⏸ MH 暫停"
+            elif state.dry_run:
+                title = "👀 MH 試行"
+            else:
+                title = "🟢 MH 運行"
+            self.item.button().setTitle_(title)
+            self.info.setTitle_(f"已打 {state.rounds} 組　上一組：{state.last_seq or '-'}")
+            self.toggle_item.setTitle_("繼續" if state.paused else "暫停")
+
+        def toggle_(self, _sender):
+            state.toggle()
+            self.refresh_(None)
+
+        def quit_(self, _sender):
+            state.request_stop("stopped from menu bar")
+
+    app = NSApplication.sharedApplication()
+    app.setActivationPolicy_(NSApplicationActivationPolicyAccessory)  # no Dock icon, no focus steal
+    controller = Controller.alloc().init().setup()  # noqa: F841 (keep a reference)
+    AppHelper.runEventLoop()
+    NSStatusBar.systemStatusBar().removeStatusItem_(controller.item)
+
+
+def cmd_run(args):
+    cfg = load_config()
+    if args.debug:
+        DEBUG_DIR.mkdir(exist_ok=True)
+    if not cfg.get("absolute") and find_window(args.app_name) is None:
+        sys.exit("iPhone Mirroring window not found. Open it first (or re-run calibrate).")
+
+    hotkey = None
+    if args.hotkey != "none":
+        if not Hotkey.ensure_permission():
+            print("! Hotkey needs 'Input Monitoring' permission for your Terminal:\n"
+                  "  System Settings > Privacy & Security > Input Monitoring, enable it,\n"
+                  "  then quit and reopen the Terminal. Running without the hotkey for now.")
+        else:
+            hotkey = Hotkey(args.hotkey)
+
+    state = BotState(paused=args.start_paused, dry_run=args.dry_run, sound=not args.no_sound)
+    print("Running" + (" (dry run, no taps)" if args.dry_run else "") +
+          ". Stop: mouse to top-left screen corner, menu bar > 停止 Bot, or Ctrl+C.")
+    if hotkey:
+        print(f"Pause / resume: press {args.hotkey}." + ("  Starting PAUSED." if state.paused else ""))
+    if not args.dry_run:
+        os.system('osascript -e \'tell application id "%s" to activate\' >/dev/null 2>&1' % BUNDLE_ID)
+        time.sleep(0.4)
+
+    # Ctrl+C only sets a flag; the loop / menu bar timer pick it up.
+    signal.signal(signal.SIGINT, lambda *_: state.request_stop("Ctrl+C"))
+    worker = threading.Thread(target=bot_loop, args=(args, cfg, state, hotkey), daemon=True)
+    worker.start()
+
+    menubar = False
+    if not args.no_menubar:
+        try:
+            run_menubar(state, worker)
+            menubar = True
+        except ImportError as e:
+            print(f"! Menu bar status unavailable ({e}); running without it.")
+    if not menubar:
+        while worker.is_alive() and not state.stop:
+            time.sleep(0.2)
+    state.request_stop("done")
+    worker.join(timeout=2)
+    print(f"\nStopped: {state.stop_reason}.")
 
 
 def main():
@@ -416,6 +520,7 @@ def main():
                    help="key that toggles pause/resume (default right_option)")
     r.add_argument("--start-paused", action="store_true", help="start paused; press the hotkey to begin")
     r.add_argument("--no-sound", action="store_true", help="no sound on pause/resume")
+    r.add_argument("--no-menubar", action="store_true", help="no status light in the menu bar")
 
     t = sub.add_parser("test", help="run detection on a screenshot file")
     t.add_argument("image")
