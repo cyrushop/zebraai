@@ -255,6 +255,8 @@ def roi_rect(cfg, win):
 # --------------------------------------------------------------------------- commands
 
 def cmd_calibrate(args):
+    if getattr(args, "image", None):
+        return cmd_calibrate_image(args)
     win = find_window(args.app_name)
     while win is None:
         print("! iPhone Mirroring window not found.")
@@ -317,6 +319,127 @@ def cmd_calibrate(args):
     cv2.imwrite(str(DEBUG_DIR / "calibration_roi.png"), annotate(roi, seq, boxes))
     print(f"Arrows visible now: {fmt(seq)}")
     print(f"Check {DEBUG_DIR / 'calibration_roi.png'} - it should show only the arrow row.")
+
+
+IMAGE_STEPS = [
+    ("roi0", "TOP-LEFT of arrow bar (left of 1st arrow, above icons)"),
+    ("roi1", "BOTTOM-RIGHT of arrow bar (right end, below icons, above +10/+6/+3 line)"),
+    ("up", "centre of UP button (orange)"),
+    ("down", "centre of DOWN button (purple)"),
+    ("left", "centre of LEFT button (green)"),
+    ("right", "centre of RIGHT button (blue)"),
+]
+
+
+def pick_points_on_image(img):
+    """Show the screenshot; the user clicks the 6 points. Returns {key: (x, y)} in image pixels."""
+    H, W = img.shape[:2]
+    scale = min(1.0, 1400 / W, 850 / H)
+    base = cv2.resize(img, (int(W * scale), int(H * scale))) if scale < 1 else img.copy()
+    pts: list = []
+    win_name = "Click the points - Z undo, Esc cancel"
+
+    def on_mouse(event, x, y, flags, param):
+        if event == cv2.EVENT_LBUTTONDOWN and len(pts) < len(IMAGE_STEPS):
+            pts.append((x / scale, y / scale))
+
+    cv2.namedWindow(win_name, cv2.WINDOW_AUTOSIZE)
+    cv2.setMouseCallback(win_name, on_mouse)
+    while True:
+        view = base.copy()
+        for i, (px, py) in enumerate(pts):
+            c = (int(px * scale), int(py * scale))
+            cv2.circle(view, c, 6, (0, 255, 255), 2)
+            cv2.putText(view, IMAGE_STEPS[i][0], (c[0] + 8, c[1] - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+        if len(pts) >= 2:
+            a = (int(pts[0][0] * scale), int(pts[0][1] * scale))
+            b = (int(pts[1][0] * scale), int(pts[1][1] * scale))
+            cv2.rectangle(view, a, b, (0, 255, 255), 1)
+        done = len(pts) == len(IMAGE_STEPS)
+        msg = "All done - press Enter to save (Z = undo)" if done else \
+            f"{len(pts) + 1}/{len(IMAGE_STEPS)}: click {IMAGE_STEPS[len(pts)][1]}"
+        cv2.rectangle(view, (0, 0), (view.shape[1], 34), (0, 0, 0), -1)
+        cv2.putText(view, msg, (10, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2)
+        cv2.imshow(win_name, view)
+        k = cv2.waitKey(30) & 0xFF
+        if k == 27:
+            cv2.destroyAllWindows()
+            sys.exit("Cancelled.")
+        if k in (ord("z"), ord("Z")) and pts:
+            pts.pop()
+        if k in (13, 10) and done:
+            break
+    cv2.destroyAllWindows()
+    cv2.waitKey(1)
+    return {key: pts[i] for i, (key, _) in enumerate(IMAGE_STEPS)}
+
+
+def find_content_rect(bgr):
+    """Bounding box (x, y, w, h) of the game picture inside the window (black frame removed)."""
+    gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+    lit = gray > 25
+    rows = np.where(lit.mean(axis=1) > 0.10)[0]
+    cols = np.where(lit.mean(axis=0) > 0.10)[0]
+    if len(rows) == 0 or len(cols) == 0:
+        return None
+    return int(cols[0]), int(rows[0]), int(cols[-1] - cols[0] + 1), int(rows[-1] - rows[0] + 1)
+
+
+def cmd_calibrate_image(args):
+    img = cv2.imread(args.image)
+    if img is None:
+        sys.exit(f"Cannot read image: {args.image}")
+    win = find_window(args.app_name)
+    while win is None:
+        input("! iPhone Mirroring window not found. Open it (any game screen is fine), then press Enter: ")
+        win = find_window(args.app_name)
+
+    print("A window with your screenshot will open. Click the 6 points in order; Z = undo, Esc = cancel.")
+    picked = pick_points_on_image(img)
+
+    # where the game picture sits inside the iPhone Mirroring window right now
+    shot = Grabber().grab(*win)
+    sx, sy = shot.shape[1] / win[2], shot.shape[0] / win[3]  # pixels per point (Retina = 2)
+    rect = find_content_rect(shot)
+    if rect is None:
+        sys.exit("Could not find the game picture in the iPhone Mirroring window. "
+                 "Is the game showing? Does the Terminal have Screen Recording permission?")
+    cx, cy, cw, ch = rect[0] / sx, rect[1] / sy, rect[2] / sx, rect[3] / sy  # in points, window-relative
+    ih, iw = img.shape[:2]
+    a_img, a_win = iw / ih, cw / ch
+    print(f"Game picture in window: x={cx:.0f} y={cy:.0f} w={cw:.0f} h={ch:.0f} (aspect {a_win:.3f}; "
+          f"screenshot {a_img:.3f})")
+    if abs(a_img - a_win) / a_img > 0.04:
+        print("! The screenshot and the mirrored picture have different shapes. Use a screenshot taken on\n"
+              "  this same iPhone in landscape, and check debug/calibration_preview.png carefully.")
+
+    def rel(p):  # image pixel -> fraction of the window
+        return [(cx + p[0] / iw * cw) / win[2], (cy + p[1] / ih * ch) / win[3]]
+
+    cfg = {
+        "absolute": False,
+        "roi": [rel(picked["roi0"]), rel(picked["roi1"])],
+        "buttons": {d: rel(picked[d]) for d in DIRECTIONS},
+        "colors": DEFAULT_COLORS,
+        "content_rect": [cx / win[2], cy / win[3], cw / win[2], ch / win[3]],
+    }
+    CONFIG_PATH.write_text(json.dumps(cfg, indent=2, ensure_ascii=False))
+    print(f"Saved {CONFIG_PATH}")
+
+    # preview on the live window: yellow box = arrow bar, dots = buttons
+    prev = shot.copy()
+    cv2.rectangle(prev, (rect[0], rect[1]), (rect[0] + rect[2], rect[1] + rect[3]), (255, 0, 255), 1)
+    (x0, y0), (x1, y1) = cfg["roi"]
+    cv2.rectangle(prev, (int(x0 * win[2] * sx), int(y0 * win[3] * sy)),
+                  (int(x1 * win[2] * sx), int(y1 * win[3] * sy)), (0, 255, 255), 2)
+    for d, (fx, fy) in cfg["buttons"].items():
+        c = (int(fx * win[2] * sx), int(fy * win[3] * sy))
+        cv2.circle(prev, c, 8, (0, 255, 255), 2)
+        cv2.putText(prev, d, (c[0] + 10, c[1]), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
+    DEBUG_DIR.mkdir(exist_ok=True)
+    cv2.imwrite(str(DEBUG_DIR / "calibration_preview.png"), prev)
+    print(f"Check {DEBUG_DIR / 'calibration_preview.png'}: the magenta box should hug the game picture.")
+    print("When the dance mini-game is on, the yellow box/dots should sit on the arrow bar and buttons.")
 
 
 def cmd_windows(args):
@@ -555,7 +678,8 @@ def main():
     ap.add_argument("--app-name", help="window owner name if auto-detect fails (e.g. 'iPhone Mirroring')")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
-    sub.add_parser("calibrate", help="mark the arrow bar and the 4 buttons")
+    c = sub.add_parser("calibrate", help="mark the arrow bar and the 4 buttons")
+    c.add_argument("--image", help="calibrate by clicking on a screenshot of the dance game instead of live")
     sub.add_parser("windows", help="list visible windows (diagnose 'window not found')")
 
     r = sub.add_parser("run", help="play")

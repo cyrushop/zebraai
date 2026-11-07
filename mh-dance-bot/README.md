@@ -53,6 +53,19 @@ Terminal 保持 focus，滑鼠逐個指住以下位置再撳 Enter：
 
 位置係按視窗比例儲存，之後拖動視窗都得。完成後睇 `debug/calibration_roi.png`，應該只見到箭咀嗰一行。
 
+### 用截圖校準（唔使等跳舞小遊戲）
+
+跳舞小遊戲有時限，難喺現場指齊 6 點。可以用一張**同一部 iPhone、打橫**影嘅跳舞畫面截圖：
+
+```bash
+python3 dance_bot.py calibrate --image ~/Downloads/IMG_0020.PNG
+```
+
+1. iPhone Mirroring 要開住（任何遊戲畫面都得）。
+2. 會彈出一個視窗顯示截圖，跟頂部提示順序撳 6 點（Z = 撤銷，Esc = 取消），撳完按 Enter。
+3. Bot 會自動搵出遊戲畫面喺 iPhone Mirroring 視窗入面嘅位置，再換算座標。
+4. 睇 `debug/calibration_preview.png`：紫框應該啱啱包住遊戲畫面。
+
 ## 使用
 
 先試只睇唔撳：
