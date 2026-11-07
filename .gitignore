@@ -5,3 +5,7 @@ data/
 *.xlsx
 *.csv
 node_modules/
+mh-dance-bot/config.json
+mh-dance-bot/debug/
+mh-dance-bot/.venv/
+__pycache__/
