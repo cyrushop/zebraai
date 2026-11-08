@@ -19,6 +19,8 @@ def inline(m):
 
 
 html = re.sub(r'<script src="([a-z]+\.js)"></script>', inline, html)
+# The artifact viewer blocks file downloads; Copy CSV stays.
+html = html.replace('<button class="btn small" type="button" id="dlCsv">Download CSV</button>', '')
 html = re.sub(r'<!doctype html>\s*', '', html, flags=re.I)
 html = re.sub(r'</?(html|head|body)[^>]*>\s*', '', html, flags=re.I)
 html = re.sub(r'<meta charset="utf-8">\s*', '', html)

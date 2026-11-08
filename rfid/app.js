@@ -385,7 +385,8 @@
         refresh(true);
       });
       $('#copyCsv').onclick = () => copyText(invCSV(), 'Inventory CSV copied');
-      $('#dlCsv').onclick = () => download('inventory-' + fmt(T).replace(':', '') + '.csv', invCSV());
+      const dl = $('#dlCsv');
+      if (dl) dl.onclick = () => download('inventory-' + fmt(T).replace(':', '') + '.csv', invCSV());
     },
     rows(S) {
       const q = UI.inv.q.trim().toLowerCase();
