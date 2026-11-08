@@ -56,10 +56,15 @@ python3 -I tools/build_initial_data.py app/initial-data.js path/to/pipeline.xls 
 
 `app/initial-data.js` contains customer data and is git-ignored. **Do not commit it.** This repository is public.
 
+## Other apps
+
+- [`rfid/`](rfid/README.md): Citygate RFID inventory. Zone-based stock and flow from FXR90 readers with AN520 / AN510 / AN670 antennas.
+
 ## Tests
 
 ```sh
 node tests/engine.test.js
+node tests/rfid-engine.test.js
 ```
 
 The tests use synthetic fixtures only.
