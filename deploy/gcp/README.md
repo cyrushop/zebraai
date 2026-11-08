@@ -9,25 +9,30 @@ targets) lives in **Firestore**; uploaded reports stay in each browser, as on cl
 | `server.js` | Serves the hub files and `/api/db/{forecast,weekly,targets}` (Firestore; `STORE=memory` for local tests) |
 | `claude-shim.js` | Gives the hub page the `window.claude.use('db')` API it uses on claude.ai, backed by `/api/db` |
 | `make_bundle.sh` | Builds the Cloud Run source folder from a built hub folder (adds the shim to `index.html`) |
-| `deploy.sh` | Enables the APIs, creates Firestore, deploys with IAP, grants access; safe to re-run |
+| `setup_project.sh` | Once, by a project owner in Cloud Shell: APIs, Firestore, build / runtime / IAP grants, and the `hub-deployer` service account |
+| `deploy.sh` | Deploys (or redeploys) with IAP in `asia-east2` and grants access; runs as `hub-deployer` |
 
 The built hub files contain customer data. **Never put a bundle in this repo** — `make_bundle.sh` refuses to
 write inside it.
 
 ## Deploy
 
-Needs a Google Cloud project with billing, and `gcloud` signed in as someone who can enable APIs and deploy.
+Needs a Google Cloud project with billing.
 
-```sh
-./make_bundle.sh /path/to/built-hub /tmp/hub-bundle
-PROJECT=your-project USERS="user:you@example.com" ./deploy.sh /tmp/hub-bundle
-```
+1. Once, as a project owner in Cloud Shell (clone this repo there):
+   ```sh
+   PROJECT=your-project deploy/gcp/setup_project.sh
+   ```
+   It creates the `hub-deployer` service account and, if the organization allows it, a key for it.
+2. Every deploy, as `hub-deployer` (or an owner):
+   ```sh
+   ./make_bundle.sh /path/to/built-hub /tmp/hub-bundle
+   PROJECT=your-project USERS="user:you@example.com" ./deploy.sh /tmp/hub-bundle
+   ```
 
-`USERS` takes `user:`, `group:` or `domain:` members, comma-separated. To add someone later, run the
-`gcloud iap web add-iam-policy-binding` line from `deploy.sh` for them.
-
-In a project that is not in a Google Workspace / Cloud organization, the first IAP setup may have to be done
-once in the Cloud Console (Security → Identity-Aware Proxy).
+`USERS` takes `user:`, `group:` or `domain:` members, comma-separated. If the organization blocks service
+account keys (`iam.disableServiceAccountKeyCreation`, on by default for organizations created since May 2024),
+an admin can exempt the project, or an owner runs `deploy.sh` in Cloud Shell.
 
 ## Local test
 
