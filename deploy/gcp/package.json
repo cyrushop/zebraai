@@ -1,0 +1,9 @@
+{
+  "name": "zebra-sales-hub",
+  "private": true,
+  "description": "Zebra Sales Hub on Cloud Run: hub files plus a small Firestore-backed database",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=22" },
+  "dependencies": { "@google-cloud/firestore": "^9.3.1" }
+}
