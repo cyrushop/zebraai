@@ -9,7 +9,7 @@ here=$(cd "$(dirname "$0")" && pwd)
 case "$(cd "$(dirname "$out")" && pwd)/" in "$(cd "$here/../.." && pwd)/"*) echo "OUT_DIR must be outside the repo (customer data)"; exit 1;; esac
 rm -rf "$out"; mkdir -p "$out/public"
 cp "$here/server.js" "$here/package.json" "$here/Dockerfile" "$here/.dockerignore" "$out/"
-for f in index.html pipeline.html pos.html dsr.html history.html engine.js initial-data.js history-pos.csv; do
+for f in index.html pipeline.html pos.html dsr.html history.html engine.js initial-data.js history-pos.csv tw-ppl.json; do
   [ -f "$hub/$f" ] && cp "$hub/$f" "$out/public/"
 done
 cp "$here/claude-shim.js" "$out/public/"
