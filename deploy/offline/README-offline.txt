@@ -15,3 +15,31 @@ Zebra Sales Hub — 離線版
   - 資料夾含客戶及銷售資料，只可以放喺公司電腦，唔好上載到公開位置。
   - 請用 Chrome / Edge。Firefox 對本機檔案嘅儲存有限制，部分設定可能存唔到。
   - 清除瀏覽器資料會清走離線版儲存嘅 forecast 同 target。
+
+────────────────────────────────────────
+每日自動由 Google Drive 載入最新報表（本機模式）
+────────────────────────────────────────
+平時直接開 index.html 用的是內置數據。想每日自動用 Google Drive 最新的報表，改用這個方法：
+
+一次過設定
+  1. 用記事本開「serve.py」，把 DRIVE_FOLDER 改成你的 Google Drive 同步資料夾，例如：
+       DRIVE_FOLDER = r'G:\My Drive\ZebraReports'
+     （如果你用 Power Automate 直接把檔案掉入這套資料夾裡的 data 子資料夾，可留空 DRIVE_FOLDER。）
+  2. 確認電腦已裝 Python（安裝時勾選 Add Python to PATH）。
+
+每日使用
+  • Double-click「啟動.bat」。它會：
+     1) 從 Google Drive 資料夾把每種報表最新的一份複製入 data；
+     2) 啟動本機伺服器並自動開啟 Hub；
+     3) Hub 底部會顯示「本機模式 · 已載入 …」。
+  • POS、SFDC pipeline、DSR、VAD 庫存／backlog 會自動載入，各取檔名日期最新的一份。
+  • 關掉那個黑色視窗就會停止伺服器。
+
+要全自動（開機或每日定時跑）
+  • 用 Windows「工作排程器」每日執行：python  <這個資料夾>\serve.py
+  • 或由 Power Automate Desktop 流程最後一步執行同一個指令。
+
+注意
+  • 本機模式載入的檔案只在這次開啟有效，不會改動內置數據，也不會上網。
+  • 檔名要保留日期（例如 POS-HKTW-2026.11.24.xlsx、pipeline-2026-11-24-….xls），自動選最新靠的就是檔名日期。
+  • data 資料夾與報表含客戶及銷售數據，只放在公司電腦，不要上載到公開位置。

@@ -82,7 +82,8 @@ def main():
             if 'history-pos.js' not in t:
                 sys.exit('history.html: d3 script tag not found')
         if p == 'index.html':
-            tags = '<script src="offline-seed.js"></script>\n<script src="offline-shim.js"></script>\n'
+            tags = ('<script src="offline-seed.js"></script>\n<script src="offline-shim.js"></script>\n'
+                    '<script src="localdata.js"></script>\n')
             m = re.search(r'<meta charset="?utf-?8"?>\n?', t, re.I)
             if not m:
                 sys.exit('index.html: charset meta not found')
@@ -106,6 +107,20 @@ def main():
         fh.write('window.OFFLINE_SEED = ' + json.dumps(seed, ensure_ascii=False) + ';\n')
     shutil.copy(os.path.join(HERE, 'offline-shim.js'), out)
     shutil.copy(os.path.join(HERE, 'README-offline.txt'), os.path.join(out, '使用說明.txt'))
+
+    # local-data mode: auto-load the newest reports from ./data (a Google Drive synced folder)
+    shutil.copy(os.path.join(HERE, 'localdata.js'), out)
+    shutil.copy(os.path.join(HERE, 'serve.py'), out)
+    if os.path.isfile(os.path.join(HERE, '啟動.bat')):
+        shutil.copy(os.path.join(HERE, '啟動.bat'), out)
+    data_dir = os.path.join(out, 'data')
+    os.makedirs(data_dir, exist_ok=True)
+    with open(os.path.join(data_dir, 'manifest.json'), 'w', encoding='utf-8') as fh:
+        json.dump({'files': [], 'builtAt': None}, fh, ensure_ascii=False)
+    with open(os.path.join(data_dir, '放報表喺呢度.txt'), 'w', encoding='utf-8') as fh:
+        fh.write('把最新的報表檔案放入這個 data 資料夾（或讓 Power Automate / Google Drive 同步進來）：\n'
+                 '  POS-HKTW-*.xlsx、pipeline-*.xls、HKTW_*.xlsx(DSR)、*_INV_*.xlsx、*_BACKLOG_*.xlsx\n'
+                 '然後 double-click 上一層的「啟動.bat」。Hub 會自動載入每種報表最新的一份。\n')
 
     if a.zip:
         z = out.rstrip(os.sep) + '.zip'
