@@ -368,8 +368,8 @@ svg.spark circle { fill: var(--spark); }
   // Increase names are stored in Chinese ("2026 年 3 月"); show them as "Mar 2026" in English.
   function evLabel(l) {
     if (LANG !== 'en') return l;
-    var m = String(l).match(/^(\d{4})\s*年\s*(\d{1,2})\s*月$/);
-    return m ? MONTHS[+m[2] - 1] + ' ' + m[1] : l === '新加價' ? 'New increase' : l;
+    var m = String(l).match(/^(\d{4})\s*年\s*(\d{1,2})\s*月(通知)?$/);
+    return m ? MONTHS[+m[2] - 1] + ' ' + m[1] + (m[3] ? ' notice' : '') : l === '新加價' ? 'New increase' : l;
   }
   var CAT_LABEL = {};
   E.CATEGORIES.forEach(function (c) { CAT_LABEL[c.id] = c.label; });
@@ -386,6 +386,12 @@ svg.spark circle { fill: var(--spark); }
     if (x.kind === 'notRaised') return ev + T('：加價後做過 PC 但冇加價', ': PC after the increase kept the old price') + (short ? '' : T('（', ' (') + usd(x.base.unit) + ' → ' + usd(x.base.unit * (1 + x.lift)) + T('）', ')')) + ' → +' + x.rate + '%';
     if (x.kind === 'early') return ev + T('：之前已提前加 ', ': raised early by ') + pctS(x.lift) + ' → RP +' + x.rate + '%';
     if (x.kind === 'raised') return ev + T('：已加過 ', ': already raised ') + pctS(x.lift) + (short ? '' : T('（對比 ', ' (vs ') + fmtDs(x.base.created) + ' ' + usd(x.base.unit) + T('）', ')'));
+    var since = fmtDs(E.date(S.rules.notice && S.rules.notice.since));
+    if (x.kind === 'noticeRaised') return ev + T('：' + since + ' 後加過 ', ': raised since ' + since + ' by ') + pctS(x.lift) + (short ? '' : T('（對比 ', ' (vs ') + fmtDs(x.base.created) + ' ' + usd(x.base.unit) + T('）', ')')) + ' → +' + x.rate + '%';
+    if (x.kind === 'noticeNotRaised') return ev + (x.base && x.lift ? T('：' + since + ' 後冇加價', ': not raised since ' + since) + (short ? '' : T('（對比 ', ' (vs ') + fmtDs(x.base.created) + ' ' + usd(x.base.unit) + ' ' + pctS(x.lift) + T('）', ')'))
+      : T('：' + since + ' 後未做過 PC', ': no PC since ' + since)) + ' → +' + x.rate + '%';
+    if (x.kind === 'noticeNoBase') return ev + T('：' + since + ' 前冇 PC 可比，當未加過', ': no PC before ' + since + ' to compare, counted as not raised') + ' → +' + x.rate + '%';
+    if (x.kind === 'noticeDone') return ev + T('：上次 PC 已喺通知之後做，唔使再加', ': last PC is after the notice, nothing to add');
     return ev + T('：第一張 PC 已按新牌價做', ': first PC already at the new list price');
   }
   function eventsSorted() {
@@ -445,7 +451,7 @@ svg.spark circle { fill: var(--spark); }
       (saved && saved.events || []).forEach(function (e) { if (e.id === 'e2026-03' && e.rates) delete e.rates.rfid15; });
     }
     if (saved) {
-      ['liftFrom', 'liftThreshold', 'includePending', 'events', 'rp'].forEach(function (k) { if (saved[k] !== undefined) r[k] = saved[k]; });
+      ['liftFrom', 'liftThreshold', 'includePending', 'events', 'rp', 'notice'].forEach(function (k) { if (saved[k] !== undefined) r[k] = saved[k]; });
     }
     return r;
   }
@@ -679,7 +685,11 @@ svg.spark circle { fill: var(--spark); }
   // Current rules in one line per category, so the uplift is visible without opening the rules tab.
   function ruleStrip() {
     var evs = eventsSorted();
+    var nt = S.rules.notice;
     var chips = E.CATEGORIES.map(function (c) {
+      var nr = noticeOf(c.id);
+      if (nr) return '<span class="rulechip"><b>' + esc(c.label) + T('</b>：', '</b>: ') + esc(evLabel(nt.label)) + ' ' +
+        T('未加過 +', 'not raised +') + nr.notRaised + '% · ' + T('已加過 +', 'raised +') + nr.raised + '%</span>';
       var parts = evs.filter(function (e) { return e.rates[c.id] != null && e.rates[c.id] !== ''; }).map(function (e) { return esc(evLabel(e.label)) + ' +' + e.rates[c.id] + '%'; });
       var rp = S.rules.rp[c.id];
       if (rp != null && rp !== '') parts.push('RP +' + rp + '%');
@@ -688,6 +698,12 @@ svg.spark circle { fill: var(--spark); }
     var open = LS.get('zpc.ruleOpen', null);
     if (open === null) open = window.innerWidth > 720;
     return '<details class="rulestrip" id="ruleStrip"' + (open ? ' open' : '') + T('><summary class="label">加價規則一覽</summary><div class="chips">', '><summary class="label">Uplift rules at a glance</summary><div class="chips">') + chips + '</div></details>';
+  }
+  // The notice's rates for a category, or null (same test as the engine).
+  function noticeOf(cat) {
+    var n = S.rules.notice, r = n && n.rates && n.rates[cat];
+    if (!r || r.notRaised == null || r.notRaised === '' || !n.date || !n.since) return null;
+    return { notRaised: r.notRaised, raised: r.raised == null || r.raised === '' ? r.notRaised : r.raised };
   }
   function regionHint() {
     return S.region === 'all' ? '' : T('（而家只睇 ', ' (showing ') + esc(REGION_ZH()[S.region] || S.region) + T('，可以揀「全部」）', ' only; pick All to see every region)');
@@ -755,7 +771,7 @@ svg.spark circle { fill: var(--spark); }
   function rateHtml(r) {
     if (r.state === 'new') return '<span class="faint">—</span>';
     if (r.rate == null) return T('<span class="tag warn">冇 RP 規則</span>', '<span class="tag warn">No RP rule</span>');
-    var src = r.rateSource === 'list' ? T('<div class="sub">冇規則，按牌價變動</div>', '<div class="sub">No rule; list price change</div>') + (listStale(r) ? T('<span class="tag warn">牌價資料舊，自己再查</span>', '<span class="tag warn">List price is old; check it</span>') : '') : '<div class="sub">' + (r.state === 'repeat' ? T('RP 加幅', 'RP uplift') : T('加價未轉嫁', 'Increase not passed on')) + '</div>';
+    var src = r.rateSource === 'list' ? T('<div class="sub">冇規則，按牌價變動</div>', '<div class="sub">No rule; list price change</div>') + (listStale(r) ? T('<span class="tag warn">牌價資料舊，自己再查</span>', '<span class="tag warn">List price is old; check it</span>') : '') : '<div class="sub">' + (r.rateSource === 'notice' ? esc(evLabel(S.rules.notice.label)) : r.state === 'repeat' ? T('RP 加幅', 'RP uplift') : T('加價未轉嫁', 'Increase not passed on')) + '</div>';
     return '<span class="big">' + (r.rate > 0 ? '+' : '') + r.rate + '%</span>' + src;
   }
   function checkRow(r, i) {
@@ -894,7 +910,27 @@ svg.spark circle { fill: var(--spark); }
         return '<td class="num"><input type="number" step="0.1" data-evrate="' + esc(e.id) + '|' + c.id + '" value="' + v(e.rates[c.id]) + '" placeholder="—"> %</td>';
       }).join('') + '<td class="num"><input type="number" step="0.1" data-rp="' + c.id + '" value="' + v(R.rp[c.id]) + '" placeholder="—"> %</td></tr>';
     }).join('');
-    return '<section class="rules">' +
+    var n = R.notice || { label: '', date: '', since: '', rates: {} };
+    var nrows = E.CATEGORIES.map(function (c) {
+      var r = (n.rates || {})[c.id] || {};
+      return '<tr><td>' + esc(c.label) + '</td>' +
+        '<td class="num"><input type="number" step="0.1" data-nrate="' + c.id + '|notRaised" value="' + v(r.notRaised) + '" placeholder="—"> %</td>' +
+        '<td class="num"><input type="number" step="0.1" data-nrate="' + c.id + '|raised" value="' + v(r.raised) + '" placeholder="—"> %</td></tr>';
+    }).join('');
+    var notice = '<div><h2>' + T('加價通知', 'Price notice') + '</h2><ul class="small muted">' +
+      T('<li>通知入面有加幅嘅分類，<b>只跟通知計</b>，唔再用下面嘅加價日同 RP。</li>', '<li>A category with a rate here <b>follows the notice only</b>; the increase dates and RP below no longer apply to it.</li>') +
+      T('<li>上次 PC 喺「由幾時起計」之後，而且特價比嗰日之前最後一張 PC 高（≥ 門檻）→ 已加過；否則 → 未加過。嗰日之前冇 PC 可比 → 當未加過。</li>',
+        '<li>Raised: the last PC is after the "since" date and above the last PC before that date (by at least the threshold). Otherwise not raised. No PC before that date to compare with counts as not raised.</li>') +
+      T('<li>上次 PC 喺通知生效日或之後 → 已按通知做，唔使再加。</li>', '<li>A last PC on or after the effective date already follows the notice: nothing more to add.</li>') +
+      T('<li>預設：2026-11-26 group notice。EMC 主機（唔包配件）未加過 +30%、已加過 +15%；AIT 未加過 +5%、已加過 +2%；ADC 未加過 +5%、已加過 +1%；由 2026-02-01 起計。</li></ul></div>',
+        '<li>Default: the 2026-11-26 group notice. EMC main units (not accessories) +30% if not raised, +15% if raised; AIT +5% / +2%; ADC +5% / +1%; counted from 2026-02-01.</li></ul></div>') +
+      '<div class="grid">' +
+      '<label><span class="label">' + T('名稱', 'Name') + '</span><input type="text" id="nLabel" value="' + esc(n.label) + '"></label>' +
+      '<label><span class="label">' + T('生效日', 'Effective from') + '</span><input type="date" id="nDate" value="' + esc(n.date) + '"></label>' +
+      '<label><span class="label">' + T('由幾時起計加過價', 'Count rises since') + '</span><input type="date" id="nSince" value="' + esc(n.since) + '"></label></div>' +
+      '<div class="tablebox"><table><thead><tr><th>' + T('產品分類', 'Category') + '</th><th class="num">' + T('未加過', 'Not raised') + '</th><th class="num">' + T('已加過', 'Raised') + '</th></tr></thead><tbody>' + nrows + '</tbody></table></div>' +
+      '<h2>' + T('加價日同 RP（通知以外嘅分類）', 'Increase dates and RP (categories outside the notice)') + '</h2>';
+    return '<section class="rules">' + notice +
       T('<div><h2>點計</h2><ul class="small muted">', '<div><h2>How it works</h2><ul class="small muted">') +
       T('<li>用客戶 + 產品最近一張已批的 PC（「上次 PC」）做基準，逐個加價日檢查：</li>', '<li>The baseline is the newest approved PC for the customer and part (the "last PC"). Each price increase date is checked against it:</li>') +
       T('<li><b>上次 PC 喺加價日之前</b> → 呢次加價未轉嫁，加該欄 %。</li>', '<li><b>Last PC before the increase date</b> → the increase is not passed on yet, so the % in that column is added.</li>') +
@@ -958,13 +994,40 @@ svg.spark circle { fill: var(--spark); }
       T('<div class="small faint">SFDC 匯出時「：」同中文會變成「?」，帶入後請睇一睇聯絡人。</div>', '<div class="small faint">The SFDC export turns full-width colons and Chinese into "?". Check the contact after filling.</div>');
     box.innerHTML = html;
   }
+  /* The sentence the price notice asks for ("state whether the increase was
+   * applied"), in English like the rest of the justification. Covers the
+   * parts on the check tab, or else the parts on the customer's last PC.
+   */
+  function noticeStatement(d) {
+    var n = S.rules.notice;
+    if (!n || !n.date) return '';
+    var parts = E.parsePartList(S.parts);
+    if (!parts.length && d.lp.last) {
+      parts = (S.idx.byAcct[S.acct] || []).filter(function (r) { return r.pc === d.lp.last.pc; }).map(function (r) { return r.part; })
+        .filter(function (p, i, a) { return a.indexOf(p) === i; });
+    }
+    var res = E.customerParts(S.idx, S.acct, S.rules, parts).filter(function (r) { return r.rateSource === 'notice'; });
+    if (!res.length) return '';
+    var by = {};
+    res.forEach(function (r) {
+      var k = r.steps[0].kind === 'noticeDone' ? 'done' : '+' + r.rate + '%';
+      var fam = r.info ? r.info.family : r.part;
+      by[k] = by[k] || [];
+      if (by[k].indexOf(fam) < 0) by[k].push(fam);
+    });
+    var keys = Object.keys(by), done = by.done;
+    var body = keys.filter(function (k) { return k !== 'done'; }).map(function (k) { return k + ' ' + by[k].join(', '); });
+    if (done) body.push('already applied on the last PC: ' + done.join(', '));
+    return 'Price increase per ' + fmtD(E.date(n.date)) + ' notice: Yes (' + body.join('; ') + ')';
+  }
   function fillJustification(mode) {
     var d = prefillData();
     if (!d || !window.PCJUI) return;
-    var f = d.fields;
-    window.PCJUI.fill({ mode: mode, previousPc: d.lp.last ? d.lp.last.pc : '', contact: f.contact, distMargin: f.distMargin,
-      resellerMargin: f.resellerMargin, zebraProduct: mode === 'new' ? d.products : '', demand: f.demand,
-      competitor: mode === 'new' ? f.competitor : '' });
+    var f = d.fields, note = noticeStatement(d);
+    var prevPc = d.lp.last ? d.lp.last.pc : '';
+    window.PCJUI.fill({ mode: mode, previousPc: prevPc && note && mode === 'repeat' ? prevPc + '; ' + note : prevPc, contact: f.contact,
+      distMargin: f.distMargin, resellerMargin: f.resellerMargin, zebraProduct: mode === 'new' ? d.products : '', demand: f.demand,
+      competitor: mode === 'new' ? f.competitor : '', otherComments: mode === 'new' ? note : '' });
     toast(T('已帶入 ', 'Filled ') + (mode === 'repeat' ? 'Repeat' : 'New') + T(' PC，請檢查一次先 Copy', ' PC. Check it before you copy.'));
   }
 
@@ -1018,7 +1081,7 @@ svg.spark circle { fill: var(--spark); }
       return [r.part, r.info ? r.info.family : '', r.info ? CAT_LABEL[r.info.cat] : '', r.last ? r.last.pc : '', r.last ? E.iso(r.last.created) : '',
         r.last ? r.last.unit : '', r.prev ? r.prev.unit : '', r.lift != null ? (r.lift * 100).toFixed(2) + '%' : '', STATE()[r.state].short,
         r.steps.map(function (x) { return stepText(x, true); }).join(T('；', '; ')),
-        r.rate != null ? r.rate : '', r.rateSource === 'list' ? T('牌價變動', 'List price change') : r.rateSource === 'rule' ? T('規則', 'Rule') : '', r.suggested != null ? r.suggested : '',
+        r.rate != null ? r.rate : '', r.rateSource === 'list' ? T('牌價變動', 'List price change') : r.rateSource === 'rule' ? T('規則', 'Rule') : r.rateSource === 'notice' ? evLabel(S.rules.notice.label) : '', r.suggested != null ? r.suggested : '',
         r.latest ? r.latest.list : '', r.latest && r.latest.stdDisc != null ? r.latest.stdDisc : '', r.newStdNet != null ? r.newStdNet : ''];
     }));
     var tsv = lines.map(function (l) { return l.join('\t'); }).join('\n');
@@ -1111,6 +1174,18 @@ svg.spark circle { fill: var(--spark); }
       if (e2) e2[k2[1]] = t.value;
       saveRules();
       return k2[1] === 'date' ? renderView() : undefined;
+    }
+    if (t.dataset.nrate) {
+      var nk = t.dataset.nrate.split('|');
+      S.rules.notice = S.rules.notice || { label: '', date: '', since: '', rates: {} };
+      var nr = S.rules.notice.rates[nk[0]] = S.rules.notice.rates[nk[0]] || {};
+      if (t.value === '') delete nr[nk[1]]; else nr[nk[1]] = +t.value;
+      return saveRules();
+    }
+    if (id === 'nLabel' || id === 'nDate' || id === 'nSince') {
+      S.rules.notice = S.rules.notice || { label: '', date: '', since: '', rates: {} };
+      S.rules.notice[{ nLabel: 'label', nDate: 'date', nSince: 'since' }[id]] = t.value;
+      return saveRules();
     }
     if (t.dataset.rp) {
       if (t.value === '') delete S.rules.rp[t.dataset.rp]; else S.rules.rp[t.dataset.rp] = +t.value;
@@ -1430,7 +1505,7 @@ svg.spark circle { fill: var(--spark); }
   // Filled from the PC history panel on the PC Price Check page.
   function fillFrom(o) {
     if (o.mode) setMode(o.mode);
-    ['previousPc', 'contact', 'zebraProduct', 'distMargin', 'resellerMargin'].forEach(function (k) {
+    ['previousPc', 'contact', 'zebraProduct', 'distMargin', 'resellerMargin', 'otherComments'].forEach(function (k) {
       if (o[k] != null && o[k] !== '') $(k).value = o[k];
     });
     if (o.demand && P.DEMANDS.indexOf(o.demand) >= 0) $('demand').value = o.demand;

@@ -89,7 +89,8 @@ const tw = E.buildIndex(rows.filter(x => x.region === 'Taiwan'), rows);
 assert.strictEqual(tw.accounts.length, 1, 'region subset indexes on its own');
 assert.strictEqual(tw.latestList['ZD421-X'].list, 515, 'list price comes from every region');
 assert.strictEqual(E.buildIndex(rows.filter(x => x.region === 'Taiwan')).latestList['ZD421-X'], undefined);
-const R = E.DEFAULT_RULES;
+// The increase-date tests below run without the November notice; it has its own tests further down.
+const R = Object.assign({}, E.DEFAULT_RULES, { notice: null });
 const get = (acct, p, rules) => E.assess(idx, (idx.byAcct[acct] || []).filter(r => r.part === p), rules || R, p);
 
 // categories
@@ -168,6 +169,46 @@ assert.strictEqual(r.cumulativeBase.unit, 900);
 // rules without events behave like "no rule"
 r = get('100', 'TC53-X', Object.assign({}, R, { events: [], rp: {} }));
 assert.strictEqual(r.state, 'norule');
+
+// November 2026 notice: EMC 30% / 15%, AIT 5% / 2%, ADC 5% / 1%; since 2026-02-01, from 2026-11-26
+const N = E.DEFAULT_RULES;
+const nrows = E.normPc({ name: 'n', headers: H, rows: [
+  // EMC raised after February → +15%
+  row(A, '10/01/2026', 'TC53-X', EMC, 1000, 600), row(A, '10/06/2026', 'TC53-X', EMC, 1150, 640),
+  // EMC not raised after February → +30%
+  row(B, '10/01/2026', 'TC53-X', EMC, 1000, 600), row(B, '10/09/2026', 'TC53-X', EMC, 1322.5, 600),
+  // EMC last PC before February → +30%
+  row(C, '10/12/2025', 'TC53-X', EMC, 1000, 600),
+  // EMC first PC after February: nothing to compare with → counted as not raised, +30%
+  row(['500', 'Echo Ltd', 'Taiwan'], '10/05/2026', 'TC53-X', EMC, 1150, 700),
+  // EMC PC made after the notice → already applied, 0%
+  row(['600', 'Fox Ltd'], '27/11/2026', 'TC53-X', EMC, 1322.5, 800),
+  // AIT raised → +2%; ADC not raised → +5%; ADC raised → +1%
+  row(A, '01/01/2026', 'ZD421-X', PRN, 500, 300), row(A, '01/09/2026', 'ZD421-X', PRN, 515, 309),
+  row(A, '01/01/2026', 'DS2278-X', ADC, 200, 100), row(A, '01/07/2026', 'DS2278-X', ADC, 200, 100),
+  row(B, '01/01/2026', 'DS2278-X', ADC, 200, 100), row(B, '01/07/2026', 'DS2278-X', ADC, 200, 102),
+  // EMC accessory and RFID are not in the notice
+  row(A, '01/01/2026', 'BTRY-X', ACC, 100, 50), row(A, '12/10/2026', 'FX9600-X', RFFX, 1500, 1000)
+].map(o => H.map(h => o[h] ?? null)) });
+const nidx = E.buildIndex(nrows);
+const nget = (acct, p) => E.assess(nidx, (nidx.byAcct[acct] || []).filter(r => r.part === p), N, p);
+const nk = r => r.steps.map(x => x.kind).join(',');
+r = nget('100', 'TC53-X');
+assert.deepStrictEqual([nk(r), r.rate, r.state, r.rateSource], ['noticeRaised', 15, 'repeat', 'notice']);
+assert.strictEqual(r.suggested, 736);
+assert.strictEqual(r.cumulativeBase.unit, 600);
+r = nget('200', 'TC53-X');
+assert.deepStrictEqual([nk(r), r.rate, r.state], ['noticeNotRaised', 30, 'full']);
+assert.strictEqual(r.suggested, 780);
+assert.deepStrictEqual([nk(nget('300', 'TC53-X')), nget('300', 'TC53-X').rate], ['noticeNotRaised', 30]);
+assert.deepStrictEqual([nk(nget('500', 'TC53-X')), nget('500', 'TC53-X').rate], ['noticeNoBase', 30]);
+assert.deepStrictEqual([nk(nget('600', 'TC53-X')), nget('600', 'TC53-X').rate], ['noticeDone', 0]);
+assert.deepStrictEqual([nk(nget('100', 'ZD421-X')), nget('100', 'ZD421-X').rate], ['noticeRaised', 2]);
+assert.deepStrictEqual([nk(nget('100', 'DS2278-X')), nget('100', 'DS2278-X').rate], ['noticeNotRaised', 5]);
+assert.deepStrictEqual([nk(nget('200', 'DS2278-X')), nget('200', 'DS2278-X').rate], ['noticeRaised', 1]);
+assert.strictEqual(nget('100', 'BTRY-X').state, 'norule', 'accessories are not in the notice');
+r = nget('100', 'FX9600-X');
+assert.deepStrictEqual([nk(r), r.rate], ['covered', 3], 'RFID keeps the increase dates and RP');
 
 // new part for the customer
 r = get('200', 'ZD421-X');

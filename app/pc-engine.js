@@ -110,7 +110,16 @@
       { id: 'e2026-10', label: '2026 年 10 月', date: '2026-10-05',
         rates: { emc: 15, rfid15: 15, rfidFixed: 5, rfidHH: 5, adc: 4, ait: 3 } }
     ],
-    rp: { emc: 15, rfid15: 3, rfidFixed: 3, rfidHH: 3, adc: 1, ait: 1 }
+    rp: { emc: 15, rfid15: 3, rfidFixed: 3, rfidHH: 3, adc: 1, ait: 1 },
+    /* Group notice of 2026-11-26, from that day on: compare the last PC with
+     * the customer's last PC before `since`. Raised since then → `raised`,
+     * otherwise → `notRaised`. A category listed here follows the notice
+     * instead of the events and RP rates above.
+     */
+    notice: {
+      label: '2026 年 11 月通知', date: '2026-11-26', since: '2026-02-01',
+      rates: { emc: { notRaised: 30, raised: 15 }, ait: { notRaised: 5, raised: 2 }, adc: { notRaised: 5, raised: 1 } }
+    }
   };
 
   // Some Hong Kong PCs carry "China" as their sub region; they belong to Hong Kong.
@@ -284,6 +293,9 @@
     res.lift = prev ? pct(last.unit, prev.unit) : null;
     res.listChange = res.latest ? pct(res.latest.list, last.list) : null;
 
+    var nr = noticeRate(rules, cat);
+    if (nr) return finish(res, applyNotice(res, granted, rules.notice, nr, thr), rp);
+
     var evs = eventsFor(rules, cat), lastDone = null, pending = [];
     evs.forEach(function (e) {
       if (!last.created || last.created < e.date) { pending.push(e); return; }
@@ -304,8 +316,51 @@
       else res.steps.push({ event: e, kind: 'pending', rate: e.rate });
     });
 
+    return finish(res, evs, rp);
+  }
+
+  // The notice's rates for a category, or null when the notice does not cover it.
+  function noticeRate(rules, cat) {
+    var n = rules.notice, r = n && n.rates && n.rates[cat];
+    if (!r || blank(r.notRaised) || !date(n.date) || !date(n.since)) return null;
+    return { notRaised: +r.notRaised, raised: blank(r.raised) ? +r.notRaised : +r.raised };
+  }
+
+  /* One step for the notice. Kinds: noticeRaised (the last PC is above the
+   * last one before `since`), noticeNotRaised (it is not, or the last PC is
+   * older than `since`), noticeNoBase (no PC before `since` to compare with:
+   * counted as not raised), noticeDone (the last PC is on or after the notice
+   * date, so the notice was already applied: nothing more to add).
+   */
+  function applyNotice(res, granted, n, nr, thr) {
+    var ev = { id: 'notice', label: n.label, date: date(n.date) }, since = date(n.since), last = res.last;
+    var base = null;
+    for (var j = 0; j < granted.length; j++) if (granted[j].created && granted[j].created < since) { base = granted[j]; break; }
+    var step;
+    if (last.created && last.created >= ev.date) step = { kind: 'noticeDone', rate: 0 };
+    else if (!last.created || last.created < since) step = { kind: 'noticeNotRaised', rate: nr.notRaised, base: last, lift: 0 };
+    else if (!base) step = { kind: 'noticeNoBase', rate: nr.notRaised };
+    else {
+      var l = pct(last.unit, base.unit);
+      step = l >= thr - 1e-12 ? { kind: 'noticeRaised', rate: nr.raised, base: base, lift: l }
+        : { kind: 'noticeNotRaised', rate: nr.notRaised, base: base, lift: l };
+    }
+    step.event = ev;
+    step.notice = true;
+    res.steps.push(step);
+    return [ev];
+  }
+
+  // Rate, state and suggested price from the steps.
+  function finish(res, evs, rp) {
+    var last = res.last;
+    var notice = res.steps.filter(function (x) { return x.notice; })[0];
     var adds = res.steps.filter(function (x) { return x.kind === 'notRaised' || x.kind === 'pending' || x.kind === 'early'; });
-    if (adds.length) {
+    if (notice) {
+      res.state = notice.kind === 'noticeRaised' || notice.kind === 'noticeDone' ? 'repeat' : 'full';
+      res.rate = notice.rate;
+      res.rateSource = 'notice';
+    } else if (adds.length) {
       res.state = adds.every(function (x) { return x.kind === 'early'; }) ? 'repeat' : 'full';
       res.rate = round2((adds.reduce(function (m, x) { return m * (1 + x.rate / 100); }, 1) - 1) * 100);
       res.rateSource = 'rule';
@@ -326,7 +381,9 @@
       res.suggested = round2(last.unit * (1 + res.rate / 100));
       // Total rise against the price before the earliest raise we credited.
       var base = null;
-      res.steps.forEach(function (x) { if ((x.kind === 'raised' || x.kind === 'early') && x.base && (!base || x.base.created < base.created)) base = x.base; });
+      res.steps.forEach(function (x) {
+        if ((x.kind === 'raised' || x.kind === 'early' || x.kind === 'noticeRaised') && x.base && (!base || x.base.created < base.created)) base = x.base;
+      });
       if (base) { res.cumulativeBase = base; res.cumulative = res.suggested / base.unit - 1; }
       if (res.latest && res.latest.list) {
         res.newDisc = 1 - res.suggested / res.latest.list;

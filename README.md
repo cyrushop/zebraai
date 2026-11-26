@@ -102,6 +102,8 @@ Customers and parts can be typed or picked from dropdowns: customers list the 15
 - Several events not passed on are compounded (15% and 15% = 32.25%). When every event has been passed on, the RP rate applies.
 - If the last PC is before an event but was already raised this year against the PC before it (for example ADC +2% ahead of October), that event gets the RP rate instead.
 
+**Price notice (from 2026-11-26).** EMC main units, AIT and ADC follow the group notice instead of the events below. The last PC is compared with the customer's last PC before 2026-02-01: raised by at least the threshold → EMC +15%, AIT +2%, ADC +1%; otherwise (including no PC before February to compare with) → EMC +30%, AIT +5%, ADC +5%. A last PC on or after the notice date already follows it, so nothing is added. The justification fill states the increase applied, as the notice asks: after the previous PC# for a repeat PC, under Other Comments for a new one. Everything is editable on the 加價規則 tab.
+
 Default events and rates (all editable on the 加價規則 tab):
 
 | Category | 2026-03-19 | 2026-10-05 | Already raised (RP) |
