@@ -92,7 +92,12 @@
     row.appendChild(msgEl); row.appendChild(x); bar.appendChild(row); bar.appendChild(detEl); document.body.appendChild(bar);
   }
   // keep the page's last lines reachable above the bar
-  function pad() { document.body.style.paddingBottom = bar && bar.style.display !== 'none' ? bar.offsetHeight + 'px' : ''; }
+  function pad() {
+    var h = bar && bar.style.display !== 'none' ? bar.offsetHeight : 0;
+    document.body.style.paddingBottom = h ? h + 'px' : '';
+    // the hub's views are position:fixed to the bottom edge: lift them too, so the bar never covers a page
+    document.querySelectorAll('.view').forEach(function (v) { v.style.bottom = h ? h + 'px' : ''; });
+  }
   function banner(text, details, warn) {
     ensureBar();
     bar.style.background = warn ? '#5a3d00' : '#0b3d2e';
