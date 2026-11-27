@@ -10,14 +10,20 @@ SEED_DIR the online hub's database exported as SEED_DIR/<collection>/<doc id>.js
 
 The hub files hold customer data: OUT_DIR must stay outside this public repository.
 """
-import argparse, json, os, re, shutil, sys, urllib.request, zipfile
+import argparse, base64, hashlib, json, os, re, shutil, sys, urllib.request, zipfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
 LIBS = {
     'chart.umd.js': 'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.js',
     'xlsx.full.min.js': 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
-    'd3.min.js': 'https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js',
+    'd3.min.js': 'https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js',
+}
+# review M15: the same sha384 the pages carry as SRI; a library that does not match is refused
+LIB_SHA384 = {
+    'chart.umd.js': 'dug+JxfBvklEQdJ4AYuBBAIScUz0bVN73xpy273gcAwHjb3qI0fXmuYNaNfdyYJG',
+    'xlsx.full.min.js': 'vtjasyidUo0kW94K5MXDXntzOJpQgBKXmE7e2Ga4LG0skTTLeBi97eFAXsqewJjw',
+    'd3.min.js': 'CjloA8y00+1SDAUkjs099PVfnY2KmDC2BZnws9kh8D/lX1s46w6EPhpXdqMfjK6i',
 }
 PAGES = ['index.html', 'pipeline.html', 'pos.html', 'dsr.html', 'history.html']
 DATA = ['engine.js', 'initial-data.js', 'tw-ppl.json']
@@ -27,7 +33,10 @@ CDN = [
     (r'https://cdn\.jsdelivr\.net/npm/xlsx@0\.18\.5/dist/xlsx\.full\.min\.js', 'lib/xlsx.full.min.js'),
     (r'https://cdnjs\.cloudflare\.com/ajax/libs/xlsx/0\.18\.5/xlsx\.full\.min\.js', 'lib/xlsx.full.min.js'),
     (r'https://cdnjs\.cloudflare\.com/ajax/libs/d3/7\.9\.0/d3\.min\.js', 'lib/d3.min.js'),
+    (r'https://cdn\.jsdelivr\.net/npm/d3@7\.9\.0/dist/d3\.min\.js', 'lib/d3.min.js'),
 ]
+# SRI + crossorigin make a file:// page refuse its own local copy: drop them on the localized tags
+LOCAL_SRI = re.compile(r'(<script src="lib/[^"]+")\s+integrity="[^"]*"\s+crossorigin="[^"]*"')
 FONTS = re.compile(r'<link[^>]*fonts\.(?:googleapis|gstatic)\.com[^>]*>\s*', re.I)
 
 
@@ -47,6 +56,10 @@ def main():
             shutil.copy(os.path.join(a.lib, name), dst)
         else:
             urllib.request.urlretrieve(url, dst)
+        with open(dst, 'rb') as fh:
+            got = base64.b64encode(hashlib.sha384(fh.read()).digest()).decode()
+        if got != LIB_SHA384[name]:
+            sys.exit('lib/%s: sha384 %s does not match the pinned %s' % (name, got, LIB_SHA384[name]))
 
     for f in DATA:
         if os.path.isfile(os.path.join(hub, f)):
@@ -68,6 +81,7 @@ def main():
             t = fh.read()
         for pat, local in CDN:
             t = re.sub(pat, local, t)
+        t = LOCAL_SRI.sub(r'\1', t)
         t = FONTS.sub('', t)
         t = re.sub(r'<link rel="preconnect"[^>]*>\s*', '', t)
         left = re.findall(r'https://(?:cdn\.jsdelivr\.net|cdnjs\.cloudflare\.com|unpkg\.com)/[^"\')\s]+', t)

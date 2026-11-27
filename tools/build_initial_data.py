@@ -23,6 +23,9 @@ SIGNATURES = {
     "inventory": ["Zebra Part Number", "On-Hand Quantity"],
 }
 
+# Taiwan DSR rows keep only what the hub's TW sales-in card reads.
+SALES_IN_COLS = ["Account Name", "Route To Market", "Line Item Status", "ERP Invoice Date", "Scheduled Ship Date", "Amount USD SUM"]
+
 # Only the columns the app reads, to keep the seed file small.
 KEEP = {
     "pipeline": [
@@ -101,11 +104,16 @@ def main():
                 idx = [j for j, h in enumerate(headers) if keep is None or h in keep]
                 body = [[row[j] if j < len(row) else None for j in idx] for row in rows[i + 1:]]
                 body = [b for b in body if any(v not in (None, "") for v in b)]
-                if t == "dsr":  # Hong Kong only
-                    c = [headers[j] for j in idx].index("Account Country")
+                extra = {}
+                if t == "dsr":  # checks use Hong Kong rows; Taiwan rows ride along, sales-in columns only
+                    kept = [headers[j] for j in idx]
+                    c = kept.index("Account Country")
+                    si = [n for n in SALES_IN_COLS if n in kept]
+                    sj = [kept.index(n) for n in si]
+                    extra = {"twHeaders": si, "twRows": [[b[j] for j in sj] for b in body if b[c] == "Taiwan"]}
                     body = [b for b in body if b[c] == "Hong Kong"]
                 name = re.sub(r"^[0-9a-f]{8}-", "", f.rsplit("/", 1)[-1])
-                tables.append({"type": t, "name": name, "headers": [headers[j] for j in idx], "rows": body})
+                tables.append({"type": t, "name": name, "headers": [headers[j] for j in idx], "rows": body, **extra})
                 print(f"{name} [{sheet}] -> {t}: {len(body)} rows", file=sys.stderr)
                 break
     with open(out, "w", encoding="utf-8") as fh:

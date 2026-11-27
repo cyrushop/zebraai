@@ -60,7 +60,9 @@ assert.deepStrictEqual(rules('Z-3w'), [], 'this week ships wait for next Wednesd
 assert.deepStrictEqual(rules('Z-3m'), []);
 assert.strictEqual(P.posDeadline('2026-10-23'), '2026-10-28', 'Fri → next Wed');
 assert.strictEqual(P.posDeadline('2026-10-19'), '2026-10-28', 'Mon → next Wed');
-assert.strictEqual(P.posDeadline('2026-10-25'), '2026-10-28', 'Sun → next Wed');
+assert.strictEqual(P.posDeadline('2026-10-24'), '2026-10-28', 'Sat (last day of the POS week) → next Wed');
+assert.strictEqual(P.posDeadline('2026-10-25'), '2026-11-04', 'Sun starts a new POS week (Sun–Sat) → the Wed after it');   // review M7
+assert.strictEqual(P.weekStart('2026-10-22'), '2026-10-18', 'POS week starts on Sunday');
 assert.strictEqual(P.posDeadline('2026-10-15'), '2026-10-21', 'last week → this Wed (past)');
 // Wednesday public holiday → next working day
 assert.strictEqual(P.posDeadline('2026-06-24'), '2026-07-02', 'Wed 1 Jul (Establishment Day) → Thu');
@@ -72,11 +74,12 @@ const julRows = P.prepare([H, row(base('Z-J', { 'First Ship Date': '26/06/2026',
 const j = d => (P.check(julRows, { today: d }).violations[0] || { issues: [] }).issues.map(i => i.rule).filter(r => r === 3);
 assert.deepStrictEqual(j('2026-07-02'), [], 'deadline moved to Thu 2 Jul');
 assert.deepStrictEqual(j('2026-07-03'), [3]);
-// rule 6 uses the POS week: this week may be Won, next Monday onward may not
+// rule 6 uses the POS week (Sun–Sat, review M7): this week may be Won, next Sunday onward may not
 const won = fs => P.prepare([H, row(base('Z-W', { 'Sales Stage': 'Closed - Won', 'Commit Category': 'Shipped/booked',
   'First Ship Date': fs, 'Customer Requested Ship Date': '01/10/2026' }))]);
 const r6 = fs => (P.check(won(fs), { today }).violations[0] || { issues: [] }).issues.map(i => i.rule).filter(r => r === 6);
-assert.deepStrictEqual(r6('25/10/2026'), [], 'Sunday this week: Won is fine');
+assert.deepStrictEqual(r6('24/10/2026'), [], 'Saturday this POS week: Won is fine');
+assert.deepStrictEqual(r6('25/10/2026'), [6], 'next Sunday starts the next POS week: too early');
 assert.deepStrictEqual(r6('26/10/2026'), [6], 'next Monday: too early (old rule allowed it up to next Wed)');
 // last week's ships wait while this week's POS has not arrived (Tue 2026-10-20, last week Thu 10-15)
 assert.deepStrictEqual((P.check(rows, { today: '2026-10-20' }).violations.find(v => v.opp === 'Z-3') || { issues: [] }).issues.map(i => i.rule).filter(r => r === 3), []);

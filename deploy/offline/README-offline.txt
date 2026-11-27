@@ -32,8 +32,16 @@ Zebra Sales Hub — 離線版
      1) 從 Google Drive 資料夾把每種報表最新的一份複製入 data；
      2) 啟動本機伺服器並自動開啟 Hub；
      3) Hub 底部會顯示「本機模式 · 已載入 …」。
-  • POS、SFDC pipeline、DSR、VAD 庫存／backlog 會自動載入，各取檔名日期最新的一份。
+  • POS、SFDC pipeline、DSR 會自動載入，各取檔名日期最新的一份；VAD 庫存／VST backlog 每個分銷商各取最新一份
+    （例如 Chinetek 同 VSTECS 的庫存都會載入）。
+  • Hub 底部會顯示一行「本機模式 · 已載入 N 份報表」，撳一下睇每份檔案的結果；有檔案讀唔到會轉做啡色並列出原因。
   • 關掉那個黑色視窗就會停止伺服器。
+  • 伺服器固定用 http://127.0.0.1:8787 。如果話連接埠被佔用，請關閉佔用的程式再試（已開着的 Hub 會直接打開）。
+
+重要：兩種開法的資料不共用
+  • 「雙擊 index.html」（file://）同「啟動.bat」（http://127.0.0.1:8787）對瀏覽器來說是兩個不同網站，
+    各自保存 forecast、sales-in target、每週快照。揀定一種開法長期用（建議用 啟動.bat），
+    否則喺一邊入的 forecast 喺另一邊會睇唔到。
 
 要全自動（開機或每日定時跑）
   • 用 Windows「工作排程器」每日執行：python  <這個資料夾>\serve.py

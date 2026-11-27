@@ -275,7 +275,7 @@
     function helpHtml() {
       var d = P.DEFAULTS;
       return '<div class="ppl-help"><h3>檢查範圍</h3><p>Opportunity Record Type = ' + esc(d.recordType) + '（報表沒有這欄就全部檢查）；階段為 Identify、Qualify、Validate、Secure、Closed - Won；First Ship Date ≥ ' +
-        d.minFirstShip + '。同一個機會的多行產品線合併計算：金額加總，其他欄取第一個非空值。POS 週 = 週一至週日；標準2 的截止日 = 下週三（今天是週三就是今天）。</p>' +
+        d.minFirstShip + '。同一個機會的多行產品線合併計算：金額加總，其他欄取第一個非空值。POS 週 = 週日至週六；標準2 的截止日 = 下週三（今天是週三就是今天）。</p>' +
         '<h3>7 條標準</h3><ol>' + P.RULES.map(function (x) { return '<li><b>標準' + x.id + ' · ' + esc(x.short) + '</b>：' + esc(x.desc) + '</li>'; }).join('') + '</ol>' +
         '<h3>透視分析</h3><p>行 = First Ship Fiscal Quarter New（發貨財季），列 = Sales Stage。可按 Owner、Is Service Product 篩選，指標可選金額或行數，預設排除 Closed - Lost / Closed - Other。</p>' +
         '<h3>Secure 未下單</h3><p>Sales Stage = Secure 且 Reseller has ordered via Distribution = 0，按季度分組。</p>' +
@@ -295,8 +295,9 @@
         });
       });
     }
+    function safeCell(c) { c = String(c == null ? '' : c); return /^[=+@\t\r]/.test(c) || (/^-/.test(c) && isNaN(Number(c.replace(/[,\s$]/g, '')))) ? "'" + c : c; }   // no spreadsheet formulas in copied / exported cells
     function copyTable() {
-      var tsv = currentTable().map(function (r) { return r.join('\t'); }).join('\n');
+      var tsv = currentTable().map(function (r) { return r.map(safeCell).join('\t'); }).join('\n');
       if (!tsv) return;
       copyText(tsv).then(function () { toast('已複製表格，可直接貼到 Excel。'); }, function () {
         var box = $('.ppl-copybox'); box.hidden = false; box.value = tsv; box.focus(); box.select();
@@ -304,7 +305,7 @@
       });
     }
     function exportCsv() {
-      var csv = currentTable().map(function (r) { return r.map(function (c) { return '"' + c.replace(/"/g, '""') + '"'; }).join(','); }).join('\r\n');
+      var csv = currentTable().map(function (r) { return r.map(function (c) { c = safeCell(c); return '"' + c.replace(/"/g, '""') + '"'; }).join(','); }).join('\r\n');
       var a = document.createElement('a');
       a.href = URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' }));
       var name = { check: 'PPL問題清單', pivot: 'PPL透視', secure: 'Secure未下單' }[S.tab] || 'PPL';

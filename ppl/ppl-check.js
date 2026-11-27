@@ -36,10 +36,10 @@
   var RULES = [
     { id: 1, short: '階段與 Commit 不符', desc: 'Identify / Qualify 的 Commit 要空白，Validate = Upside，Secure = Commit，Closed - Won = Shipped/booked。' },
     { id: 2, short: '超過 90 天未更新', desc: 'Identify / Qualify 的 Last Modified Date 在 2026-05-01 之後，但距截止日（下週三）已超過 90 天。2026-05-01 之前修改的不提醒。' },
-    { id: 3, short: '發貨日已過仍未關閉', desc: '發貨週（週一至週日）的 POS 報表在下週三收到，收到後才更新 SFDC。所以發貨週之後的週三過了，階段仍不是 Closed 才算違規；這週和上週（未到週三）發貨的不提醒。該週三是公眾假期就順延到下一個工作天。' },
+    { id: 3, short: '發貨日已過仍未關閉', desc: '發貨週（POS 週：週日至週六）的 POS 報表在下週三收到，收到後才更新 SFDC。所以發貨週之後的週三過了，階段仍不是 Closed 才算違規；這週和上週（未到週三）發貨的不提醒。該週三是公眾假期就順延到下一個工作天。' },
     { id: 4, short: '≥ 50k 缺 Forecast Notes', desc: '整個機會的 Schedule Amount 合計 ≥ US$50,000，階段是 Validate 或 Secure，Forecast Notes 卻是空白。' },
     { id: 5, short: 'Fulfillment Type 空白', desc: 'Fulfillment Type 不可以空白。' },
-    { id: 6, short: '未到發貨週已 Closed - Won', desc: '按同一個 POS 週期（週一至週日）：本週發貨的可以 Closed - Won；First Ship Date 在下週一或之後，階段卻已是 Closed - Won 才算違規。' },
+    { id: 6, short: '未到發貨週已 Closed - Won', desc: '按同一個 POS 週期（週日至週六）：本週發貨的可以 Closed - Won；First Ship Date 在下週日或之後，階段卻已是 Closed - Won 才算違規。' },
     { id: 7, short: 'CRSD 問題', desc: '發貨日 ≥ 2026-08-01 的機會：CRSD 不可空白；First Ship Date 與 CRSD 可以不同日，但要在同一財季；Commit = Shipped/booked 時 CRSD 要早於今天。' }
   ];
 
@@ -67,7 +67,12 @@
     return ymd(new Date(d.getFullYear(), d.getMonth(), d.getDate() + (3 - d.getDay() + 7) % 7));
   }
 
-  // 該日所在 POS 週（週一至週日）的週一
+  // 該日所在 POS fiscal week（週日至週六）的週日 — review M7：同 POS 報表一致
+  function weekStart(isoDay) {
+    var p = isoDay.split('-'), d = new Date(+p[0], +p[1] - 1, +p[2]);
+    return ymd(new Date(d.getFullYear(), d.getMonth(), d.getDate() - d.getDay()));
+  }
+  // 舊名（週一）保留俾外部呼叫；檢查本身用 weekStart
   function weekMonday(isoDay) {
     var p = isoDay.split('-'), d = new Date(+p[0], +p[1] - 1, +p[2]);
     return ymd(new Date(d.getFullYear(), d.getMonth(), d.getDate() - (d.getDay() + 6) % 7));
@@ -76,7 +81,7 @@
   // POS 更新期限：發貨週之後的週三。這週的生意下週三才收到 POS 報表，收到後才更新 SFDC。
   // 週三是公眾假期就順延到下一個工作天（跳過週末和假期）。
   function posDeadline(isoDay, holidays) {
-    var off = holidays || HK_HOLIDAYS, d = addDays(weekMonday(isoDay), 9);
+    var off = holidays || HK_HOLIDAYS, d = addDays(weekStart(isoDay), 10);   // 週六收週之後的週三
     while (off.indexOf(d) >= 0 || /^[06]$/.test(String(new Date(d + 'T00:00:00').getDay()))) d = addDays(d, 1);
     return d;
   }
@@ -205,7 +210,7 @@
     if (!has('firstShip')) notes.push('報表沒有 First Ship Date 欄，不按發貨日篩選。');
 
     var today = todayOf(opts), cutoff = nextWednesday(today);
-    var holidays = opts.holidays || HK_HOLIDAYS, nextMonday = addDays(weekMonday(today), 7);
+    var holidays = opts.holidays || HK_HOLIDAYS, nextMonday = addDays(weekStart(today), 7);   // 下個 POS 週嘅週日（變數名沿用）
     if (!opts.holidays && today.slice(0, 4) > HK_HOLIDAYS[HK_HOLIDAYS.length - 1].slice(0, 4)) {
       notes.push('內置公眾假期表只到 ' + HK_HOLIDAYS[HK_HOLIDAYS.length - 1].slice(0, 4) + ' 年，標準3 的假期順延暫時不計新一年的假期。');
     }
@@ -254,7 +259,7 @@
       }
       var fs = has('firstShip') ? parseDate(info.firstShip) : null;
       if (fs && stage.indexOf('Closed') !== 0 && today > posDeadline(fs, holidays)) {
-        var dl = posDeadline(fs, holidays), shifted = dl !== addDays(weekMonday(fs), 9);
+        var dl = posDeadline(fs, holidays), shifted = dl !== addDays(weekStart(fs), 10);
         add(3, '發貨日 ' + fs + '，POS 更新期限 ' + dl + (shifted ? '（週三假期，已順延）' : '（發貨週之後的週三）') + '已過，階段仍是 ' + stage);
       }
       if (has('amount') && has('notes') && (stage === 'Validate' || stage === 'Secure') &&
@@ -275,7 +280,7 @@
         amount: info.amount, firstShip: fs || '', issues: info.issues });
     });
     violations.sort(function (a, b) { return a.opp < b.opp ? -1 : a.opp > b.opp ? 1 : 0; });
-    return { today: today, cutoff: cutoff, weekStart: weekMonday(today), weekEnd: addDays(weekMonday(today), 6), totalRows: rows.length - 1, checkedLines: checkedLines, checkedOpps: agg.size,
+    return { today: today, cutoff: cutoff, weekStart: weekStart(today), weekEnd: addDays(weekStart(today), 6), totalRows: rows.length - 1, checkedLines: checkedLines, checkedOpps: agg.size,
       stats: stats, violations: violations, skipped: skipped, notes: notes, hasOwner: has('owner') };
   }
 
@@ -368,6 +373,7 @@
    * 是 Salesforce 內部格式，官方未公開支援，日後版本可能失效；介面同時把編號複製到剪貼簿作後備。 */
   function sfdcLink(opp, oppId, domain) {
     domain = String(domain || DEFAULTS.sfdcDomain).replace(/\/+$/, '');
+    if (!/^https:\/\/[a-z0-9-]+(\.[a-z0-9-]+)*\.(force\.com|salesforce\.com)$/i.test(domain)) domain = DEFAULTS.sfdcDomain;   // only a Salesforce https host
     if (cleanId(oppId)) return { kind: 'record', url: domain + '/lightning/r/Opportunity/' + cleanId(oppId) + '/view' };
     var payload = {
       componentDef: 'forceSearch:searchPageDesktop',
@@ -385,7 +391,7 @@
   var api = {
     DEFAULTS: DEFAULTS, RULES: RULES, STAGE_COMMIT: STAGE_COMMIT,
     prepare: prepare, slim: slim, check: check, pivot: pivot, secureNotOrdered: secureNotOrdered, owners: owners,
-    sfdcLink: sfdcLink, parseDate: parseDate, nextWednesday: nextWednesday, posDeadline: posDeadline, weekMonday: weekMonday, HK_HOLIDAYS: HK_HOLIDAYS, fq: fq
+    sfdcLink: sfdcLink, parseDate: parseDate, nextWednesday: nextWednesday, posDeadline: posDeadline, weekMonday: weekMonday, weekStart: weekStart, HK_HOLIDAYS: HK_HOLIDAYS, fq: fq
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.PPLCheck = api;

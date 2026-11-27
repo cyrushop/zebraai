@@ -34,8 +34,11 @@ function memoryStore() {
 // IAP passes the signed-in account as "accounts.google.com:name@example.com"
 const userOf = req => String(req.headers['x-goog-authenticated-user-email'] || '').replace(/^accounts\.google\.com:/, '');
 
+// security review H3: other sites must not embed the hub (they could take over its frames)
+const NOFRAME = { 'x-frame-options': 'SAMEORIGIN', 'content-security-policy': "frame-ancestors 'self'" };
+
 function send(res, code, body, type) {
-  res.writeHead(code, { 'content-type': type || 'application/json', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
+  res.writeHead(code, { 'content-type': type || 'application/json', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', ...NOFRAME });
   res.end(typeof body === 'string' || Buffer.isBuffer(body) ? body : JSON.stringify(body));
 }
 function readBody(req) {
@@ -68,7 +71,7 @@ function file(req, res, url) {
   if (!full.startsWith(ROOT + path.sep)) return send(res, 403, 'forbidden', 'text/plain');
   fs.readFile(full, (err, buf) => {
     if (err) return send(res, 404, 'not found', 'text/plain');
-    res.writeHead(200, { 'content-type': TYPES[path.extname(full)] || 'application/octet-stream', 'cache-control': 'no-cache', 'x-content-type-options': 'nosniff' });
+    res.writeHead(200, { 'content-type': TYPES[path.extname(full)] || 'application/octet-stream', 'cache-control': 'no-cache', 'x-content-type-options': 'nosniff', ...NOFRAME });
     res.end(buf);
   });
 }
