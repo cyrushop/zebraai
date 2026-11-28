@@ -85,7 +85,8 @@
     { id: 'emc', label: 'EMC mobile computers', test: function (r) {
       return r.line === 'Mobile Computing' && !/software/i.test(r.subLine);
     } },
-    { id: 'ait', label: 'AIT printers, supplies & parts', test: function (r) { return r.bu === 'AIT'; } },
+    { id: 'supplies', label: 'AIT supplies (labels, ribbons, card)', test: function (r) { return r.bu === 'AIT' && /supplies/i.test(r.line); } },
+    { id: 'ait', label: 'AIT printers & parts', test: function (r) { return r.bu === 'AIT'; } },
     { id: 'svc', label: 'Services (OneCare etc.)', test: function (r) { return /svcs|services/i.test(r.line); } },
     { id: 'other', label: 'Other', test: function () { return true; } }
   ];
@@ -119,7 +120,13 @@
     notice: {
       label: '2026 年 11 月通知', date: '2026-11-26', since: '2026-02-01',
       rates: { emc: { notRaised: 30, raised: 15 }, ait: { notRaised: 5, raised: 2 }, adc: { notRaised: 5, raised: 1 } }
-    }
+    },
+    /* Cumulative target for the year: the last PC should end up this many %
+     * above the customer's last PC before `since`; only what is still missing
+     * is added. A category listed here follows it instead of the notice,
+     * events and RP rates.
+     */
+    accum: { label: '2026 供應品累計', since: '2026-01-01', rates: { supplies: 3 } }
   };
 
   // Some Hong Kong PCs carry "China" as their sub region; they belong to Hong Kong.
@@ -293,6 +300,8 @@
     res.lift = prev ? pct(last.unit, prev.unit) : null;
     res.listChange = res.latest ? pct(res.latest.list, last.list) : null;
 
+    var ar = accumRate(rules, cat);
+    if (ar != null) return finish(res, applyAccum(res, granted, rules.accum, ar), rp);
     var nr = noticeRate(rules, cat);
     if (nr) return finish(res, applyNotice(res, granted, rules.notice, nr, thr), rp);
 
@@ -351,12 +360,45 @@
     return [ev];
   }
 
+  // The cumulative target for a category, in %, or null when it has none.
+  function accumRate(rules, cat) {
+    var a = rules.accum, r = a && a.rates ? a.rates[cat] : null;
+    return blank(r) || !date(a.since) ? null : +r;
+  }
+
+  /* One step for the cumulative target. Kinds: accumPending (no PC since
+   * `since`, or the last one is older: the whole target), accumNoBase (no PC
+   * before `since` to measure from: the whole target), accumPartial (raised by
+   * less than the target: the rest), accumDone (raised by the target or more).
+   */
+  function applyAccum(res, granted, a, target) {
+    var ev = { id: 'accum', label: a.label, date: date(a.since) }, since = ev.date, last = res.last;
+    var base = null;
+    for (var j = 0; j < granted.length; j++) if (granted[j].created && granted[j].created < since) { base = granted[j]; break; }
+    var step;
+    if (!last.created || last.created < since) step = { kind: 'accumPending', rate: target };
+    else if (!base) step = { kind: 'accumNoBase', rate: target };
+    else {
+      var l = pct(last.unit, base.unit), need = round2(((1 + target / 100) / (1 + l) - 1) * 100);
+      step = need > 0.005 ? { kind: 'accumPartial', rate: need, base: base, lift: l } : { kind: 'accumDone', rate: 0, base: base, lift: l };
+    }
+    step.event = ev;
+    step.accum = true;
+    step.target = target;
+    res.steps.push(step);
+    return [ev];
+  }
+
   // Rate, state and suggested price from the steps.
   function finish(res, evs, rp) {
     var last = res.last;
-    var notice = res.steps.filter(function (x) { return x.notice; })[0];
+    var notice = res.steps.filter(function (x) { return x.notice; })[0], accum = res.steps.filter(function (x) { return x.accum; })[0];
     var adds = res.steps.filter(function (x) { return x.kind === 'notRaised' || x.kind === 'pending' || x.kind === 'early'; });
-    if (notice) {
+    if (accum) {
+      res.state = accum.kind === 'accumPartial' || accum.kind === 'accumDone' ? 'repeat' : 'full';
+      res.rate = accum.rate;
+      res.rateSource = 'accum';
+    } else if (notice) {
       res.state = notice.kind === 'noticeRaised' || notice.kind === 'noticeDone' ? 'repeat' : 'full';
       res.rate = notice.rate;
       res.rateSource = 'notice';
@@ -382,7 +424,8 @@
       // Total rise against the price before the earliest raise we credited.
       var base = null;
       res.steps.forEach(function (x) {
-        if ((x.kind === 'raised' || x.kind === 'early' || x.kind === 'noticeRaised') && x.base && (!base || x.base.created < base.created)) base = x.base;
+        if ((x.kind === 'raised' || x.kind === 'early' || x.kind === 'noticeRaised' || x.kind === 'accumPartial' || x.kind === 'accumDone') && x.base &&
+          (!base || x.base.created < base.created)) base = x.base;
       });
       if (base) { res.cumulativeBase = base; res.cumulative = res.suggested / base.unit - 1; }
       if (res.latest && res.latest.list) {

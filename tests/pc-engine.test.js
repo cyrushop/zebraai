@@ -210,6 +210,27 @@ assert.strictEqual(nget('100', 'BTRY-X').state, 'norule', 'accessories are not i
 r = nget('100', 'FX9600-X');
 assert.deepStrictEqual([nk(r), r.rate], ['covered', 3], 'RFID keeps the increase dates and RP');
 
+// Supplies: 3% cumulative in 2026, measured from the last PC before 2026-01-01
+const SUP = { bu: 'AIT', line: 'Barcode Supplies', sub: 'Ribbons', fam: 'Barcode Ribbons' };
+const srows = E.normPc({ name: 's', headers: H, rows: [
+  row(A, '01/11/2025', 'RIB-X', SUP, 20, 10), row(A, '01/05/2026', 'RIB-X', SUP, 20, 10.1),    // +1% so far → ~2% more
+  row(B, '01/11/2025', 'RIB-X', SUP, 20, 10), row(B, '01/06/2026', 'RIB-X', SUP, 20.6, 10.35), // +3.5% → nothing more
+  row(C, '01/11/2025', 'RIB-X', SUP, 20, 10),                                                   // no PC in 2026 → +3%
+  row(['500', 'Echo Ltd'], '01/03/2026', 'RIB-X', SUP, 20, 10)                                  // nothing before 2026 → +3%
+].map(o => H.map(h => o[h] ?? null)) });
+const sidx = E.buildIndex(srows);
+const sget = acct => E.assess(sidx, (sidx.byAcct[acct] || []).filter(r => r.part === 'RIB-X'), E.DEFAULT_RULES, 'RIB-X');
+assert.strictEqual(sidx.info['RIB-X'].cat, 'supplies');
+r = sget('100');
+assert.deepStrictEqual([r.steps[0].kind, r.rate, r.state, r.rateSource], ['accumPartial', 1.98, 'repeat', 'accum']);
+assert.strictEqual(r.suggested, 10.3);
+assert.ok(Math.abs(r.cumulative - 0.03) < 0.001);
+assert.deepStrictEqual([sget('200').steps[0].kind, sget('200').rate], ['accumDone', 0]);
+assert.deepStrictEqual([sget('300').steps[0].kind, sget('300').rate, sget('300').state], ['accumPending', 3, 'full']);
+assert.deepStrictEqual([sget('500').steps[0].kind, sget('500').rate], ['accumNoBase', 3]);
+// printers stay on the notice
+assert.strictEqual(E.assess(sidx, [], E.DEFAULT_RULES, 'RIB-X').state, 'new');
+
 // new part for the customer
 r = get('200', 'ZD421-X');
 assert.strictEqual(r.state, 'new');

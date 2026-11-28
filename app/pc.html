@@ -369,6 +369,7 @@ svg.spark circle { fill: var(--spark); }
   function evLabel(l) {
     if (LANG !== 'en') return l;
     var m = String(l).match(/^(\d{4})\s*年\s*(\d{1,2})\s*月(通知)?$/);
+    if (/^(\d{4})\s*供應品累計$/.test(l)) return l.slice(0, 4) + ' supplies, cumulative';
     return m ? MONTHS[+m[2] - 1] + ' ' + m[1] + (m[3] ? ' notice' : '') : l === '新加價' ? 'New increase' : l;
   }
   var CAT_LABEL = {};
@@ -392,6 +393,12 @@ svg.spark circle { fill: var(--spark); }
       : T('：' + since + ' 後未做過 PC', ': no PC since ' + since)) + ' → +' + x.rate + '%';
     if (x.kind === 'noticeNoBase') return ev + T('：' + since + ' 前冇 PC 可比，當未加過', ': no PC before ' + since + ' to compare, counted as not raised') + ' → +' + x.rate + '%';
     if (x.kind === 'noticeDone') return ev + T('：上次 PC 已喺通知之後做，唔使再加', ': last PC is after the notice, nothing to add');
+    var asince = fmtDs(E.date(S.rules.accum && S.rules.accum.since)), tgt = '+' + x.target + '%';
+    if (x.kind === 'accumPending') return ev + T('：' + asince + ' 後未加過 → 加足 ' + tgt, ': not raised since ' + asince + ' → the full ' + tgt);
+    if (x.kind === 'accumNoBase') return ev + T('：' + asince + ' 前冇 PC 可比 → 加足 ' + tgt, ': no PC before ' + asince + ' to compare → the full ' + tgt);
+    if (x.kind === 'accumPartial') return ev + T('：已加 ' + pctS(x.lift) + '，再加 +' + x.rate + '% 到 ' + tgt, ': raised ' + pctS(x.lift) + ' so far, +' + x.rate + '% more to ' + tgt) +
+      (short ? '' : T('（對比 ', ' (vs ') + fmtDs(x.base.created) + ' ' + usd(x.base.unit) + T('）', ')'));
+    if (x.kind === 'accumDone') return ev + T('：已加 ' + pctS(x.lift) + '，夠 ' + tgt + '，唔使再加', ': raised ' + pctS(x.lift) + ', ' + tgt + ' reached, nothing to add');
     return ev + T('：第一張 PC 已按新牌價做', ': first PC already at the new list price');
   }
   function eventsSorted() {
@@ -451,7 +458,7 @@ svg.spark circle { fill: var(--spark); }
       (saved && saved.events || []).forEach(function (e) { if (e.id === 'e2026-03' && e.rates) delete e.rates.rfid15; });
     }
     if (saved) {
-      ['liftFrom', 'liftThreshold', 'includePending', 'events', 'rp', 'notice'].forEach(function (k) { if (saved[k] !== undefined) r[k] = saved[k]; });
+      ['liftFrom', 'liftThreshold', 'includePending', 'events', 'rp', 'notice', 'accum'].forEach(function (k) { if (saved[k] !== undefined) r[k] = saved[k]; });
     }
     return r;
   }
@@ -557,7 +564,8 @@ svg.spark circle { fill: var(--spark); }
       'DS2278-DEMO': ['EVM', 'Adv Data Capture', 'General Purpose HandHeld', 'DS227X'],
       'ZD421-DEMO': ['AIT', 'Desktop', '4 Inch Line', 'ZD421'],
       'MC333R-DEMO': ['EVM', 'RFID Devices', 'RFID HH Readers', 'MC33XXR'],
-      'RFD4031-DEMO': ['EVM', 'RFID Devices', 'RFID HH Readers', 'RFD4XXX']
+      'RFD4031-DEMO': ['EVM', 'RFID Devices', 'RFID HH Readers', 'RFD4XXX'],
+      'RIBBON-DEMO': ['AIT', 'Barcode Supplies', 'Ribbons', 'Barcode Ribbons']
     };
     var n = 90000000, out = [];
     function add(acct, d, p, list, unit, st) {
@@ -573,6 +581,7 @@ svg.spark circle { fill: var(--spark); }
     add(A, '18/05/2026', 'CRD-TC5X-DEMO', 300, 180); add(B, '14/10/2026', 'CRD-TC5X-DEMO', 315, 200);
     add(A, '11/04/2026', 'RFD4031-DEMO', 1500, 950); add(A, '16/10/2026', 'RFD4031-DEMO', 1575, 990, 'Pending');
     add(B, '08/10/2026', 'TC530E-DEMO', 1449, 900);
+    add(A, '03/11/2025', 'RIBBON-DEMO', 20, 10); add(A, '04/05/2026', 'RIBBON-DEMO', 20.6, 10.1);
     return E.normPc({ name: 'demo', headers: H, rows: out });
   }
 
@@ -687,6 +696,9 @@ svg.spark circle { fill: var(--spark); }
     var evs = eventsSorted();
     var nt = S.rules.notice;
     var chips = E.CATEGORIES.map(function (c) {
+      var ar = accumOf(c.id);
+      if (ar != null) return '<span class="rulechip"><b>' + esc(c.label) + T('</b>：', '</b>: ') + esc(evLabel(S.rules.accum.label)) + ' ' +
+        T('全年累計 +', 'total +') + ar + '%</span>';
       var nr = noticeOf(c.id);
       if (nr) return '<span class="rulechip"><b>' + esc(c.label) + T('</b>：', '</b>: ') + esc(evLabel(nt.label)) + ' ' +
         T('未加過 +', 'not raised +') + nr.notRaised + '% · ' + T('已加過 +', 'raised +') + nr.raised + '%</span>';
@@ -704,6 +716,11 @@ svg.spark circle { fill: var(--spark); }
     var n = S.rules.notice, r = n && n.rates && n.rates[cat];
     if (!r || r.notRaised == null || r.notRaised === '' || !n.date || !n.since) return null;
     return { notRaised: r.notRaised, raised: r.raised == null || r.raised === '' ? r.notRaised : r.raised };
+  }
+  // The cumulative target for a category, or null (same test as the engine).
+  function accumOf(cat) {
+    var a = S.rules.accum, r = a && a.rates ? a.rates[cat] : null;
+    return r == null || r === '' || !a.since ? null : r;
   }
   function regionHint() {
     return S.region === 'all' ? '' : T('（而家只睇 ', ' (showing ') + esc(REGION_ZH()[S.region] || S.region) + T('，可以揀「全部」）', ' only; pick All to see every region)');
@@ -771,7 +788,7 @@ svg.spark circle { fill: var(--spark); }
   function rateHtml(r) {
     if (r.state === 'new') return '<span class="faint">—</span>';
     if (r.rate == null) return T('<span class="tag warn">冇 RP 規則</span>', '<span class="tag warn">No RP rule</span>');
-    var src = r.rateSource === 'list' ? T('<div class="sub">冇規則，按牌價變動</div>', '<div class="sub">No rule; list price change</div>') + (listStale(r) ? T('<span class="tag warn">牌價資料舊，自己再查</span>', '<span class="tag warn">List price is old; check it</span>') : '') : '<div class="sub">' + (r.rateSource === 'notice' ? esc(evLabel(S.rules.notice.label)) : r.state === 'repeat' ? T('RP 加幅', 'RP uplift') : T('加價未轉嫁', 'Increase not passed on')) + '</div>';
+    var src = r.rateSource === 'list' ? T('<div class="sub">冇規則，按牌價變動</div>', '<div class="sub">No rule; list price change</div>') + (listStale(r) ? T('<span class="tag warn">牌價資料舊，自己再查</span>', '<span class="tag warn">List price is old; check it</span>') : '') : '<div class="sub">' + (r.rateSource === 'accum' ? esc(evLabel(S.rules.accum.label)) : r.rateSource === 'notice' ? esc(evLabel(S.rules.notice.label)) : r.state === 'repeat' ? T('RP 加幅', 'RP uplift') : T('加價未轉嫁', 'Increase not passed on')) + '</div>';
     return '<span class="big">' + (r.rate > 0 ? '+' : '') + r.rate + '%</span>' + src;
   }
   function checkRow(r, i) {
@@ -930,7 +947,21 @@ svg.spark circle { fill: var(--spark); }
       '<label><span class="label">' + T('由幾時起計加過價', 'Count rises since') + '</span><input type="date" id="nSince" value="' + esc(n.since) + '"></label></div>' +
       '<div class="tablebox"><table><thead><tr><th>' + T('產品分類', 'Category') + '</th><th class="num">' + T('未加過', 'Not raised') + '</th><th class="num">' + T('已加過', 'Raised') + '</th></tr></thead><tbody>' + nrows + '</tbody></table></div>' +
       '<h2>' + T('加價日同 RP（通知以外嘅分類）', 'Increase dates and RP (categories outside the notice)') + '</h2>';
-    return '<section class="rules">' + notice +
+    var ac = R.accum || { label: '', since: '', rates: {} };
+    var arows = E.CATEGORIES.map(function (c) {
+      return '<tr><td>' + esc(c.label) + '</td><td class="num"><input type="number" step="0.1" data-arate="' + c.id + '" value="' + v((ac.rates || {})[c.id]) + '" placeholder="—"> %</td></tr>';
+    }).join('');
+    var accum = '<div><h2>' + T('全年累計加幅', 'Cumulative uplift for the year') + '</h2><ul class="small muted">' +
+      T('<li>有累計目標嘅分類，<b>只跟呢個目標計</b>，唔再用加價通知、加價日同 RP。</li>', '<li>A category with a target here <b>follows the target only</b>; the notice, increase dates and RP no longer apply to it.</li>') +
+      T('<li>對比「由幾時起計」之前最後一張 PC：已加夠就唔使再加；加咗少過目標就補返差額（例如已加 1%，目標 3% → 再加約 1.98%）。期間未做過 PC，或者之前冇 PC 可比 → 加足目標。</li>',
+        '<li>Measured from the last PC before the "since" date: at or above the target, nothing is added; below it, only the rest (1% so far against 3% → about 1.98% more). No PC since that date, or none before it to compare with, gets the full target.</li>') +
+      T('<li>預設：2026 年供應品（Barcode / Card Supplies：label、ribbon、card）全年累計 +3%，由 2026-01-01 起計。</li></ul></div>',
+        '<li>Default: 2026 supplies (Barcode and Card Supplies: labels, ribbons, cards) +3% in total for the year, from 2026-01-01.</li></ul></div>') +
+      '<div class="grid">' +
+      '<label><span class="label">' + T('名稱', 'Name') + '</span><input type="text" id="aLabel" value="' + esc(ac.label) + '"></label>' +
+      '<label><span class="label">' + T('由幾時起計', 'Measured since') + '</span><input type="date" id="aSince" value="' + esc(ac.since) + '"></label></div>' +
+      '<div class="tablebox"><table><thead><tr><th>' + T('產品分類', 'Category') + '</th><th class="num">' + T('全年累計目標', 'Target for the year') + '</th></tr></thead><tbody>' + arows + '</tbody></table></div>';
+    return '<section class="rules">' + accum + notice +
       T('<div><h2>點計</h2><ul class="small muted">', '<div><h2>How it works</h2><ul class="small muted">') +
       T('<li>用客戶 + 產品最近一張已批的 PC（「上次 PC」）做基準，逐個加價日檢查：</li>', '<li>The baseline is the newest approved PC for the customer and part (the "last PC"). Each price increase date is checked against it:</li>') +
       T('<li><b>上次 PC 喺加價日之前</b> → 呢次加價未轉嫁，加該欄 %。</li>', '<li><b>Last PC before the increase date</b> → the increase is not passed on yet, so the % in that column is added.</li>') +
@@ -1020,10 +1051,31 @@ svg.spark circle { fill: var(--spark); }
     if (done) body.push('already applied on the last PC: ' + done.join(', '));
     return 'Price increase per ' + fmtD(E.date(n.date)) + ' notice: Yes (' + body.join('; ') + ')';
   }
+  // Supplies: how much of the year's cumulative target this PC adds.
+  function accumStatement(d, parts) {
+    var a = S.rules.accum;
+    if (!a || !a.since) return '';
+    var res = E.customerParts(S.idx, S.acct, S.rules, parts).filter(function (r) { return r.rateSource === 'accum'; });
+    if (!res.length) return '';
+    var by = {};
+    res.forEach(function (r) {
+      var k = r.steps[0].kind === 'accumDone' ? 'already at the target' : '+' + r.rate + '%', fam = r.info ? r.info.family : r.part;
+      (by[k] = by[k] || []).indexOf(fam) < 0 && by[k].push(fam);
+    });
+    return 'Supplies, ' + a.since.slice(0, 4) + ' cumulative +' + res[0].steps[0].target + '%: ' + Object.keys(by).map(function (k) { return k + ' ' + by[k].join(', '); }).join('; ');
+  }
+  function noticeParts(d) {
+    var parts = E.parsePartList(S.parts);
+    if (!parts.length && d.lp.last) {
+      parts = (S.idx.byAcct[S.acct] || []).filter(function (r) { return r.pc === d.lp.last.pc; }).map(function (r) { return r.part; })
+        .filter(function (p, i, a) { return a.indexOf(p) === i; });
+    }
+    return parts;
+  }
   function fillJustification(mode) {
     var d = prefillData();
     if (!d || !window.PCJUI) return;
-    var f = d.fields, note = noticeStatement(d);
+    var f = d.fields, note = [noticeStatement(d), accumStatement(d, noticeParts(d))].filter(Boolean).join('; ');
     var prevPc = d.lp.last ? d.lp.last.pc : '';
     window.PCJUI.fill({ mode: mode, previousPc: prevPc && note && mode === 'repeat' ? prevPc + '; ' + note : prevPc, contact: f.contact,
       distMargin: f.distMargin, resellerMargin: f.resellerMargin, zebraProduct: mode === 'new' ? d.products : '', demand: f.demand,
@@ -1081,7 +1133,7 @@ svg.spark circle { fill: var(--spark); }
       return [r.part, r.info ? r.info.family : '', r.info ? CAT_LABEL[r.info.cat] : '', r.last ? r.last.pc : '', r.last ? E.iso(r.last.created) : '',
         r.last ? r.last.unit : '', r.prev ? r.prev.unit : '', r.lift != null ? (r.lift * 100).toFixed(2) + '%' : '', STATE()[r.state].short,
         r.steps.map(function (x) { return stepText(x, true); }).join(T('；', '; ')),
-        r.rate != null ? r.rate : '', r.rateSource === 'list' ? T('牌價變動', 'List price change') : r.rateSource === 'rule' ? T('規則', 'Rule') : r.rateSource === 'notice' ? evLabel(S.rules.notice.label) : '', r.suggested != null ? r.suggested : '',
+        r.rate != null ? r.rate : '', r.rateSource === 'list' ? T('牌價變動', 'List price change') : r.rateSource === 'rule' ? T('規則', 'Rule') : r.rateSource === 'notice' ? evLabel(S.rules.notice.label) : r.rateSource === 'accum' ? evLabel(S.rules.accum.label) : '', r.suggested != null ? r.suggested : '',
         r.latest ? r.latest.list : '', r.latest && r.latest.stdDisc != null ? r.latest.stdDisc : '', r.newStdNet != null ? r.newStdNet : ''];
     }));
     var tsv = lines.map(function (l) { return l.join('\t'); }).join('\n');
@@ -1174,6 +1226,16 @@ svg.spark circle { fill: var(--spark); }
       if (e2) e2[k2[1]] = t.value;
       saveRules();
       return k2[1] === 'date' ? renderView() : undefined;
+    }
+    if (t.dataset.arate) {
+      S.rules.accum = S.rules.accum || { label: '', since: '', rates: {} };
+      if (t.value === '') delete S.rules.accum.rates[t.dataset.arate]; else S.rules.accum.rates[t.dataset.arate] = +t.value;
+      return saveRules();
+    }
+    if (id === 'aLabel' || id === 'aSince') {
+      S.rules.accum = S.rules.accum || { label: '', since: '', rates: {} };
+      S.rules.accum[id === 'aLabel' ? 'label' : 'since'] = t.value;
+      return saveRules();
     }
     if (t.dataset.nrate) {
       var nk = t.dataset.nrate.split('|');
